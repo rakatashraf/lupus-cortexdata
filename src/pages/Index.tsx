@@ -134,9 +134,9 @@ const Index = () => {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
       </div>
       
-      {/* Footer positioned with more space from content */}
-      <div className="w-full py-3 mt-12">
-        <div className="text-center">
+      {/* Footer fixed at bottom of page */}
+      <div className="w-full py-4 mt-auto">
+        <div className="text-center space-y-1">
           <div className="text-xs text-muted-foreground">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
           </div>
