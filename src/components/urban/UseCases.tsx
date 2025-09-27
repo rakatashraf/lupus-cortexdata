@@ -480,14 +480,21 @@ export const UseCases: React.FC<UseCasesProps> = ({
           // Load the new logo for header
           const newImg = new Image();
           newImg.onload = () => {
-            // Create canvas to convert logo to appropriate format
+            // Create high-resolution canvas for crisp logo
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = newImg.width;
-            canvas.height = newImg.height;
             
-            // Draw the new logo
-            ctx.drawImage(newImg, 0, 0);
+            // Set high resolution for crisp rendering
+            const scale = 2; // Double resolution for crisp display
+            canvas.width = newImg.width * scale;
+            canvas.height = newImg.height * scale;
+            
+            // Enable high-quality scaling
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // Draw the new logo at high resolution
+            ctx.drawImage(newImg, 0, 0, canvas.width, canvas.height);
             
             // Convert canvas to data URL
             const newLogoDataUrl = canvas.toDataURL('image/png');
@@ -505,11 +512,11 @@ export const UseCases: React.FC<UseCasesProps> = ({
         };
         
         const generateRestOfPDFWithNewLogo = (newLogoDataUrl: string) => {
-        // Add logo watermark behind text (large and semi-transparent)
+        // Add logo watermark behind text (smaller and higher resolution)
         const img = new Image();
         img.onload = () => {
-          // Add watermark (jsPDF doesn't support opacity directly, use light color overlay)
-          doc.addImage(img, 'PNG', pageWidth/2 - 60, pageHeight/2 - 40, 120, 80, undefined, 'NONE');
+          // Add smaller, clearer watermark
+          doc.addImage(img, 'PNG', pageWidth/2 - 40, pageHeight/2 - 30, 80, 60, undefined, 'NONE');
           
           // Continue with rest of PDF generation
           generatePDFContent();
@@ -527,8 +534,8 @@ export const UseCases: React.FC<UseCasesProps> = ({
           doc.setFillColor(52, 152, 219); // Lighter blue accent
           doc.rect(0, 42, pageWidth, 4, 'F');
           
-          // New logo at the most left side
-          doc.addImage(newLogoDataUrl, 'PNG', 5, 8, 50, 32);
+          // New logo at the most left side (smaller and high resolution)
+          doc.addImage(newLogoDataUrl, 'PNG', 8, 12, 35, 22);
           
           // Company details at the most right side in white (right-aligned)
           doc.setTextColor(255, 255, 255);
