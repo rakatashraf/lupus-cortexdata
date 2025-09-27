@@ -31,6 +31,7 @@ import { n8nService } from '@/services/n8n-service';
 import jsPDF from 'jspdf';
 import lupusLogo from '@/assets/lupus-cortex-logo.png';
 import lupusLogoPdf from '@/assets/lupus-cortex-logo-pdf.png';
+import lupusLogoNew from '@/assets/lupus-cortex-new-logo.png';
 
 interface UseCase {
   id: string;
@@ -475,7 +476,35 @@ export const UseCases: React.FC<UseCasesProps> = ({
         generateRestOfPDF(blackLogoDataUrl);
       };
       
-      const generateRestOfPDF = (logoDataUrl: string) => {
+        const generateRestOfPDF = (logoDataUrl: string) => {
+          // Load the new logo for header
+          const newImg = new Image();
+          newImg.onload = () => {
+            // Create canvas to convert logo to appropriate format
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = newImg.width;
+            canvas.height = newImg.height;
+            
+            // Draw the new logo
+            ctx.drawImage(newImg, 0, 0);
+            
+            // Convert canvas to data URL
+            const newLogoDataUrl = canvas.toDataURL('image/png');
+            
+            // Continue with PDF generation using new logo
+            generateRestOfPDFWithNewLogo(newLogoDataUrl);
+          };
+          
+          newImg.onerror = () => {
+            // Fallback to original logo if new one fails to load
+            generateRestOfPDFWithNewLogo(logoDataUrl);
+          };
+          
+          newImg.src = lupusLogoNew;
+        };
+        
+        const generateRestOfPDFWithNewLogo = (newLogoDataUrl: string) => {
         // Add logo watermark behind text (large and semi-transparent)
         const img = new Image();
         img.onload = () => {
@@ -485,7 +514,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
           // Continue with rest of PDF generation
           generatePDFContent();
         };
-        img.src = lupusLogoPdf;
+        img.src = lupusLogoNew;
         
         const generatePDFContent = () => {
           // Define current date for use throughout the PDF
@@ -498,8 +527,8 @@ export const UseCases: React.FC<UseCasesProps> = ({
           doc.setFillColor(52, 152, 219); // Lighter blue accent
           doc.rect(0, 42, pageWidth, 4, 'F');
           
-          // White logo at the most left side
-          doc.addImage(logoDataUrl, 'PNG', 5, 8, 50, 32);
+          // New logo at the most left side
+          doc.addImage(newLogoDataUrl, 'PNG', 5, 8, 50, 32);
           
           // Company details at the most right side in white (right-aligned)
           doc.setTextColor(255, 255, 255);
