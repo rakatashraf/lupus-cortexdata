@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain } from 'lucide-react';
 import { fetchWeatherData, WeatherData, getWeatherDescription, getWeatherIcon, getWindDirection } from '@/services/weather-service';
 import { LocationSearch } from '@/components/urban/LocationSearch';
+import { MapboxEarth } from '@/components/urban/MapboxEarth';
 
 interface NASAEarthMapProps {
   height?: string;
@@ -532,9 +533,9 @@ function Scene({
         speed={0.5}
       />
       
-      {/* Earth with click handler */}
+      {/* Gorgeous Map-based Earth with click handler */}
       <group onClick={handleEarthClick}>
-        <Earth rotationSpeed={isPlaying ? 0.001 : 0} selectedLayer={selectedLayer} />
+        <MapboxEarth rotationSpeed={isPlaying ? 0.001 : 0} selectedLayer={selectedLayer} />
       </group>
       
       {/* Satellites */}
@@ -756,10 +757,10 @@ export function NASAEarthMap({
               onChange={(e) => setSelectedLayer(e.target.value)}
               className="bg-black/50 border border-gray-600 text-white text-sm rounded px-3 py-2"
             >
-              <option value="Visible Earth">🌍 Visible Earth</option>
-              <option value="Air Temperature">🌡️ Temperature</option>
-              <option value="Visible Light">💡 Visible Light</option>
-              <option value="Infrared">🔴 Infrared</option>
+              <option value="Visible Earth">🛰️ Satellite View</option>
+              <option value="Air Temperature">🗺️ Outdoor Map</option>
+              <option value="Visible Light">🏘️ Street Map</option>
+              <option value="Infrared">🌃 Dark Theme</option>
             </select>
           </div>
         </div>
