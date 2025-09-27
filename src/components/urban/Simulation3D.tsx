@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArcGISMap } from './ArcGISMap';
+import { NASAEarthMap } from './NASAEarthMap';
 import { ThreeDViewer, ViewerToolbar } from './3DViewer';
 import { 
   Map, 
@@ -314,10 +314,6 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                     onClick={() => {
                       const newState = !isSimulationRunning;
                       setIsSimulationRunning(newState);
-                      // Control ArcGIS rotation via global function
-                      if ((window as any).arcgisRotationControl) {
-                        (window as any).arcgisRotationControl(newState);
-                      }
                     }}
                     className="w-full"
                   >
@@ -409,8 +405,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                     onDuplicateObject={handle3DDuplicateObject}
                   />
                 ) : (
-                  <ArcGISMap 
-                    webmapId="625da886dbf24a559da73840d293156d"
+                  <NASAEarthMap 
                     height={isFullscreen ? "100vh" : "950px"}
                     enableRotation={isSimulationRunning}
                     onRotationChange={setIsSimulationRunning}
