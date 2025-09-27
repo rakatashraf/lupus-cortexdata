@@ -5,6 +5,7 @@ import { AIChatbot } from '@/components/urban/AIChatbot';
 import { NavigationHeader } from '@/components/urban/NavigationHeader';
 import { WelcomeSection } from '@/components/urban/WelcomeSection';
 import { Simulation3D } from '@/components/urban/Simulation3D';
+import { UseCases } from '@/components/urban/UseCases';
 import { useState, useCallback, useEffect } from 'react';
 import { MapSelectionBounds } from '@/types/urban-indices';
 import { useToast } from '@/hooks/use-toast';
@@ -101,6 +102,13 @@ const Index = () => {
         );
       case 'simulation':
         return <Simulation3D onLocationSelect={handleLocationSelect} />;
+      case 'usecases':
+        return (
+          <UseCases
+            latitude={currentLocation.latitude}
+            longitude={currentLocation.longitude}
+          />
+        );
       default:
         return <WelcomeSection onGetStarted={handleGetStarted} />;
     }

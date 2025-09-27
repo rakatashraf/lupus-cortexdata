@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Home, BarChart3, Map, Bot, Info, Box } from 'lucide-react';
+import { Menu, Home, BarChart3, Map, Bot, Info, Box, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import lupusLogo from '@/assets/lupus-cortex-logo.png';
 
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { id: 'charts', label: 'Data Visualization', icon: BarChart3, description: 'Trends & insights' },
   { id: 'chatbot', label: 'AI Assistant', icon: Bot, description: 'Smart urban guidance' },
   { id: 'simulation', label: '3D Simulation', icon: Box, description: 'Urban planning & design' },
+  { id: 'usecases', label: 'Use Cases', icon: Lightbulb, description: 'Recommendations & reports' },
 ];
 
 export function NavigationHeader({ 
