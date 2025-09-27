@@ -60,21 +60,21 @@ export function NavigationHeader({
               const isActive = currentSection === item.id;
               
               return (
-                 <Button
-                   key={item.id}
-                   variant={isActive ? "default" : "ghost"}
-                   size="sm"
-                   onClick={() => handleNavClick(item.id)}
-                   className={cn(
-                     "flex items-center gap-1 px-2 lg:px-3 py-1 rounded-lg text-xs lg:text-sm font-medium transition-all duration-300 border min-h-[44px]",
-                     isActive 
-                       ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25 scale-105" 
-                       : "text-foreground hover:text-primary hover:bg-primary/5 border-transparent hover:border-primary/20 hover:shadow-md"
-                   )}
-                 >
-                   <Icon className="h-3 w-3 lg:h-4 lg:w-4" />
-                   <span className="hidden xl:inline">{item.label}</span>
-                 </Button>
+                  <Button
+                    key={item.id}
+                    variant={isActive ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => handleNavClick(item.id)}
+                    className={cn(
+                      "flex items-center gap-1 px-2 lg:px-3 py-1 rounded-lg text-xs lg:text-sm font-medium transition-all duration-300 border min-h-[44px]",
+                      isActive 
+                        ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25 scale-105" 
+                        : "text-foreground hover:text-primary hover:bg-primary/5 border-transparent hover:border-primary/20 hover:shadow-md"
+                    )}
+                  >
+                    <Icon className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <span className="hidden lg:inline">{item.label}</span>
+                  </Button>
               );
             })}
           </nav>
@@ -106,7 +106,7 @@ export function NavigationHeader({
           </nav>
 
           {/* Location Badge - responsive */}
-          <div className="hidden xl:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             {currentLocation && (
               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors text-xs">
                 <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
