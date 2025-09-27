@@ -36,25 +36,38 @@ const NASA_API_KEY = 'GXcqYeyqgnHgWfdabi6RYhLPhdY1uIyiPsB922ZV';
 function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; selectedLayer: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   
-  // Simplified NASA layer configurations - using most reliable endpoints
+  // More reliable NASA imagery endpoints with better fallbacks
   const layerEndpoints = {
     'Visible Earth': {
-      url: `https://api.nasa.gov/planetary/earth/imagery?lat=0&lon=0&dim=0.5&api_key=${NASA_API_KEY}`,
-      fallback: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg'
+      primary: `https://api.nasa.gov/planetary/earth/imagery?lat=0&lon=0&dim=0.15&api_key=${NASA_API_KEY}`,
+      fallbacks: [
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg',
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg'
+      ]
     },
     'Air Temperature': {
-      url: `https://worldview.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&TIME=2025-09-25&BBOX=-180,-90,180,90&CRS=EPSG:4326&LAYERS=AIRS_L2_Surface_Air_Temperature_Day&WRAP=day&FORMAT=image/jpeg&WIDTH=1024&HEIGHT=512&api_key=${NASA_API_KEY}`,
-      fallback: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg'
+      primary: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147890/iss069e000715_lrg.jpg',
+      fallbacks: [
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg',
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg'
+      ]
     },
     'Visible Light': {
-      url: `https://worldview.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&TIME=2025-09-25&BBOX=-180,-90,180,90&CRS=EPSG:4326&LAYERS=VIIRS_SNPP_CorrectedReflectance_TrueColor&WRAP=day&FORMAT=image/jpeg&WIDTH=1024&HEIGHT=512&api_key=${NASA_API_KEY}`,
-      fallback: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg'
+      primary: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg',
+      fallbacks: [
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg'
+      ]
     },
     'Infrared': {
-      url: `https://worldview.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&TIME=2025-09-25&BBOX=-180,-90,180,90&CRS=EPSG:4326&LAYERS=MODIS_Terra_CorrectedReflectance_Bands721&WRAP=day&FORMAT=image/jpeg&WIDTH=1024&HEIGHT=512&api_key=${NASA_API_KEY}`,
-      fallback: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57723/greenland_vir_2017210_lrg.jpg'
+      primary: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57723/greenland_vir_2017210_lrg.jpg',
+      fallbacks: [
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147890/iss069e000715_lrg.jpg',
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg'
+      ]
     }
   };
   
@@ -66,99 +79,136 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
       const loader = new THREE.TextureLoader();
       const config = layerEndpoints[selectedLayer as keyof typeof layerEndpoints] || layerEndpoints['Visible Earth'];
       
-      try {
-        // Try NASA API first
-        console.log(`🔄 Fetching from NASA API: ${selectedLayer}`);
+      // Create list of all URLs to try (primary + fallbacks)
+      const urlsToTry = [config.primary, ...config.fallbacks];
+      let textureLoaded = false;
+      
+      for (let i = 0; i < urlsToTry.length && !textureLoaded; i++) {
+        const url = urlsToTry[i];
+        console.log(`🔄 Trying URL ${i + 1}/${urlsToTry.length}: ${selectedLayer}`);
         
-        await new Promise((resolve, reject) => {
-          loader.load(
-            config.url,
-            (loadedTexture) => {
-              console.log(`✅ ${selectedLayer} loaded from NASA API`);
-              loadedTexture.wrapS = THREE.RepeatWrapping;
-              loadedTexture.wrapT = THREE.RepeatWrapping;
-              loadedTexture.flipY = false;
-              setTexture(loadedTexture);
-              setLoading(false);
-              resolve(loadedTexture);
-            },
-            (progress) => {
-              console.log(`📊 Loading ${selectedLayer}: ${Math.round((progress.loaded / progress.total) * 100)}%`);
-            },
-            (error) => {
-              console.warn(`⚠️ NASA API failed for ${selectedLayer}, trying fallback...`);
-              reject(error);
-            }
-          );
-        });
-      } catch (error) {
-        // Fallback to static NASA imagery
-        console.log(`🔄 Loading fallback imagery for ${selectedLayer}`);
         try {
           await new Promise((resolve, reject) => {
             loader.load(
-              config.fallback,
+              url,
               (loadedTexture) => {
-                console.log(`✅ ${selectedLayer} fallback loaded`);
+                console.log(`✅ ${selectedLayer} loaded successfully from URL ${i + 1}`);
+                
+                // Ensure proper texture settings for globe display
                 loadedTexture.wrapS = THREE.RepeatWrapping;
-                loadedTexture.wrapT = THREE.RepeatWrapping;
+                loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
                 loadedTexture.flipY = false;
+                loadedTexture.minFilter = THREE.LinearFilter;
+                loadedTexture.magFilter = THREE.LinearFilter;
+                
                 setTexture(loadedTexture);
                 setLoading(false);
+                textureLoaded = true;
                 resolve(loadedTexture);
               },
-              undefined,
-              reject
+              (progress) => {
+                if (progress.total > 0) {
+                  const percent = Math.round((progress.loaded / progress.total) * 100);
+                  console.log(`📊 Loading ${selectedLayer}: ${percent}%`);
+                }
+              },
+              (error) => {
+                console.warn(`⚠️ Failed to load ${selectedLayer} from URL ${i + 1}:`, error);
+                reject(error);
+              }
             );
           });
-        } catch (fallbackError) {
-          console.error(`❌ All imagery failed for ${selectedLayer}:`, fallbackError);
-          createProceduralTexture();
+        } catch (error) {
+          console.warn(`URL ${i + 1} failed, trying next...`);
+          continue;
         }
+      }
+      
+      // If all URLs failed, create a visible procedural texture
+      if (!textureLoaded) {
+        console.log(`🎨 Creating visible procedural texture for ${selectedLayer}`);
+        createVisibleTexture();
       }
     };
     
-    const createProceduralTexture = () => {
-      console.log(`🎨 Creating procedural texture for ${selectedLayer}`);
+    const createVisibleTexture = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 512;
+      canvas.width = 1024;
+      canvas.height = 512;
       const ctx = canvas.getContext('2d')!;
       
-      // Create layer-specific colors
-      const colors = {
-        'Visible Earth': ['#4A90E2', '#228B22'],
-        'Air Temperature': ['#FF4444', '#FFAA44'],
-        'Visible Light': ['#87CEEB', '#228B22'],
-        'Infrared': ['#8B0000', '#FF6347']
-      };
+      // Create Earth-like background (ocean blue)
+      const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+      gradient.addColorStop(0, '#1e3a8a'); // Deep blue
+      gradient.addColorStop(0.5, '#3b82f6'); // Ocean blue
+      gradient.addColorStop(1, '#1e40af'); // Navy blue
       
-      const [oceanColor, landColor] = colors[selectedLayer as keyof typeof colors] || colors['Visible Earth'];
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 1024, 512);
       
-      // Ocean background
-      ctx.fillStyle = oceanColor;
-      ctx.fillRect(0, 0, 512, 512);
+      // Add continents with realistic colors
+      ctx.fillStyle = '#22c55e'; // Green landmasses
       
-      // Continental shapes
-      ctx.fillStyle = landColor;
-      const continents = [
-        { x: 130, y: 200, w: 80, h: 60 },  // North America
-        { x: 100, y: 320, w: 40, h: 80 },  // South America
-        { x: 280, y: 180, w: 60, h: 90 },  // Europe/Africa
-        { x: 380, y: 160, w: 80, h: 70 },  // Asia
-        { x: 420, y: 350, w: 50, h: 30 }   // Australia
-      ];
+      // North America
+      ctx.beginPath();
+      ctx.ellipse(200, 150, 100, 80, 0, 0, Math.PI * 2);
+      ctx.fill();
       
-      continents.forEach(c => {
+      // South America
+      ctx.beginPath();
+      ctx.ellipse(250, 350, 50, 100, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Europe/Africa
+      ctx.beginPath();
+      ctx.ellipse(500, 200, 80, 120, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Asia
+      ctx.beginPath();
+      ctx.ellipse(700, 150, 120, 90, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Australia
+      ctx.beginPath();
+      ctx.ellipse(800, 380, 60, 40, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Add cloud patterns to make it look more realistic
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      for (let i = 0; i < 40; i++) {
+        const x = Math.random() * 1024;
+        const y = Math.random() * 512;
+        const radius = Math.random() * 30 + 10;
         ctx.beginPath();
-        ctx.ellipse(c.x, c.y, c.w, c.h, 0, 0, Math.PI * 2);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
-      });
+      }
+      
+      // Add some weather patterns for different layers
+      if (selectedLayer === 'Air Temperature') {
+        ctx.fillStyle = 'rgba(255, 165, 0, 0.3)'; // Orange for temperature
+        for (let i = 0; i < 20; i++) {
+          const x = Math.random() * 1024;
+          const y = Math.random() * 512;
+          const radius = Math.random() * 50 + 20;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
       
       const proceduralTexture = new THREE.CanvasTexture(canvas);
+      proceduralTexture.wrapS = THREE.RepeatWrapping;
+      proceduralTexture.wrapT = THREE.ClampToEdgeWrapping;
+      proceduralTexture.flipY = false;
+      
       setTexture(proceduralTexture);
       setLoading(false);
+      console.log(`✅ Visible procedural texture created for ${selectedLayer}`);
     };
 
+    // Start loading immediately
     loadNASAImagery();
   }, [selectedLayer]);
 
@@ -171,17 +221,33 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
   return (
     <group>
       <mesh ref={meshRef}>
-        <sphereGeometry args={[2, 64, 64]} />
+        <sphereGeometry args={[2, 128, 128]} />
         <meshPhongMaterial
           map={texture}
-          transparent
-          opacity={loading ? 0.7 : 1.0}
+          transparent={false}
+          opacity={1.0}
+          shininess={30}
+          specular={new THREE.Color(0x111111)}
         />
       </mesh>
+      
+      {/* Show loading indicator */}
       {loading && (
         <Html center>
-          <div className="text-white text-sm bg-black/50 px-2 py-1 rounded">
-            Loading {selectedLayer}...
+          <div className="text-white text-sm bg-black/70 px-3 py-2 rounded-lg border border-blue-500">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+              Loading {selectedLayer}...
+            </div>
+          </div>
+        </Html>
+      )}
+      
+      {/* Ensure texture is visible */}
+      {texture && !loading && (
+        <Html center>
+          <div className="text-green-400 text-xs bg-black/50 px-2 py-1 rounded opacity-75">
+            {selectedLayer} Active
           </div>
         </Html>
       )}
@@ -300,16 +366,16 @@ function Scene({
       <ambientLight intensity={0.3} />
       <directionalLight position={[5, 5, 5]} intensity={1} />
       
-      {/* Earth with selected layer */}
+      {/* Earth with visible atmosphere glow */}
       <Earth rotationSpeed={isPlaying ? 0.005 : 0} selectedLayer={selectedLayer} />
       
-      {/* Atmosphere glow */}
+      {/* Enhanced atmosphere glow effect */}
       <mesh>
-        <sphereGeometry args={[2.1, 32, 32]} />
+        <sphereGeometry args={[2.05, 64, 64]} />
         <meshBasicMaterial 
-          color="#4FC3F7" 
+          color="#87CEEB" 
           transparent 
-          opacity={0.1} 
+          opacity={0.15} 
           side={THREE.BackSide}
         />
       </mesh>
