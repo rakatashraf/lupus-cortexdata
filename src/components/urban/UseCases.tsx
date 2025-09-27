@@ -481,162 +481,166 @@ export const UseCases: React.FC<UseCasesProps> = ({
         
         // Company Details under the logo
         doc.setFont('times', 'bold');
-        doc.setFontSize(9);
+        doc.setFontSize(7);
         doc.setTextColor(100, 100, 100);
-        doc.text('Urban Intelligence & Analytics Solutions', 20, 42);
-        doc.setFontSize(8);
-        doc.text('AI-Powered Location Intelligence Platform', 20, 48);
-        doc.text('Contact: info@lupus-cortex.com | www.lupus-cortex.com', 20, 54);
+        doc.text('Urban Intelligence & Analytics Solutions', 20, 40);
+        doc.setFontSize(6);
+        doc.text('AI-Powered Location Intelligence Platform', 20, 44);
+        doc.text('Contact: info@lupus-cortex.com | www.lupus-cortex.com', 20, 48);
         
         // Date in top right
         const currentDate = new Date().toISOString().split('T')[0];
-        doc.setFontSize(7);
+        doc.setFontSize(6);
         doc.setTextColor(100, 100, 100);
-        doc.text(currentDate, pageWidth - 35, 25);
+        doc.text(currentDate, pageWidth - 30, 23);
         
         // Main Title
-        doc.setFontSize(14);
+        doc.setFontSize(10);
         doc.setTextColor(0, 0, 0);
         doc.setFont('times', 'bold');
-        doc.text('INDEPENDENT EVALUATION REPORT', 20, 68);
+        doc.text('LOCATION EVALUATION REPORT', 20, 58);
+        
+        // Rating display prominently
+        doc.setFontSize(14);
+        doc.setFont('times', 'bold');
+        doc.text(`${recommendation.rating}/5 STARS`, 20, 70);
         
         // Executive Summary
-        doc.setFontSize(10);
+        doc.setFontSize(8);
         doc.setFont('times', 'bold');
         doc.setTextColor(0, 0, 0);
-        doc.text('EXECUTIVE SUMMARY', 20, 82);
+        doc.text('SUMMARY', 20, 82);
         
-        doc.setFontSize(8);
+        doc.setFontSize(6);
         doc.setFont('times', 'normal');
-        const ratingText = recommendation.rating >= 4 ? 'PREMIUM EXCELLENCE' : recommendation.rating >= 3 ? 'SUPERIOR QUALITY' : 'STRATEGIC CONSIDERATION';
-        const summaryText = `Location assessment for coordinates ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng} yielded ${recommendation.rating}/5 stars, achieving ${ratingText} classification. Our AI-powered analysis provides strategic insights for optimal location utilization based on comprehensive urban intelligence metrics.`;
+        const ratingText = recommendation.rating >= 4 ? 'EXCELLENT' : recommendation.rating >= 3 ? 'GOOD' : 'CONDITIONAL';
+        const summaryText = `Location (${recommendation.coordinates.lat.toFixed(4)}, ${recommendation.coordinates.lng.toFixed(4)}) rated ${recommendation.rating}/5 - ${ratingText}. AI analysis based on urban intelligence metrics.`;
         
         const summaryLines = doc.splitTextToSize(summaryText, 170);
-        let yPos = 90;
+        let yPos = 88;
         summaryLines.forEach(line => {
           doc.text(line, 20, yPos);
-          yPos += 8;
+          yPos += 5;
         });
         
-        // AI Intelligence Metrics
-        yPos += 8;
-        doc.setFontSize(10);
-        doc.setFont('times', 'bold');
-        doc.text('AI INTELLIGENCE METRICS', 20, yPos);
-        
-        yPos += 8;
+        // Metrics
+        yPos += 6;
         doc.setFontSize(8);
+        doc.setFont('times', 'bold');
+        doc.text('METRICS', 20, yPos);
+        
+        yPos += 5;
+        doc.setFontSize(6);
         doc.setFont('times', 'normal');
         
         Object.entries(recommendation.indexScores).forEach(([index, score]) => {
-          const performance = score > 70 ? 'EXCELLENT' : score > 50 ? 'GOOD' : 'NEEDS ATTENTION';
-          doc.text(`• ${index}: ${score.toFixed(1)}/100 - ${performance}`, 25, yPos);
-          yPos += 7;
+          const performance = score > 70 ? 'EXCELLENT' : score > 50 ? 'GOOD' : 'NEEDS WORK';
+          doc.text(`• ${index}: ${score.toFixed(0)}/100 - ${performance}`, 22, yPos);
+          yPos += 4;
         });
         
-        // Key Assessment Findings
-        yPos += 8;
-        doc.setFontSize(10);
-        doc.setFont('times', 'bold');
-        doc.text('KEY ASSESSMENT FINDINGS', 20, yPos);
-        
-        yPos += 8;
+        // Findings
+        yPos += 4;
         doc.setFontSize(8);
+        doc.setFont('times', 'bold');
+        doc.text('FINDINGS', 20, yPos);
+        
+        yPos += 5;
+        doc.setFontSize(6);
         doc.setFont('times', 'normal');
         
-        // Simplified findings
+        // Short findings
         const findings = [];
         Object.entries(recommendation.indexScores).forEach(([index, score]) => {
           if (score > 70) {
-            findings.push(`${index}: Excellent performance with score ${score.toFixed(1)}/100. Highly suitable for implementation.`);
+            findings.push(`${index}: Excellent (${score.toFixed(0)}/100) - Suitable`);
           } else if (score > 50) {
-            findings.push(`${index}: Good performance with score ${score.toFixed(1)}/100. Suitable with standard precautions.`);
+            findings.push(`${index}: Good (${score.toFixed(0)}/100) - Standard precautions`);
           } else {
-            findings.push(`${index}: Score ${score.toFixed(1)}/100 requires attention. Consider mitigation strategies.`);
+            findings.push(`${index}: Low (${score.toFixed(0)}/100) - Needs attention`);
           }
         });
         
         findings.forEach((finding) => {
           const findingLines = doc.splitTextToSize(`• ${finding}`, 170);
           findingLines.forEach(line => {
-            doc.text(line, 20, yPos);
-            yPos += 7;
+            doc.text(line, 22, yPos);
+            yPos += 4;
           });
         });
         
-        // Strategic Recommendations
-        yPos += 8;
-        doc.setFontSize(10);
-        doc.setFont('times', 'bold');
-        doc.text('STRATEGIC RECOMMENDATIONS', 20, yPos);
-        
-        yPos += 8;
+        // Recommendations
+        yPos += 4;
         doc.setFontSize(8);
+        doc.setFont('times', 'bold');
+        doc.text('RECOMMENDATIONS', 20, yPos);
+        
+        yPos += 5;
+        doc.setFontSize(6);
         doc.setFont('times', 'normal');
         
-        // Simplified recommendations based on rating
+        // Short recommendations based on rating
         const strategicRecs = [];
         if (recommendation.rating >= 4) {
-          strategicRecs.push('1. Proceed with confidence - location demonstrates premium suitability');
-          strategicRecs.push('2. Leverage excellent metrics for strategic advantage');
-          strategicRecs.push('3. Consider this as a priority location for development');
+          strategicRecs.push('1. Proceed - excellent suitability');
+          strategicRecs.push('2. Leverage strong metrics');
+          strategicRecs.push('3. Priority for development');
         } else if (recommendation.rating >= 3) {
-          strategicRecs.push('1. Recommended for implementation with standard monitoring');
-          strategicRecs.push('2. Address moderate-scoring indices through targeted improvements');
-          strategicRecs.push('3. Establish regular performance review protocols');
+          strategicRecs.push('1. Recommended with monitoring');
+          strategicRecs.push('2. Address moderate scores');
+          strategicRecs.push('3. Regular review needed');
         } else {
-          strategicRecs.push('1. Conditional approval - implement comprehensive risk mitigation');
-          strategicRecs.push('2. Prioritize improvement of low-scoring indices before proceeding');
-          strategicRecs.push('3. Consider alternative locations or substantial enhancement measures');
+          strategicRecs.push('1. Conditional - risk mitigation required');
+          strategicRecs.push('2. Improve low scores first');
+          strategicRecs.push('3. Consider alternatives');
         }
         
         strategicRecs.forEach((rec) => {
           const recLines = doc.splitTextToSize(rec, 170);
           recLines.forEach(line => {
-            doc.text(line, 20, yPos);
-            yPos += 7;
+            doc.text(line, 22, yPos);
+            yPos += 4;
           });
         });
         
         // Conclusion
-        yPos += 8;
-        doc.setFontSize(10);
+        yPos += 4;
+        doc.setFontSize(8);
         doc.setFont('times', 'bold');
         doc.text('CONCLUSION', 20, yPos);
         
-        yPos += 8;
-        doc.setFontSize(8);
+        yPos += 5;
+        doc.setFontSize(6);
         doc.setFont('times', 'normal');
         const conclusionText = recommendation.rating >= 4 
-          ? `Location rated ${recommendation.rating}/5 stars demonstrates EXCEPTIONAL suitability. Highly recommended for immediate implementation.`
+          ? `${recommendation.rating}/5 - EXCEPTIONAL suitability. Highly recommended.`
           : recommendation.rating >= 3 
-          ? `Location rated ${recommendation.rating}/5 stars shows STRONG potential. Recommended for implementation with standard protocols.`
-          : `Location rated ${recommendation.rating}/5 stars requires STRATEGIC consideration. Conditional approval with risk mitigation essential.`;
+          ? `${recommendation.rating}/5 - STRONG potential. Recommended with protocols.`
+          : `${recommendation.rating}/5 - Requires consideration. Conditional approval.`;
         
         const conclusionLines = doc.splitTextToSize(conclusionText, 170);
         conclusionLines.forEach(line => {
-          doc.text(line, 20, yPos);
-          yPos += 7;
+          doc.text(line, 22, yPos);
+          yPos += 4;
         });
         
-        // Professional Certification
-        yPos += 12;
-        doc.setFontSize(8);
-        doc.setFont('times', 'bold');
-        doc.text('PROFESSIONAL CERTIFICATION', 20, yPos);
-        
-        yPos += 8;
+        // Certification
+        yPos += 6;
         doc.setFontSize(7);
-        doc.setFont('times', 'normal');
-        doc.text('Prepared by: LUPUS CORTEX AI Analytics Division', 20, yPos);
-        doc.text(`Certification Date: ${currentDate} | Report ID: LC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, 20, yPos + 6);
+        doc.setFont('times', 'bold');
+        doc.text('CERTIFICATION', 20, yPos);
         
-        // Footer
-        doc.setFontSize(6);
+        yPos += 5;
+        doc.setFontSize(5);
+        doc.setFont('times', 'normal');
+        doc.text('LUPUS CORTEX AI Analytics Division', 20, yPos);
+        doc.text(`${currentDate} | ID: LC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, 20, yPos + 3);
+        
+        doc.setFontSize(5);
         doc.setFont('times', 'normal');
         doc.setTextColor(128, 128, 128);
-        doc.text('© 2024 LUPUS CORTEX - Premium Urban Intelligence Solutions | www.lupus-cortex.com', 20, pageHeight - 20);
-        doc.text('This report contains proprietary analysis and is intended for authorized use only.', 20, pageHeight - 14);
+        doc.text('© 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com', 20, pageHeight - 15);
+        doc.text('Proprietary analysis - authorized use only.', 20, pageHeight - 10);
         
         // Save PDF
         const cleanArea = recommendation.area.replace(/[^a-zA-Z0-9]/g, '-');
