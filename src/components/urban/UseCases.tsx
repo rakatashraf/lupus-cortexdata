@@ -428,74 +428,179 @@ export const UseCases: React.FC<UseCasesProps> = ({
     try {
       // Create PDF
       const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.width;
+      const pageHeight = doc.internal.pageSize.height;
       
-      // Header with logo
-      doc.setFontSize(20);
-      doc.setTextColor(34, 139, 34); // Primary green color
-      doc.text('LUPUS CORTEX', 20, 30);
-      doc.text('COMPREHENSIVE EVALUATION REPORT', 20, 45);
+      // Border
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(1);
+      doc.rect(10, 10, pageWidth - 20, pageHeight - 20);
       
-      // Seal/Badge
-      doc.setFontSize(14);
-      doc.setTextColor(0, 100, 0);
-      doc.text('✓ LUPUS RECOMMENDED', 20, 60);
+      // Header - Logo area (placeholder) and Date
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('[COMPANY LOGO HERE]', 20, 25);
       
-      // Rating stars
-      const stars = '★'.repeat(recommendation.rating) + '☆'.repeat(5 - recommendation.rating);
-      doc.setFontSize(16);
-      doc.setTextColor(255, 215, 0); // Gold color for stars
-      doc.text(`${stars} ${recommendation.rating}/5`, 20, 75);
+      const currentDate = new Date().toISOString().split('T')[0];
+      doc.text(currentDate, pageWidth - 40, 25);
       
-      // User requirement and area info
-      doc.setFontSize(12);
+      // Main Title
+      doc.setFontSize(18);
       doc.setTextColor(0, 0, 0);
-      doc.text(`User Requirement: ${userDescription}`, 20, 95);
-      doc.text(`Evaluated Area: ${recommendation.area}`, 20, 110);
-      doc.text(`Coordinates: ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng}`, 20, 125);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 140);
+      doc.setFont('helvetica', 'bold');
+      doc.text('INDEPENDENT EVALUATION REPORT', 20, 45);
       
-      // Comprehensive Index Analysis
-      doc.setFontSize(14);
-      doc.setTextColor(34, 139, 34);
-      doc.text('COMPREHENSIVE INDEX ANALYSIS', 20, 165);
+      // Subtitle
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`[${userDescription.substring(0, 50)}${userDescription.length > 50 ? '...' : ''}]`, 20, 55);
       
-      let yPos = 180;
-      Object.entries(recommendation.indexScores).forEach(([index, score]) => {
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        doc.text(`${index}: ${score.toFixed(1)}/100`, 25, yPos);
-        yPos += 15;
+      // Executive Summary
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('EXECUTIVE SUMMARY', 20, 75);
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      const overallScore = Object.values(recommendation.indexScores).reduce((a, b) => a + b, 0) / Object.keys(recommendation.indexScores).length;
+      const summaryText = `This independent evaluation assessed location suitability for the specified scenario at coordinates ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng}. The comprehensive analysis yielded an overall rating of ${recommendation.rating}/5, earning ${recommendation.rating >= 4 ? '"Highly Recommended"' : recommendation.rating >= 3 ? '"Recommended"' : '"Conditional"'} designation. We confidently recommend ${recommendation.rating >= 3 ? 'continued investment and support' : 'careful consideration of identified risks'} for this location.`;
+      
+      const summaryLines = doc.splitTextToSize(summaryText, 170);
+      let yPos = 85;
+      summaryLines.forEach(line => {
+        doc.text(line, 20, yPos);
+        yPos += 12;
       });
       
-      // Key Assessment Factors
+      // Key Findings
       yPos += 10;
-      doc.setFontSize(14);
-      doc.setTextColor(34, 139, 34);
-      doc.text('KEY ASSESSMENT FACTORS', 20, yPos);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('KEY FINDINGS', 20, yPos);
       
       yPos += 15;
-      recommendation.reasons.forEach((reason, i) => {
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        const lines = doc.splitTextToSize(`${i + 1}. ${reason}`, 170);
-        doc.text(lines, 25, yPos);
-        yPos += lines.length * 12;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      
+      // Analyze findings based on scores
+      const findings = [];
+      Object.entries(recommendation.indexScores).forEach(([index, score]) => {
+        if (score > 70) {
+          findings.push(`★ ROBUST ${index.toUpperCase()} PERFORMANCE: Location demonstrated excellent ${index} conditions with score of ${score.toFixed(1)}/100`);
+        } else if (score > 50) {
+          findings.push(`★ ACCEPTABLE ${index.toUpperCase()} LEVELS: Moderate performance in ${index} category with room for improvement`);
+        } else {
+          findings.push(`★ ${index.toUpperCase()} CONCERNS: Below-optimal conditions requiring strategic attention and mitigation`);
+        }
       });
       
-      // Footer
-      const pageHeight = doc.internal.pageSize.height;
+      findings.slice(0, 3).forEach((finding) => {
+        const findingLines = doc.splitTextToSize(finding, 170);
+        findingLines.forEach(line => {
+          doc.text(line, 20, yPos);
+          yPos += 10;
+        });
+        yPos += 5;
+      });
+      
+      // AI Key Factors Analysis
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('KEY FACTORS ANALYZED BY AI', 20, yPos);
+      
+      yPos += 15;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Our AI system evaluated multiple urban intelligence indices:', 20, yPos);
+      yPos += 12;
+      
+      Object.entries(recommendation.indexScores).forEach(([index, score]) => {
+        doc.text(`• ${index}: ${score.toFixed(1)}/100 - ${score > 70 ? 'Excellent' : score > 50 ? 'Acceptable' : 'Needs Attention'}`, 25, yPos);
+        yPos += 10;
+      });
+      
+      // Recommendations
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('RECOMMENDATIONS', 20, yPos);
+      
+      yPos += 15;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      
+      const recommendations = recommendation.reasons.slice(0, 4);
+      recommendations.forEach((rec, index) => {
+        const cleanRec = rec.replace(/[✅❌⚠️🔍]/g, '').trim();
+        doc.text(`${index + 1}. ${cleanRec}`, 20, yPos);
+        yPos += 12;
+      });
+      
+      // Conclusion
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('CONCLUSION', 20, yPos);
+      
+      yPos += 15;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      const conclusionText = `Based on comprehensive AI analysis and urban intelligence metrics, this location ${recommendation.rating >= 3 ? 'demonstrates strong potential' : 'presents significant challenges'} for the specified use case. ${recommendation.rating >= 4 ? 'Highly recommended for implementation.' : recommendation.rating >= 3 ? 'Recommended with standard precautions.' : 'Conditional approval with risk mitigation required.'}`;
+      
+      const conclusionLines = doc.splitTextToSize(conclusionText, 170);
+      conclusionLines.forEach(line => {
+        doc.text(line, 20, yPos);
+        yPos += 12;
+      });
+      
+      // Sign-off
+      yPos += 15;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SIGN-OFF', 20, yPos);
+      
+      yPos += 12;
       doc.setFontSize(8);
-      doc.setTextColor(128, 128, 128);
-      doc.text('Generated by Lupus Cortex Urban Intelligence Dashboard', 20, pageHeight - 30);
-      doc.text('© 2024 Lupus Cortex. All rights reserved.', 20, pageHeight - 20);
-      doc.text('For more analysis, visit: https://lupus-cortex.lovable.app', 20, pageHeight - 10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Prepared by: LUPUS CORTEX AI, Lead Urban Intelligence Analyst', 20, yPos);
+      doc.text(`Date: ${currentDate}`, 20, yPos + 10);
+      
+      // Recommendation Stamp
+      if (recommendation.rating >= 3) {
+        doc.setFontSize(24);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(200, 50, 50);
+        
+        // Create stamp effect
+        const stampX = pageWidth - 80;
+        const stampY = pageHeight - 120;
+        
+        // Stamp border (circle)
+        doc.setDrawColor(200, 50, 50);
+        doc.setLineWidth(3);
+        doc.circle(stampX, stampY, 35);
+        doc.circle(stampX, stampY, 30);
+        
+        // Stars around the stamp
+        doc.setFontSize(16);
+        doc.text('★', stampX - 25, stampY - 20);
+        doc.text('★', stampX + 20, stampY - 20);
+        doc.text('★', stampX - 25, stampY + 25);
+        doc.text('★', stampX + 20, stampY + 25);
+        doc.text('★', stampX - 5, stampY - 30);
+        
+        // Main text
+        doc.setFontSize(14);
+        doc.text('RECOMMENDED', stampX - 25, stampY + 5);
+      }
       
       // Save PDF
       doc.save(`lupus-evaluation-${recommendation.area.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
 
       toast({
         title: "Download Complete",
-        description: "Your comprehensive evaluation report has been downloaded as PDF",
+        description: "Your professional evaluation report has been downloaded as PDF",
       });
     } catch (error) {
       console.error('Error generating PDF:', error);
