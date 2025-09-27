@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain, Search } from 'lucide-react';
 import { fetchWeatherData, WeatherData, getWeatherDescription, getWeatherIcon, getWindDirection } from '@/services/weather-service';
 
 interface NASAEarthMapProps {
@@ -359,7 +360,8 @@ function Scene({
   onSatelliteClick,
   selectedLayer,
   selectedLocation,
-  onLocationSelect
+  onLocationSelect,
+  focusLocation
 }: { 
   isPlaying: boolean;
   satellites: Satellite[];
@@ -367,6 +369,7 @@ function Scene({
   selectedLayer: string;
   selectedLocation: SelectedLocation | null;
   onLocationSelect: (lat: number, lon: number) => void;
+  focusLocation?: SelectedLocation;
 }) {
   const { camera, gl, raycaster, pointer } = useThree();
   
@@ -396,6 +399,38 @@ function Scene({
       }
     };
   }, [camera, gl]);
+
+  // Focus camera on searched location
+  useEffect(() => {
+    if (focusLocation && camera) {
+      console.log(`🎯 Focusing camera on: ${focusLocation.latitude}°, ${focusLocation.longitude}°`);
+      
+      // Calculate optimal camera position to view the location
+      const [x, y, z] = focusLocation.position;
+      const distance = 4; // Distance from the surface
+      
+      // Position camera to look at the location
+      const cameraX = x * distance / 2;
+      const cameraY = y * distance / 2;
+      const cameraZ = z * distance / 2;
+      
+      // Smooth camera transition
+      const targetPosition = new THREE.Vector3(cameraX, cameraY, cameraZ);
+      const currentPosition = camera.position.clone();
+      
+      // Animate camera movement
+      let progress = 0;
+      const animateCamera = () => {
+        progress += 0.02;
+        if (progress <= 1) {
+          camera.position.lerpVectors(currentPosition, targetPosition, progress);
+          camera.lookAt(0, 0, 0); // Always look at Earth center
+          requestAnimationFrame(animateCamera);
+        }
+      };
+      animateCamera();
+    }
+  }, [focusLocation, camera]);
 
   // Handle globe clicks for location selection
   const handleGlobeClick = useCallback((event: any) => {
@@ -498,6 +533,11 @@ export function NASAEarthMap({
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [focusLocation, setFocusLocation] = useState<SelectedLocation | null>(null);
+  
   // Handle location selection
   const handleLocationSelect = useCallback(async (lat: number, lon: number) => {
     console.log(`🌍 Location selected: ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`);
@@ -518,6 +558,7 @@ export function NASAEarthMap({
     };
     
     setSelectedLocation(newLocation);
+    setFocusLocation(newLocation); // Focus camera on the location
     onLocationSelect?.(lat, lon);
     
     // Fetch weather data for the selected location
@@ -642,6 +683,90 @@ export function NASAEarthMap({
     console.log('Satellite clicked:', satellite.name);
   }, []);
 
+  // Geocoding service for place name search
+  const geocodePlace = async (placeName: string): Promise<{lat: number; lon: number; displayName: string} | null> => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}&limit=1&addressdetails=1`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'NASA-Earth-Weather-App'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.length > 0) {
+          return {
+            lat: parseFloat(data[0].lat),
+            lon: parseFloat(data[0].lon),
+            displayName: data[0].display_name
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Geocoding failed:', error);
+    }
+    return null;
+  };
+
+  // Parse coordinate input (lat,lon format)
+  const parseCoordinates = (input: string): {lat: number; lon: number} | null => {
+    const coordRegex = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/;
+    const match = input.trim().match(coordRegex);
+    
+    if (match) {
+      const lat = parseFloat(match[1]);
+      const lon = parseFloat(match[2]);
+      
+      if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+        return { lat, lon };
+      }
+    }
+    return null;
+  };
+
+  // Handle search functionality
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setSearchLoading(true);
+    console.log(`🔍 Searching for: ${searchQuery}`);
+    
+    try {
+      // First, try to parse as coordinates
+      const coords = parseCoordinates(searchQuery);
+      
+      if (coords) {
+        console.log(`📍 Parsed coordinates: ${coords.lat}, ${coords.lon}`);
+        await handleLocationSelect(coords.lat, coords.lon);
+        setSearchQuery(''); // Clear search after successful search
+      } else {
+        // Try geocoding as place name
+        const result = await geocodePlace(searchQuery);
+        
+        if (result) {
+          console.log(`🌍 Found location: ${result.displayName}`);
+          await handleLocationSelect(result.lat, result.lon);
+          setSearchQuery(''); // Clear search after successful search
+        } else {
+          console.warn('❌ Location not found');
+          // You could show a toast notification here
+        }
+      }
+    } catch (error) {
+      console.error('Search failed:', error);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Handle search input keypress
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
   return (
     <div className="relative w-full bg-black" style={{ height }}>
       {/* Simplified Header */}
@@ -681,20 +806,56 @@ export function NASAEarthMap({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {dataLayers.map((layer) => (
-              <Button
-                key={layer}
-                variant={selectedLayer === layer ? "default" : "outline"}
-                className={`w-full justify-start text-sm ${
-                  selectedLayer === layer 
-                    ? 'bg-blue-600 text-white border-blue-600' 
-                    : 'text-gray-300 border-gray-600 hover:bg-gray-800 hover:text-white'
-                }`}
-                onClick={() => setSelectedLayer(layer)}
-              >
-                {layer}
-              </Button>
-            ))}
+            {/* Search Bar */}
+            <div className="space-y-2">
+              <h3 className="text-white text-sm font-medium flex items-center gap-2">
+                <Search className="w-4 h-4" />
+                Location Search
+              </h3>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Enter place name or lat,lon (e.g. 40.7589,-73.9851)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={handleSearchKeyPress}
+                  className="text-sm bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSearch}
+                  disabled={searchLoading || !searchQuery.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {searchLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-gray-500 text-xs">
+                Search by city name or coordinates (latitude,longitude)
+              </p>
+            </div>
+            
+            <div className="border-t border-gray-700 pt-3">
+              <h3 className="text-white text-sm font-medium mb-3">Data Layers</h3>
+              {dataLayers.map((layer) => (
+                <Button
+                  key={layer}
+                  variant={selectedLayer === layer ? "default" : "outline"}
+                  className={`w-full justify-start text-sm ${
+                    selectedLayer === layer 
+                      ? 'bg-blue-600 text-white border-blue-600' 
+                      : 'text-gray-300 border-gray-600 hover:bg-gray-800 hover:text-white'
+                  }`}
+                  onClick={() => setSelectedLayer(layer)}
+                >
+                  {layer}
+                </Button>
+              ))}
+            </div>
             
             {/* Weather Data Section */}
             {weatherData && (
@@ -834,6 +995,7 @@ export function NASAEarthMap({
             selectedLayer={selectedLayer}
             selectedLocation={selectedLocation}
             onLocationSelect={handleLocationSelect}
+            focusLocation={focusLocation}
           />
         </Canvas>
       </Suspense>
