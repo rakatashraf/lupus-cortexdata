@@ -38,9 +38,9 @@ export function NavigationHeader({
       className="sticky top-0 z-50 w-full border-b-2 border-primary/20 bg-gradient-to-r from-background via-background/95 to-background backdrop-blur-md shadow-xl"
     >
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
-        <div className="flex items-center justify-between w-full">
-          {/* Logo - positioned at far left */}
-          <div className="flex items-center flex-shrink-0">
+        <div className="flex items-center w-full">
+          {/* Logo - positioned at far left for all screens */}
+          <div className="flex items-center flex-shrink-0 mr-6 lg:mr-8">
             <button 
               onClick={() => handleNavClick('dashboard')}
               className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
@@ -53,8 +53,8 @@ export function NavigationHeader({
             </button>
           </div>
 
-          {/* Desktop Navigation - center aligned */}
-          <nav className="hidden lg:flex items-center gap-1">
+          {/* Desktop Navigation - left aligned after logo */}
+          <nav className="hidden lg:flex items-center gap-1 flex-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = currentSection === item.id;
@@ -77,11 +77,22 @@ export function NavigationHeader({
                   </Button>
               );
             })}
+            
+            {/* Location Badge - in desktop nav */}
+            <div className="ml-auto flex items-center">
+              {currentLocation && (
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors text-xs">
+                  <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                  {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
+                </Badge>
+              )}
+            </div>
           </nav>
 
-          <div className="flex items-center gap-3">
+          {/* Right side for tablet and mobile */}
+          <div className="lg:hidden flex items-center gap-3 ml-auto">
             {/* Tablet Navigation - positioned at far right */}
-            <nav className="hidden md:flex lg:hidden items-center gap-1">
+            <nav className="hidden md:flex items-center gap-1">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const isActive = currentSection === item.id;
@@ -105,16 +116,6 @@ export function NavigationHeader({
                 );
               })}
             </nav>
-
-            {/* Location Badge - responsive */}
-            <div className="hidden lg:flex items-center">
-              {currentLocation && (
-                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors text-xs">
-                  <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
-                  {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
-                </Badge>
-              )}
-            </div>
 
             {/* Mobile Menu - positioned at far right */}
             <div className="md:hidden">
