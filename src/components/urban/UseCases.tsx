@@ -484,8 +484,8 @@ export const UseCases: React.FC<UseCasesProps> = ({
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // Set high resolution for crisp rendering
-            const scale = 2; // Double resolution for crisp display
+            // Set very high resolution for ultra-crisp rendering
+            const scale = 4; // Quadruple resolution for maximum clarity
             canvas.width = newImg.width * scale;
             canvas.height = newImg.height * scale;
             
@@ -493,7 +493,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             
-            // Draw the new logo at high resolution
+            // Draw the new logo at very high resolution for ultra-clarity
             ctx.drawImage(newImg, 0, 0, canvas.width, canvas.height);
             
             // Convert canvas to data URL
@@ -526,40 +526,40 @@ export const UseCases: React.FC<UseCasesProps> = ({
         const generatePDFContent = () => {
           // Define current date for use throughout the PDF
           const currentDate = new Date().toISOString().split('T')[0];
-          // Website theme teal gradient header (smaller height)
+          // Website theme teal gradient header (30 pixels height)
           doc.setFillColor(20, 184, 166); // Primary teal from website theme
-          doc.rect(0, 0, pageWidth, 40, 'F');
+          doc.rect(0, 0, pageWidth, 30, 'F');
           
           // Accent gradient stripe with cyan
           doc.setFillColor(6, 182, 212); // Cyan accent from website theme  
-          doc.rect(0, 40, pageWidth, 3, 'F');
+          doc.rect(0, 30, pageWidth, 2, 'F');
           
-          // New logo at the most left side (wider and adjusted for smaller header)
-          doc.addImage(newLogoDataUrl, 'PNG', 8, 8, 45, 20);
+          // Ultra high-res logo at the most left side (optimized for 30px header)
+          doc.addImage(newLogoDataUrl, 'PNG', 5, 4, 40, 18);
           
-          // Company details at the most right side in white (adjusted for smaller header)
+          // Company details at the most right side in white (compact for 30px header)
           doc.setTextColor(255, 255, 255);
-          doc.setFontSize(8);
+          doc.setFontSize(7);
           doc.setFont('times', 'bold');
           const text1 = 'Urban Intelligence & Analytics Solutions';
           const text1Width = doc.getTextWidth(text1);
-          doc.text(text1, pageWidth - text1Width - 5, 16);
+          doc.text(text1, pageWidth - text1Width - 5, 12);
           
-          doc.setFontSize(6);
+          doc.setFontSize(5);
           doc.setFont('times', 'normal');
           const text2 = 'AI-Powered Location Intelligence Platform';
           const text2Width = doc.getTextWidth(text2);
-          doc.text(text2, pageWidth - text2Width - 5, 23);
+          doc.text(text2, pageWidth - text2Width - 5, 18);
           
           const text3 = 'Contact: info@lupus-cortex.com | www.lupus-cortex.com';
           const text3Width = doc.getTextWidth(text3);
-          doc.text(text3, pageWidth - text3Width - 5, 30);
+          doc.text(text3, pageWidth - text3Width - 5, 24);
           
-          // Professional report title with teal theme (adjusted for smaller header)
+          // Professional report title with teal theme (adjusted for 30px header)
           doc.setTextColor(20, 184, 166); // Primary teal
           doc.setFontSize(20);
           doc.setFont('times', 'bold');
-          doc.text('LOCATION EVALUATION REPORT', 20, 60);
+          doc.text('LOCATION EVALUATION REPORT', 20, 50);
           
           // Rating display with teal theme color coding
           doc.setFontSize(16);
