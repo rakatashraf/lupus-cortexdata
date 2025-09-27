@@ -289,7 +289,7 @@ export function ArcGISMap({
           const lat = customLat || selectedLocation.lat || view.camera.position.latitude || 23.8103;
           const lon = customLon || selectedLocation.lon || view.camera.position.longitude || 90.4125;
           
-          // Get location name using reverse geocoding
+          // Get location name using reverse geocoding and show coordinates
           try {
             const locationResponse = await fetch(
               `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
@@ -297,10 +297,10 @@ export function ArcGISMap({
             if (locationResponse.ok) {
               const locationData = await locationResponse.json();
               const locationName = locationData.city || locationData.locality || locationData.countryName || 'Unknown Location';
-              document.getElementById("location-name")!.textContent = locationName;
+              document.getElementById("location-name")!.textContent = `${locationName} (${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`;
             }
           } catch (error) {
-            document.getElementById("location-name")!.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+            document.getElementById("location-name")!.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
           }
           
           // Fetch weather data from Open-Meteo API (free, no key required)
@@ -480,22 +480,11 @@ export function ArcGISMap({
           
           // Update weather data for clicked location
           updateWeatherData(lat, lon);
-          
-          // Pause rotation temporarily when user clicks
-          if (isRotating) {
-            stopRotation();
-            setTimeout(() => {
-              if (isRotating && !userInteracting) {
-                startRotation();
-              }
-            }, 5000);
-          }
         });
 
         // Clean up interval on component unmount
         const originalCleanup = () => {
           clearInterval(weatherInterval);
-          stopRotation();
           if (view) {
             view.destroy();
           }
@@ -593,124 +582,14 @@ export function ArcGISMap({
       });
       webmap.add(graphicsLayer);
 
-      // Add auto-rotation for globe effect
-      let rotationHandle: any = null;
-      let isRotating = enableRotation;
-      let userInteracting = false;
-      let zoomTimeout: any = null;
+      // Disable auto-rotation - globe remains still
       let selectedLocation = { lat: 23.8103, lon: 90.4125 };
-      
-      function startRotation() {
-        if (rotationHandle || !isRotating) return;
-        
-        rotationHandle = setInterval(() => {
-          if (isRotating && !userInteracting) {
-            const camera = view.camera.clone();
-            camera.position.longitude += 0.2;
-            view.camera = camera;
-          }
-        }, 50);
-      }
-
-      function stopRotation() {
-        if (rotationHandle) {
-          clearInterval(rotationHandle);
-          rotationHandle = null;
-        }
-      }
-
-      // Function to toggle rotation (exposed via window for external control)
-      function toggleRotation(enabled: boolean) {
-        isRotating = enabled;
-        if (enabled) {
-          startRotation();
-        } else {
-          stopRotation();
-          // Update weather data for current location when pausing
-          updateWeatherData();
-        }
-        onRotationChange?.(enabled);
-      }
-
-      // Expose rotation control globally
-      (window as any).arcgisRotationControl = toggleRotation;
-
-      // Start rotation initially if enabled
-      view.when(() => {
-        if (enableRotation) {
-          startRotation();
-        }
-      });
-
-      // Handle user interactions with improved zoom detection
-      view.on(["drag", "mouse-wheel", "hold", "key-down", "double-click"], (event) => {
-        userInteracting = true;
-        
-        // Handle zoom events (mouse-wheel, double-click for zoom)
-        if (event.type === "mouse-wheel" || event.type === "double-click") {
-          // Clear any existing zoom timeout
-          if (zoomTimeout) {
-            clearTimeout(zoomTimeout);
-          }
-          
-          // Temporarily pause rotation during zoom
-          stopRotation();
-          
-          // Set a timeout to resume rotation after zooming is complete
-          zoomTimeout = setTimeout(() => {
-            userInteracting = false;
-            // Update weather data for new location after zoom
-            updateWeatherData();
-            if (enableRotation && isRotating) {
-              startRotation();
-            }
-          }, 3000); // Resume after 3 seconds of no zoom activity
-        } 
-        // Handle drag and other interactions
-        else if (event.type === "drag" || event.type === "hold") {
-          stopRotation();
-          
-          // Resume rotation after drag/hold ends
-          setTimeout(() => {
-            userInteracting = false;
-            // Update weather data for new location after drag
-            updateWeatherData();
-            if (enableRotation && isRotating) {
-              startRotation();
-            }
-          }, 5000); // Resume after 5 seconds for drag/hold
-        }
-      });
-      
-      // Also handle zoom controls (+ and - buttons)
-      view.watch("zoom", () => {
-        userInteracting = true;
-        
-        // Clear any existing zoom timeout
-        if (zoomTimeout) {
-          clearTimeout(zoomTimeout);
-        }
-        
-        // Temporarily pause rotation
-        stopRotation();
-        
-        // Resume after zoom completes
-        zoomTimeout = setTimeout(() => {
-          userInteracting = false;
-          // Update weather data for new zoom location
-          updateWeatherData();
-          if (enableRotation && isRotating) {
-            startRotation();
-          }
-        }, 3000);
-      });
 
       // Clean up on unmount
       return () => {
         if ((window as any).arcgisCleanup) {
           (window as any).arcgisCleanup();
         } else {
-          stopRotation();
           if (view) {
             view.destroy();
           }
