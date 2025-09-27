@@ -283,11 +283,11 @@ export function ArcGISMap({
       `;
 
       // Function to fetch and update real weather data
-      async function updateWeatherData() {
+      async function updateWeatherData(customLat?: number, customLon?: number) {
         try {
-          // Get current camera position for location-based weather
-          const lat = view.camera.position.latitude || 23.8103;
-          const lon = view.camera.position.longitude || 90.4125;
+          // Use custom coordinates if provided, otherwise use selected location or camera position
+          const lat = customLat || selectedLocation.lat || view.camera.position.latitude || 23.8103;
+          const lon = customLon || selectedLocation.lon || view.camera.position.longitude || 90.4125;
           
           // Get location name using reverse geocoding
           try {
@@ -346,6 +346,50 @@ export function ArcGISMap({
           document.getElementById("forecast-text")!.textContent = "Partly cloudy with chance of precipitation";
           document.getElementById("location-name")!.textContent = "Sample Location";
         }
+      }
+
+      // Function to add location marker
+      function addLocationMarker(lat: number, lon: number) {
+        // Clear existing graphics
+        graphicsLayer.removeAll();
+        
+        // Create location marker
+        const point = {
+          type: "point",
+          latitude: lat,
+          longitude: lon
+        };
+        
+        const markerSymbol = {
+          type: "simple-marker",
+          color: [0, 223, 252, 0.8], // Cyan color matching theme
+          size: "12px",
+          outline: {
+            color: [255, 255, 255, 1],
+            width: 2
+          }
+        };
+        
+        const pointGraphic = new Graphic({
+          geometry: point,
+          symbol: markerSymbol,
+          attributes: {
+            Name: "Selected Location",
+            Latitude: lat.toFixed(4),
+            Longitude: lon.toFixed(4)
+          },
+          popupTemplate: {
+            title: "Selected Location",
+            content: `
+              <div style="color: #333;">
+                <p><strong>Coordinates:</strong> ${lat.toFixed(4)}°, ${lon.toFixed(4)}°</p>
+                <p><strong>Weather data updated for this location</strong></p>
+              </div>
+            `
+          }
+        });
+        
+        graphicsLayer.add(pointGraphic);
       }
 
       // Add UI components when view is ready
@@ -419,6 +463,32 @@ export function ArcGISMap({
           if (distance > 5) {
             lastUpdatePosition = { lat: currentLat, lon: currentLon };
             updateWeatherData();
+          }
+        });
+
+        // Add click event listener for location selection
+        view.on("click", (event) => {
+          // Get the clicked location
+          const lat = event.mapPoint.latitude;
+          const lon = event.mapPoint.longitude;
+          
+          // Update selected location
+          selectedLocation = { lat, lon };
+          
+          // Add marker at clicked location
+          addLocationMarker(lat, lon);
+          
+          // Update weather data for clicked location
+          updateWeatherData(lat, lon);
+          
+          // Pause rotation temporarily when user clicks
+          if (isRotating) {
+            stopRotation();
+            setTimeout(() => {
+              if (isRotating && !userInteracting) {
+                startRotation();
+              }
+            }, 5000);
           }
         });
 
@@ -517,11 +587,18 @@ export function ArcGISMap({
       });
       view.ui.add(legendExpand, "bottom-right");
 
+      // Create graphics layer for location marker
+      const graphicsLayer = new GraphicsLayer({
+        title: "Selected Location"
+      });
+      webmap.add(graphicsLayer);
+
       // Add auto-rotation for globe effect
       let rotationHandle: any = null;
       let isRotating = enableRotation;
       let userInteracting = false;
       let zoomTimeout: any = null;
+      let selectedLocation = { lat: 23.8103, lon: 90.4125 };
       
       function startRotation() {
         if (rotationHandle || !isRotating) return;
