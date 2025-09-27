@@ -203,7 +203,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Control Panel */}
         <div className="lg:col-span-1 space-y-6">
           {/* View Toggle */}
@@ -369,8 +369,8 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
         </div>
 
         {/* 3D Viewport */}
-        <div className="lg:col-span-3">
-          <Card className="glass-card h-full min-h-[900px] bg-gradient-to-br from-background/95 via-accent/5 to-background/95 backdrop-blur-sm border-primary/20 shadow-2xl">
+        <div className="lg:col-span-2">
+          <Card className="glass-card h-full min-h-[600px] bg-gradient-to-br from-background/95 via-accent/5 to-background/95 backdrop-blur-sm border-primary/20 shadow-2xl">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xl">
@@ -391,7 +391,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                 ref={canvasRef}
                 className={cn(
                   "relative w-full rounded-lg overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800",
-                  isFullscreen ? "h-screen" : "h-[850px]"
+                  isFullscreen ? "h-screen" : "h-[550px]"
                 )}
               >
                 {viewMode === '3d' ? (
