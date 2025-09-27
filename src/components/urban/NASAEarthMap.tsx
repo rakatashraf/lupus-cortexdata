@@ -29,15 +29,33 @@ interface Satellite {
   };
 }
 
-// Real-time NASA Earth Component with GIBS imagery
-function Earth({ rotationSpeed }: { rotationSpeed: number }) {
+// Real-time NASA Earth Component with proper GIBS layer switching
+function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; selectedLayer: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   
+  // NASA GIBS layer configurations
+  const layerConfigs = {
+    'Visible Earth': 'VIIRS_SNPP_CorrectedReflectance_TrueColor',
+    'Air Temperature': 'AIRS_L2_Surface_Air_Temperature_Day',
+    'Carbon Dioxide': 'AIRS_L2_Carbon_Dioxide_500hPa_Day', 
+    'Carbon Monoxide': 'AIRS_L2_Carbon_Monoxide_500hPa_Day',
+    'Chlorophyll': 'MODIS_Aqua_Chlorophyll_A',
+    'Precipitation': 'GPM_3IMERGHH_06_precipitation',
+    'Sea Level': 'JASON_3_L2_OST_OGDR_GPS',
+    'Sea Surface Temperature': 'MODIS_Aqua_Sea_Surface_Temperature',
+    'Soil Moisture': 'SMAP_L3_Passive_Soil_Moisture_Pm',
+    'Ozone': 'OMI_Ozone_DOAS',
+    'Water Vapor': 'AIRS_L2_Water_Vapor_400hPa_Day',
+    'Water Storage': 'GRACE_Liquid_Water_Equivalent_Thickness',
+    'Nitrous Oxide': 'AIRS_L2_Nitrous_Oxide_500hPa_Day'
+  };
+  
   useEffect(() => {
-    console.log('🌍 Loading real-time NASA GIBS Earth imagery...');
+    console.log(`🌍 Loading NASA GIBS layer: ${selectedLayer}`);
     
     const loader = new THREE.TextureLoader();
+    const layerId = layerConfigs[selectedLayer as keyof typeof layerConfigs] || layerConfigs['Visible Earth'];
     
     // Get current date for real-time imagery
     const today = new Date();
@@ -45,36 +63,59 @@ function Earth({ rotationSpeed }: { rotationSpeed: number }) {
     yesterday.setDate(today.getDate() - 1);
     const dateStr = yesterday.toISOString().split('T')[0];
     
-    // NASA GIBS WMTS endpoint for VIIRS Corrected Reflectance True Color
-    const gibsBaseUrl = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best';
-    const layer = 'VIIRS_SNPP_CorrectedReflectance_TrueColor';
-    const tileMatrixSet = '250m';
-    const format = 'jpg';
-    
-    // Construct full Earth mosaic using GIBS tiles
+    // Create Earth texture using NASA GIBS
     const createEarthTexture = async () => {
       try {
-        // For demo, use a pre-built NASA Blue Marble with night lights composite
-        const earthImageUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg';
-        
-        loader.load(
-          earthImageUrl,
-          (loadedTexture) => {
-            console.log('✅ NASA Earth texture loaded successfully!');
-            loadedTexture.wrapS = THREE.RepeatWrapping;
-            loadedTexture.wrapT = THREE.RepeatWrapping;
-            loadedTexture.flipY = false;
-            setTexture(loadedTexture);
-          },
-          (progress) => {
-            console.log('📊 Loading NASA Earth imagery:', Math.round(progress.loaded / progress.total * 100) + '%');
-          },
-          (error) => {
-            console.error('❌ Failed to load NASA Earth texture:', error);
-            // Fallback to procedural Earth
-            createFallbackTexture();
+        // NASA GIBS WMTS endpoint - using a simpler approach with REST API
+        const gibsUrls = [
+          // Primary GIBS endpoint with proper layer
+          `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${layerId}/default/${dateStr}/250m/0/0/0.jpg`,
+          
+          // Fallback to Worldview snapshot API 
+          `https://worldview.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&TIME=${dateStr}&BBOX=-180,-90,180,90&CRS=EPSG:4326&LAYERS=${layerId}&WRAP=day&FORMAT=image/jpeg&WIDTH=2048&HEIGHT=1024`,
+          
+          // Static NASA Blue Marble as final fallback
+          'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg'
+        ];
+
+        let success = false;
+        for (const url of gibsUrls) {
+          try {
+            console.log(`🔄 Trying GIBS URL: ${url.substring(0, 80)}...`);
+            await new Promise((resolve, reject) => {
+              loader.load(
+                url,
+                (loadedTexture) => {
+                  console.log(`✅ NASA ${selectedLayer} layer loaded successfully!`);
+                  loadedTexture.wrapS = THREE.RepeatWrapping;
+                  loadedTexture.wrapT = THREE.RepeatWrapping;
+                  loadedTexture.flipY = false;
+                  setTexture(loadedTexture);
+                  success = true;
+                  resolve(loadedTexture);
+                },
+                (progress) => {
+                  if (progress.total > 0) {
+                    console.log('📊 Loading progress:', Math.round(progress.loaded / progress.total * 100) + '%');
+                  }
+                },
+                (error) => {
+                  console.warn(`⚠️ Failed to load from URL: ${error}`);
+                  reject(error);
+                }
+              );
+            });
+            if (success) break;
+          } catch (error) {
+            console.warn(`Failed URL: ${url.substring(0, 80)}...`);
+            continue;
           }
-        );
+        }
+        
+        if (!success) {
+          console.log('🎨 Creating fallback texture for layer:', selectedLayer);
+          createFallbackTexture();
+        }
       } catch (error) {
         console.error('Error creating Earth texture:', error);
         createFallbackTexture();
@@ -86,50 +127,85 @@ function Earth({ rotationSpeed }: { rotationSpeed: number }) {
       canvas.width = canvas.height = 1024;
       const ctx = canvas.getContext('2d')!;
       
-      // Create realistic Earth colors
+      // Create different colors based on selected layer
+      const layerColors = {
+        'Visible Earth': ['#4A90E2', '#2171B5', '#08519C'],
+        'Air Temperature': ['#FF4444', '#FF7744', '#FFAA44'],
+        'Carbon Dioxide': ['#8B4513', '#A0522D', '#CD853F'],
+        'Carbon Monoxide': ['#800080', '#9932CC', '#DA70D6'],
+        'Chlorophyll': ['#228B22', '#32CD32', '#90EE90'],
+        'Precipitation': ['#4169E1', '#6495ED', '#87CEEB'],
+        'Sea Level': ['#0000FF', '#4169E1', '#6495ED'],
+        'Sea Surface Temperature': ['#FF6347', '#FFA500', '#FFD700'],
+        'Soil Moisture': ['#8B4513', '#D2691E', '#F4A460'],
+        'Ozone': ['#9370DB', '#BA55D3', '#DA70D6'],
+        'Water Vapor': ['#87CEEB', '#B0E0E6', '#E0F6FF'],
+        'Water Storage': ['#1E90FF', '#4169E1', '#6495ED'],
+        'Nitrous Oxide': ['#FF69B4', '#FF1493', '#DC143C']
+      };
+      
+      const colors = layerColors[selectedLayer as keyof typeof layerColors] || layerColors['Visible Earth'];
+      
+      // Create gradient based on layer type
       const gradient = ctx.createRadialGradient(512, 512, 0, 512, 512, 512);
-      gradient.addColorStop(0, '#4A90E2'); // Ocean blue
-      gradient.addColorStop(0.6, '#2171B5'); // Deep ocean
-      gradient.addColorStop(1, '#08519C'); // Deep blue
+      gradient.addColorStop(0, colors[0]);
+      gradient.addColorStop(0.6, colors[1]);
+      gradient.addColorStop(1, colors[2]);
       
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 1024, 1024);
       
-      // Add landmasses with realistic colors
-      ctx.fillStyle = '#228B22'; // Forest green
-      
-      // Simplified continental shapes
-      const continents = [
-        { x: 200, y: 300, w: 120, h: 80 }, // North America
-        { x: 150, y: 450, w: 60, h: 120 }, // South America
-        { x: 500, y: 250, w: 80, h: 100 }, // Europe/Africa
-        { x: 650, y: 200, w: 140, h: 90 }, // Asia
-        { x: 780, y: 500, w: 80, h: 60 }, // Australia
-      ];
-      
-      continents.forEach(continent => {
-        ctx.beginPath();
-        ctx.ellipse(continent.x, continent.y, continent.w, continent.h, 0, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      
-      // Add cloud patterns
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-      for (let i = 0; i < 20; i++) {
-        const x = Math.random() * 1024;
-        const y = Math.random() * 1024;
-        const radius = Math.random() * 50 + 20;
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
+      // Add landmasses for visible earth, or data patterns for other layers
+      if (selectedLayer === 'Visible Earth') {
+        ctx.fillStyle = '#228B22';
+        // Continental shapes (simplified)
+        const continents = [
+          { x: 200, y: 300, w: 120, h: 80 }, // North America
+          { x: 150, y: 450, w: 60, h: 120 }, // South America
+          { x: 500, y: 250, w: 80, h: 100 }, // Europe/Africa
+          { x: 650, y: 200, w: 140, h: 90 }, // Asia
+          { x: 780, y: 500, w: 80, h: 60 }, // Australia
+        ];
+        
+        continents.forEach(continent => {
+          ctx.beginPath();
+          ctx.ellipse(continent.x, continent.y, continent.w, continent.h, 0, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        
+        // Add cloud patterns
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        for (let i = 0; i < 20; i++) {
+          const x = Math.random() * 1024;
+          const y = Math.random() * 1024;
+          const radius = Math.random() * 50 + 20;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        // Add data visualization patterns for other layers
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        for (let i = 0; i < 30; i++) {
+          const x = Math.random() * 1024;
+          const y = Math.random() * 1024;
+          const radius = Math.random() * 30 + 10;
+          const intensity = Math.random();
+          ctx.globalAlpha = intensity;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
       }
       
       const fallbackTexture = new THREE.CanvasTexture(canvas);
       setTexture(fallbackTexture);
+      console.log(`✅ Fallback texture created for ${selectedLayer}`);
     };
 
     createEarthTexture();
-  }, []);
+  }, [selectedLayer]); // Re-run when layer changes
 
   useFrame(() => {
     if (meshRef.current) {
@@ -244,15 +320,17 @@ function OrbitalPath({ radius, color, inclination = 0 }: { radius: number; color
   );
 }
 
-// Main Scene Component with WebGL context recovery
+// Main Scene Component with layer support
 function Scene({ 
   isPlaying, 
   satellites, 
-  onSatelliteClick 
+  onSatelliteClick,
+  selectedLayer 
 }: { 
   isPlaying: boolean;
   satellites: Satellite[];
   onSatelliteClick: (satellite: Satellite) => void;
+  selectedLayer: string;
 }) {
   const { camera, gl } = useThree();
   
@@ -289,8 +367,8 @@ function Scene({
       <ambientLight intensity={0.3} />
       <directionalLight position={[5, 5, 5]} intensity={1} />
       
-      {/* Earth */}
-      <Earth rotationSpeed={isPlaying ? 0.005 : 0} />
+      {/* Earth with selected layer */}
+      <Earth rotationSpeed={isPlaying ? 0.005 : 0} selectedLayer={selectedLayer} />
       
       {/* Atmosphere glow */}
       <mesh>
@@ -340,6 +418,7 @@ export function NASAEarthMap({
     month: 'long', 
     day: 'numeric'
   }));
+  // Update selected layer state to trigger Earth texture reload
   const [selectedLayer, setSelectedLayer] = useState('Visible Earth');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [weatherData, setWeatherData] = useState<any>(null);
@@ -616,6 +695,7 @@ export function NASAEarthMap({
             isPlaying={isPlaying} 
             satellites={satellites}
             onSatelliteClick={handleSatelliteClick}
+            selectedLayer={selectedLayer}
           />
         </Canvas>
       </Suspense>
