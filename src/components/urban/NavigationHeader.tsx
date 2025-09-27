@@ -39,16 +39,16 @@ export function NavigationHeader({
     >
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between">
-          {/* Logo - responsive sizing */}
-          <div className="flex items-center mr-2 sm:mr-4 lg:mr-16">
+          {/* Logo - fixed sizing */}
+          <div className="flex items-center mr-2 sm:mr-4 lg:mr-16 flex-shrink-0">
             <button 
               onClick={() => handleNavClick('dashboard')}
-              className="cursor-pointer hover:opacity-80 transition-opacity"
+              className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
             >
               <img 
                 src={lupusLogo} 
                 alt="Lupus Cortex" 
-                className="h-10 sm:h-12 lg:h-14 w-auto"
+                className="h-12 sm:h-14 lg:h-16 w-auto object-contain flex-shrink-0"
               />
             </button>
           </div>
