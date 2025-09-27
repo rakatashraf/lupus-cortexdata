@@ -477,10 +477,13 @@ export function ArcGISMap({
           // Update selected location
           selectedLocation = { lat, lon };
           
+          // Immediately update location display with coordinates
+          document.getElementById("location-name")!.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+          
           // Add marker at clicked location
           addLocationMarker(lat, lon);
           
-          // Update weather data for clicked location
+          // Update weather data for clicked location (this will fetch location name)
           updateWeatherData(lat, lon);
           
           // Notify parent component of location change
