@@ -40,10 +40,14 @@ interface SelectedLocation {
 // NASA API Configuration
 const NASA_API_KEY = 'GXcqYeyqgnHgWfdabi6RYhLPhdY1uIyiPsB922ZV';
 
-  // Enhanced Earth Component with NASA imagery and OpenStreetMap fallback
+  // Enhanced 3D Earth Component with realistic terrain and materials
 function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; selectedLayer: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const cloudsRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const [elevationTexture, setElevationTexture] = useState<THREE.Texture | null>(null);
+  const [normalTexture, setNormalTexture] = useState<THREE.Texture | null>(null);
+  const [cloudsTexture, setCloudsTexture] = useState<THREE.Texture | null>(null);
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   
@@ -91,6 +95,63 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
       console.log(`🛰️ Loading ${selectedLayer} imagery...`);
       
       const loader = new THREE.TextureLoader();
+      
+      // Create inner function to have access to loader
+      const loadAdditionalTextures = () => {
+        console.log('🌍 Loading additional Earth textures for realism...');
+        
+        // Load elevation/displacement map for terrain
+        loader.load(
+          'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73934/gebco_08_rev_elev_21600x10800.png',
+          (elevTexture) => {
+            console.log('✅ Elevation texture loaded');
+            elevTexture.wrapS = THREE.RepeatWrapping;
+            elevTexture.wrapT = THREE.ClampToEdgeWrapping;
+            setElevationTexture(elevTexture);
+          },
+          undefined,
+          (error) => {
+            console.warn('Failed to load elevation texture:', error);
+            // Create procedural elevation texture
+            createProceduralElevation();
+          }
+        );
+        
+        // Load normal map for surface detail
+        loader.load(
+          'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
+          (normTexture) => {
+            console.log('✅ Normal texture loaded');
+            normTexture.wrapS = THREE.RepeatWrapping;
+            normTexture.wrapT = THREE.ClampToEdgeWrapping;
+            setNormalTexture(normTexture);
+          },
+          undefined,
+          (error) => {
+            console.warn('Failed to load normal texture:', error);
+          }
+        );
+        
+        // Load cloud texture
+        loader.load(
+          'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg',
+          (cloudTexture) => {
+            console.log('✅ Cloud texture loaded');
+            cloudTexture.wrapS = THREE.RepeatWrapping;
+            cloudTexture.wrapT = THREE.ClampToEdgeWrapping;
+            setCloudsTexture(cloudTexture);
+          },
+          undefined,
+          (error) => {
+            console.warn('Failed to load cloud texture:', error);
+            // Create procedural clouds
+            createProceduralClouds();
+          }
+        );
+      };
+      
+      // Load additional textures for realism
+      loadAdditionalTextures();
       const config = layerEndpoints[selectedLayer as keyof typeof layerEndpoints] || layerEndpoints['Visible Earth'];
       
       // Create list of all URLs to try (primary + fallbacks)
@@ -269,26 +330,191 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
       console.log(`✅ Basic Earth texture created as final fallback`);
     };
 
+    // Load additional textures for 3D realism
+    const loadAdditionalTextures = () => {
+      console.log('🌍 Loading additional Earth textures for realism...');
+      
+      // Load elevation/displacement map for terrain
+      loader.load(
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73934/gebco_08_rev_elev_21600x10800.png',
+        (elevTexture) => {
+          console.log('✅ Elevation texture loaded');
+          elevTexture.wrapS = THREE.RepeatWrapping;
+          elevTexture.wrapT = THREE.ClampToEdgeWrapping;
+          setElevationTexture(elevTexture);
+        },
+        undefined,
+        (error) => {
+          console.warn('Failed to load elevation texture:', error);
+          // Create procedural elevation texture
+          createProceduralElevation();
+        }
+      );
+      
+      // Load normal map for surface detail
+      loader.load(
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
+        (normTexture) => {
+          console.log('✅ Normal texture loaded');
+          normTexture.wrapS = THREE.RepeatWrapping;
+          normTexture.wrapT = THREE.ClampToEdgeWrapping;
+          setNormalTexture(normTexture);
+        },
+        undefined,
+        (error) => {
+          console.warn('Failed to load normal texture:', error);
+        }
+      );
+      
+      // Load cloud texture
+      loader.load(
+        'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg',
+        (cloudTexture) => {
+          console.log('✅ Cloud texture loaded');
+          cloudTexture.wrapS = THREE.RepeatWrapping;
+          cloudTexture.wrapT = THREE.ClampToEdgeWrapping;
+          setCloudsTexture(cloudTexture);
+        },
+        undefined,
+        (error) => {
+          console.warn('Failed to load cloud texture:', error);
+          // Create procedural clouds
+          createProceduralClouds();
+        }
+      );
+    };
+
+    // Start loading immediately
+    loadNASAImagery();
+  }, [selectedLayer]);
+    const createProceduralElevation = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d')!;
+      
+      // Create elevation-like patterns using noise
+      const imageData = ctx.createImageData(512, 256);
+      const data = imageData.data;
+      
+      for (let i = 0; i < data.length; i += 4) {
+        const x = (i / 4) % 512;
+        const y = Math.floor((i / 4) / 512);
+        
+        // Simple noise pattern for elevation
+        const noise = Math.sin(x * 0.02) * Math.cos(y * 0.02) * 0.5 + 0.5;
+        const elevation = Math.floor(noise * 255);
+        
+        data[i] = elevation;     // R
+        data[i + 1] = elevation; // G
+        data[i + 2] = elevation; // B
+        data[i + 3] = 255;       // A
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      const elevTexture = new THREE.CanvasTexture(canvas);
+      elevTexture.wrapS = THREE.RepeatWrapping;
+      elevTexture.wrapT = THREE.ClampToEdgeWrapping;
+      setElevationTexture(elevTexture);
+    };
+    
+    // Create procedural cloud texture if loading fails
+    const createProceduralClouds = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d')!;
+      
+      // Create cloud patterns
+      ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+      ctx.fillRect(0, 0, 1024, 512);
+      
+      // Add multiple cloud layers
+      for (let layer = 0; layer < 3; layer++) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.2 + layer * 0.1})`;
+        
+        for (let i = 0; i < 50; i++) {
+          const x = Math.random() * 1024;
+          const y = Math.random() * 512;
+          const size = Math.random() * 100 + 20;
+          
+          ctx.beginPath();
+          ctx.arc(x, y, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      
+      const cloudTexture = new THREE.CanvasTexture(canvas);
+      cloudTexture.wrapS = THREE.RepeatWrapping;
+      cloudTexture.wrapT = THREE.ClampToEdgeWrapping;
+      setCloudsTexture(cloudTexture);
+    };
+
     // Start loading immediately
     loadNASAImagery();
   }, [selectedLayer]);
 
-  useFrame(() => {
+  useFrame((state) => {
     if (meshRef.current) {
       meshRef.current.rotation.y += rotationSpeed;
+    }
+    
+    // Rotate clouds slightly faster for realism
+    if (cloudsRef.current) {
+      cloudsRef.current.rotation.y += rotationSpeed * 1.1;
     }
   });
 
   return (
     <group>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[2, 128, 128]} />
-        <meshPhongMaterial
+      {/* Enhanced Earth with realistic materials */}
+      <mesh ref={meshRef} receiveShadow castShadow>
+        <sphereGeometry args={[2, 256, 256]} />
+        <meshStandardMaterial
           map={texture}
+          displacementMap={elevationTexture}
+          displacementScale={0.1}
+          normalMap={normalTexture}
+          normalScale={new THREE.Vector2(1, 1)}
+          roughness={0.8}
+          metalness={0.1}
           transparent={false}
           opacity={1.0}
-          shininess={30}
-          specular={new THREE.Color(0x111111)}
+        />
+      </mesh>
+      
+      {/* Realistic cloud layer */}
+      {cloudsTexture && (
+        <mesh ref={cloudsRef}>
+          <sphereGeometry args={[2.02, 128, 128]} />
+          <meshLambertMaterial
+            map={cloudsTexture}
+            transparent={true}
+            opacity={0.4}
+            alphaMap={cloudsTexture}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      
+      {/* Improved atmosphere glow with multiple layers */}
+      <mesh>
+        <sphereGeometry args={[2.08, 64, 64]} />
+        <meshBasicMaterial 
+          color="#87CEEB" 
+          transparent 
+          opacity={0.08} 
+          side={THREE.BackSide}
+        />
+      </mesh>
+      
+      <mesh>
+        <sphereGeometry args={[2.15, 64, 64]} />
+        <meshBasicMaterial 
+          color="#4FC3F7" 
+          transparent 
+          opacity={0.05} 
+          side={THREE.BackSide}
         />
       </mesh>
       
@@ -510,23 +736,48 @@ function Scene({
 
   return (
     <>
-      <Stars radius={100} depth={50} count={1000} factor={4} saturation={0.5} fade speed={1} />
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[5, 5, 5]} intensity={1} />
+      <Stars radius={100} depth={50} count={2000} factor={6} saturation={0.7} fade speed={0.5} />
+      
+      {/* Enhanced lighting system for realism */}
+      <ambientLight intensity={0.2} color="#404040" />
+      
+      {/* Main sun light */}
+      <directionalLight 
+        position={[10, 5, 5]} 
+        intensity={1.2} 
+        color="#FFE5B4"
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-far={50}
+        shadow-camera-left={-10}
+        shadow-camera-right={10}
+        shadow-camera-top={10}
+        shadow-camera-bottom={-10}
+      />
+      
+      {/* Rim lighting for atmosphere effect */}
+      <pointLight position={[-8, 0, 0]} intensity={0.5} color="#87CEEB" />
+      <pointLight position={[8, 0, 0]} intensity={0.3} color="#FFA500" />
+      
+      {/* Subtle fill light */}
+      <hemisphereLight 
+        args={["#87CEEB", "#2C1810", 0.4]}
+      />
       
       {/* Earth with clickable surface */}
       <group onClick={handleGlobeClick}>
         <Earth rotationSpeed={isPlaying ? 0.005 : 0} selectedLayer={selectedLayer} />
       </group>
       
-      {/* Enhanced atmosphere glow effect */}
+      {/* Volumetric atmosphere effect */}
       <mesh>
-        <sphereGeometry args={[2.05, 64, 64]} />
+        <sphereGeometry args={[2.25, 32, 32]} />
         <meshBasicMaterial 
-          color="#87CEEB" 
+          color="#1E88E5" 
           transparent 
-          opacity={0.15} 
+          opacity={0.03} 
           side={THREE.BackSide}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
       
@@ -552,8 +803,14 @@ function Scene({
         enablePan={true} 
         enableZoom={true} 
         enableRotate={true}
-        minDistance={3}
-        maxDistance={15}
+        minDistance={2.5}
+        maxDistance={25}
+        enableDamping={true}
+        dampingFactor={0.05}
+        rotateSpeed={0.5}
+        zoomSpeed={0.8}
+        panSpeed={0.8}
+        autoRotate={false}
       />
     </>
   );
