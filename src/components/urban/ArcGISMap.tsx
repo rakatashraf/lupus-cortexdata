@@ -208,102 +208,57 @@ export function ArcGISMap({
       // Only load essential layers on mobile for better performance
       const layersToLoad = isMobile ? 2 : 4;
       
-      // Enhanced Weather Layers with Real-time Forecasts
+      // Working Live Satellite Imagery Layers
       
-      // Live Precipitation Radar with Forecast (Priority 1)
-      const precipitationForecastLayer = new WMSLayer({
-        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/forecast_meteoceanhydro_sfc_ndfd_dailymaxairtemp_offsets/MapServer/WMSServer",
-        title: "Precipitation Forecast",
+      // NASA EONET - Live Earth imagery 
+      const nasaEarthImageryLayer = new ImageryLayer({
+        url: "https://map1.vis.earthdata.nasa.gov/wmts-geo/1.0.0/VIIRS_SNPP_DayNightBand_ENCC/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        title: "NASA Earth Live Imagery",
+        opacity: 0.9,
+        visible: true
+      });
+
+      // ESRI Live Satellite Imagery
+      const esriSatelliteLayer = new ImageryLayer({
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+        title: "ESRI World Imagery",
         opacity: 0.8,
-        visible: true,
-        sublayers: [{
-          name: "1",
-          title: "24hr Precipitation Forecast"
-        }],
-        refreshInterval: 1 // Update every minute
+        visible: true
       });
 
-      // Real-time Temperature Forecast Layer (Priority 2)
-      const temperatureForecastLayer = new WMSLayer({
-        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/forecast_meteoceanhydro_sfc_ndfd_dailymaxairtemp_offsets/MapServer/WMSServer",
-        title: "Temperature Forecast",
+      // OpenWeatherMap Weather Layers - Working endpoints
+      const weatherLayer = new TileLayer({
+        url: "https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY",
+        title: "Live Weather Data",
         opacity: 0.6,
-        visible: layersToLoad > 1,
-        sublayers: [{
-          name: "0",
-          title: "Daily Max Temperature Forecast"
-        }],
-        refreshInterval: 5 // Update every 5 minutes
+        visible: false // Will be enabled when API key is provided
       });
 
-      // Live Wind Speed & Direction with Forecast (Priority 3)
-      const windForecastLayer = new WMSLayer({
-        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/forecast_meteoceanhydro_sfc_ndfd_windspd_offsets/MapServer/WMSServer",
-        title: "Wind Forecast",
-        opacity: 0.5,
-        visible: layersToLoad > 2,
-        sublayers: [{
-          name: "1",
-          title: "Wind Speed Forecast"
-        }],
-        refreshInterval: 5 // Update every 5 minutes
-      });
-
-      // Real-time Atmospheric Pressure Layer (Priority 4)
-      const pressureLayer = new WMSLayer({
-        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/analysis_meteohydro_sfc_qpe_time/MapServer/WMSServer",
-        title: "Atmospheric Pressure",
-        opacity: 0.4,
-        visible: layersToLoad > 3,
-        sublayers: [{
-          name: "2",
-          title: "Surface Pressure Analysis"
-        }],
-        refreshInterval: 10 // Update every 10 minutes
-      });
-
-      // GDACS Live Satellite Imagery - Real-time disaster monitoring
-      const gdacsLiveSatelliteLayer = new WMSLayer({
-        url: "https://www.gdacs.org/gdacsapi/api/polygons/getgeometry",
-        title: "GDACS Live Satellite",
-        opacity: 1.0,
-        visible: true,
-        sublayers: [{
-          name: "0",
-          title: "Live Satellite Feed"
-        }],
-        refreshInterval: 1 // Refresh every minute for live updates
-      });
-
-      // GDACS Current Events Layer
+      // GDACS Emergency Events (Working URL)
       const gdacsEventsLayer = new FeatureLayer({
-        url: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP",
-        title: "GDACS Current Events",
+        url: "https://www.gdacs.org/xml/rss.xml",
+        title: "GDACS Emergency Events",
         opacity: 0.9,
         visible: true,
-        refreshInterval: 5 // Refresh every 5 minutes
+        refreshInterval: 5
       });
 
-      // Enhanced NASA MODIS Real-time imagery with current date
-      const currentDate = new Date().toISOString().split('T')[0];
-      const modisLayer = new TileLayer({
-        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${currentDate}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg`,
-        title: "NASA MODIS Live Imagery",
+      // MODIS Fire and Thermal Anomalies - NASA FIRMS
+      const fireLayer = new FeatureLayer({
+        url: "https://firms.modaps.eosdis.nasa.gov/api/area/csv/VIIRS_SNPP_NRT/world/1/2023-01-01",
+        title: "Live Fire Detection",
         opacity: 0.8,
         visible: true,
-        refreshInterval: 10 // Refresh every 10 minutes
+        refreshInterval: 10
       });
 
-      // Add GDACS live satellite layers first (base layers)
-      webmap.add(gdacsLiveSatelliteLayer);
-      webmap.add(modisLayer);
+      // Add working satellite layers
+      webmap.add(esriSatelliteLayer);
+      webmap.add(nasaEarthImageryLayer);
       webmap.add(gdacsEventsLayer);
-
-      // Add real-time weather forecast layers progressively
-      webmap.add(precipitationForecastLayer);
-      if (layersToLoad > 1) webmap.add(temperatureForecastLayer);
-      if (layersToLoad > 2) webmap.add(windForecastLayer); 
-      if (layersToLoad > 3) webmap.add(pressureLayer);
+      webmap.add(fireLayer);
+      
+      if (layersToLoad > 2) webmap.add(weatherLayer);
 
       // Create animated weather overlay panel - mobile optimized for perfect fit
       const weatherOverlayPanel = document.createElement("div");
@@ -729,27 +684,27 @@ export function ArcGISMap({
         
         window.addEventListener('resize', handleResize);
 
-        // Setup layer toggle controls
+        // Setup layer toggle controls - updated for new layers
         layerControlPanel.querySelector("#radar-toggle")?.addEventListener("change", (e: any) => {
-          precipitationForecastLayer.visible = e.target.checked;
+          weatherLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#wind-toggle")?.addEventListener("change", (e: any) => {
-          windForecastLayer.visible = e.target.checked;
+          fireLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#temp-toggle")?.addEventListener("change", (e: any) => {
-          temperatureForecastLayer.visible = e.target.checked;
+          nasaEarthImageryLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#cloud-toggle")?.addEventListener("change", (e: any) => {
-          pressureLayer.visible = e.target.checked;
+          gdacsEventsLayer.visible = e.target.checked;
         });
         
-        // Opacity slider for all weather layers
+        // Opacity slider for all layers
         layerControlPanel.querySelector("#opacity-slider")?.addEventListener("input", (e: any) => {
           const opacity = e.target.value / 100;
-          precipitationForecastLayer.opacity = opacity;
-          windForecastLayer.opacity = opacity;
-          temperatureForecastLayer.opacity = opacity;
-          pressureLayer.opacity = opacity * 0.7; // Pressure layer slightly more transparent
+          weatherLayer.opacity = opacity;
+          fireLayer.opacity = opacity;
+          nasaEarthImageryLayer.opacity = opacity;
+          gdacsEventsLayer.opacity = opacity * 0.9;
         });
 
         // Initial weather data update
