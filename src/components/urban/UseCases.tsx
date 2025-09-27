@@ -510,33 +510,33 @@ export const UseCases: React.FC<UseCasesProps> = ({
           doc.setFont('times', 'normal');
           doc.text('Urban Intelligence Solutions', 20, 32);
           
-          // Professional report title with corporate styling
-          doc.setTextColor(41, 128, 185); // Corporate blue
-          doc.setFontSize(18);
+          // Professional report title with teal theme
+          doc.setTextColor(20, 184, 166); // Primary teal
+          doc.setFontSize(20);
           doc.setFont('times', 'bold');
-          doc.text('LOCATION EVALUATION REPORT', 20, 62);
+          doc.text('LOCATION EVALUATION REPORT', 20, 70);
           
-          // Rating display with color coding
+          // Rating display with teal theme color coding
           doc.setFontSize(16);
           doc.setFont('times', 'bold');
           if (recommendation.rating >= 4) {
-            doc.setTextColor(46, 125, 50); // Green for excellent
+            doc.setTextColor(16, 185, 129); // Emerald for excellent
           } else if (recommendation.rating >= 3) {
-            doc.setTextColor(255, 152, 0); // Orange for good  
+            doc.setTextColor(6, 182, 212); // Cyan for good  
           } else {
-            doc.setTextColor(211, 47, 47); // Red for conditional
+            doc.setTextColor(239, 68, 68); // Red for conditional
           }
-          doc.text(`${recommendation.rating}/5 STARS`, 20, 76);
+          doc.text(`${recommendation.rating}/5 STARS`, 20, 82);
           
-          // Executive Summary with colorful header
-          doc.setFillColor(236, 239, 241); // Light gray background
-          doc.rect(18, 82, 174, 2, 'F');
-          doc.setTextColor(41, 128, 185); // Corporate blue
-          doc.setFontSize(10);
+          // Executive Summary with teal header
+          doc.setFillColor(240, 253, 250); // Very light teal background
+          doc.rect(18, 88, 174, 3, 'F');
+          doc.setTextColor(20, 184, 166); // Primary teal
+          doc.setFontSize(11);
           doc.setFont('times', 'bold');
-          doc.text('EXECUTIVE SUMMARY', 20, 88);
+          doc.text('EXECUTIVE SUMMARY', 20, 95);
           
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
           const ratingText = recommendation.rating >= 4 ? 'EXCELLENT' : recommendation.rating >= 3 ? 'GOOD' : 'CONDITIONAL';
@@ -547,50 +547,50 @@ User Requirement: ${userDescription.substring(0, 120)}${userDescription.length >
 AI Analysis: Comprehensive evaluation based on urban intelligence metrics including crime rates, air quality, and urban heat vulnerability indices.`;
           
           const summaryLines = doc.splitTextToSize(summaryText, 170);
-          let yPos = 92;
+          let yPos = 99;
           summaryLines.forEach(line => {
             doc.text(line, 20, yPos);
             yPos += 4;
           });
           
-          // Metrics section with colorful styling
+          // Metrics section with teal styling
           yPos += 6;
-          doc.setFillColor(236, 239, 241); // Light gray background
-          doc.rect(18, yPos - 2, 174, 2, 'F');
-          doc.setTextColor(41, 128, 185); // Corporate blue
-          doc.setFontSize(10);
+          doc.setFillColor(240, 253, 250); // Light teal background
+          doc.rect(18, yPos - 2, 174, 3, 'F');
+          doc.setTextColor(20, 184, 166); // Primary teal
+          doc.setFontSize(11);
           doc.setFont('times', 'bold');
           doc.text('KEY METRICS', 20, yPos + 2);
           
           yPos += 6;
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('times', 'normal');
           
           Object.entries(recommendation.indexScores).forEach(([index, score]) => {
-            // Color code metrics based on performance
+            // Teal theme color coding for metrics
             if (score > 70) {
-              doc.setTextColor(46, 125, 50); // Green
+              doc.setTextColor(16, 185, 129); // Emerald
             } else if (score > 50) {
-              doc.setTextColor(255, 152, 0); // Orange
+              doc.setTextColor(6, 182, 212); // Cyan
             } else {
-              doc.setTextColor(211, 47, 47); // Red
+              doc.setTextColor(239, 68, 68); // Red
             }
             const performance = score > 70 ? 'EXCELLENT' : score > 50 ? 'GOOD' : 'ATTENTION NEEDED';
             doc.text(`• ${index}: ${score.toFixed(0)}/100 - ${performance}`, 22, yPos);
             yPos += 4;
           });
           
-          // Findings section
+          // Findings section with teal theme
           yPos += 4;
-          doc.setFillColor(236, 239, 241);
-          doc.rect(18, yPos - 2, 174, 2, 'F');
-          doc.setTextColor(41, 128, 185);
-          doc.setFontSize(10);
+          doc.setFillColor(240, 253, 250);
+          doc.rect(18, yPos - 2, 174, 3, 'F');
+          doc.setTextColor(20, 184, 166);
+          doc.setFontSize(11);
           doc.setFont('times', 'bold');
           doc.text('ANALYSIS FINDINGS', 20, yPos + 2);
           
           yPos += 6;
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
           
@@ -613,17 +613,17 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
             });
           });
           
-          // Recommendations section
+          // Recommendations section with teal theme
           yPos += 4;
-          doc.setFillColor(236, 239, 241);
-          doc.rect(18, yPos - 2, 174, 2, 'F');
-          doc.setTextColor(41, 128, 185);
-          doc.setFontSize(10);
+          doc.setFillColor(240, 253, 250);
+          doc.rect(18, yPos - 2, 174, 3, 'F');
+          doc.setTextColor(20, 184, 166);
+          doc.setFontSize(11);
           doc.setFont('times', 'bold');
           doc.text('STRATEGIC RECOMMENDATIONS', 20, yPos + 2);
           
           yPos += 6;
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
           
@@ -650,17 +650,17 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
             });
           });
           
-          // Conclusion section
+          // Conclusion section with teal theme
           yPos += 4;
-          doc.setFillColor(236, 239, 241);
-          doc.rect(18, yPos - 2, 174, 2, 'F');
-          doc.setTextColor(41, 128, 185);
-          doc.setFontSize(10);
+          doc.setFillColor(240, 253, 250);
+          doc.rect(18, yPos - 2, 174, 3, 'F');
+          doc.setTextColor(20, 184, 166);
+          doc.setFontSize(11);
           doc.setFont('times', 'bold');
           doc.text('FINAL ASSESSMENT', 20, yPos + 2);
           
           yPos += 6;
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
           const conclusionText = recommendation.rating >= 4 
@@ -675,24 +675,25 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
             yPos += 4;
           });
           
-          // Professional certification
+          // Professional certification with teal theme
           yPos += 8;
-          doc.setFillColor(41, 128, 185);
-          doc.rect(18, yPos - 2, 174, 12, 'F');
+          doc.setFillColor(20, 184, 166);
+          doc.rect(18, yPos - 2, 174, 15, 'F');
           doc.setTextColor(255, 255, 255);
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('times', 'bold');
-          doc.text('CERTIFIED ANALYSIS', 20, yPos + 2);
+          doc.text('CERTIFIED ANALYSIS', 20, yPos + 4);
           
-          doc.setFontSize(6);
-          doc.setFont('times', 'normal');
-          doc.text('LUPUS CORTEX AI Analytics Division', 20, yPos + 6);
-          doc.text(`${currentDate} | Analysis ID: LC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, 20, yPos + 9);
-          
-          // Footer text centered at bottom outside border
           doc.setFontSize(7);
           doc.setFont('times', 'normal');
-          doc.setTextColor(100, 100, 100);
+          doc.text('LUPUS CORTEX AI Analytics Division', 20, yPos + 8);
+          doc.text(`${currentDate} | Analysis ID: LC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, 20, yPos + 12);
+          
+          // Footer text centered inside border at bottom
+          yPos += 20;
+          doc.setFontSize(8);
+          doc.setFont('times', 'normal');
+          doc.setTextColor(20, 184, 166); // Primary teal color
           const footerText = '© 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com';
           const footerText2 = 'Proprietary analysis - authorized use only.';
           
@@ -702,8 +703,12 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           const footerWidth2 = doc.getTextWidth(footerText2);
           const footerX2 = (pageWidth - footerWidth2) / 2;
           
-          doc.text(footerText, footerX, pageHeight - 12);
-          doc.text(footerText2, footerX2, pageHeight - 8);
+          // Add light background for footer
+          doc.setFillColor(247, 254, 231); // Very light background
+          doc.rect(18, yPos - 2, 174, 10, 'F');
+          
+          doc.text(footerText, footerX, yPos + 2);
+          doc.text(footerText2, footerX2, yPos + 6);
           
           // Save PDF
           const cleanArea = recommendation.area.replace(/[^a-zA-Z0-9]/g, '-');
