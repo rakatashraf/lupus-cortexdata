@@ -208,78 +208,102 @@ export function ArcGISMap({
       // Only load essential layers on mobile for better performance
       const layersToLoad = isMobile ? 2 : 4;
       
-      // NOAA Weather Radar Layer (Priority 1)
-      const radarLayer = new WMSLayer({
-        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/WMSServer",
-        title: "Live Weather Radar",
-        opacity: 0.7,
+      // Enhanced Weather Layers with Real-time Forecasts
+      
+      // Live Precipitation Radar with Forecast (Priority 1)
+      const precipitationForecastLayer = new WMSLayer({
+        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/forecast_meteoceanhydro_sfc_ndfd_dailymaxairtemp_offsets/MapServer/WMSServer",
+        title: "Precipitation Forecast",
+        opacity: 0.8,
         visible: true,
         sublayers: [{
           name: "1",
-          title: "Precipitation"
-        }]
+          title: "24hr Precipitation Forecast"
+        }],
+        refreshInterval: 1 // Update every minute
       });
 
-      // Wind Speed Layer (Priority 2)  
-      const windLayer = new ImageryLayer({
-        url: "https://services.arcgisonline.com/arcgis/rest/services/Weather/NOAA_METAR_current_wind_speed_direction/MapServer",
-        title: "Wind Speed & Direction",
+      // Real-time Temperature Forecast Layer (Priority 2)
+      const temperatureForecastLayer = new WMSLayer({
+        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/forecast_meteoceanhydro_sfc_ndfd_dailymaxairtemp_offsets/MapServer/WMSServer",
+        title: "Temperature Forecast",
+        opacity: 0.6,
+        visible: layersToLoad > 1,
+        sublayers: [{
+          name: "0",
+          title: "Daily Max Temperature Forecast"
+        }],
+        refreshInterval: 5 // Update every 5 minutes
+      });
+
+      // Live Wind Speed & Direction with Forecast (Priority 3)
+      const windForecastLayer = new WMSLayer({
+        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/forecast_meteoceanhydro_sfc_ndfd_windspd_offsets/MapServer/WMSServer",
+        title: "Wind Forecast",
         opacity: 0.5,
-        visible: layersToLoad > 1
+        visible: layersToLoad > 2,
+        sublayers: [{
+          name: "1",
+          title: "Wind Speed Forecast"
+        }],
+        refreshInterval: 5 // Update every 5 minutes
       });
 
-      // Temperature Layer (Priority 3)
-      const temperatureLayer = new ImageryLayer({
-        url: "https://services.arcgisonline.com/arcgis/rest/services/Weather/NOAA_METAR_current_conditions/MapServer",
-        title: "Temperature",
-        opacity: 0.5,
-        visible: layersToLoad > 2
-      });
-
-      // Cloud Cover Layer (Priority 4)
-      const cloudLayer = new TileLayer({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_Cloud_Top_Temp_Day/default/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
-        title: "Cloud Cover",
+      // Real-time Atmospheric Pressure Layer (Priority 4)
+      const pressureLayer = new WMSLayer({
+        url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/analysis_meteohydro_sfc_qpe_time/MapServer/WMSServer",
+        title: "Atmospheric Pressure",
         opacity: 0.4,
-        visible: layersToLoad > 3
+        visible: layersToLoad > 3,
+        sublayers: [{
+          name: "2",
+          title: "Surface Pressure Analysis"
+        }],
+        refreshInterval: 10 // Update every 10 minutes
       });
 
-      // Live Satellite Imagery Layer from the specific ArcGIS web app
-      const liveSatelliteLayer = new ImageryLayer({
-        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
-        title: "Live Satellite Imagery",
+      // GDACS Live Satellite Imagery - Real-time disaster monitoring
+      const gdacsLiveSatelliteLayer = new WMSLayer({
+        url: "https://www.gdacs.org/gdacsapi/api/polygons/getgeometry",
+        title: "GDACS Live Satellite",
         opacity: 1.0,
         visible: true,
-        refreshInterval: 0.5 // Refresh every 30 seconds for live data
+        sublayers: [{
+          name: "0",
+          title: "Live Satellite Feed"
+        }],
+        refreshInterval: 1 // Refresh every minute for live updates
       });
 
-      // High-resolution satellite layer for detailed view
-      const highResSatelliteLayer = new TileLayer({
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
-        title: "High Resolution Satellite",
-        opacity: 1.0,
+      // GDACS Current Events Layer
+      const gdacsEventsLayer = new FeatureLayer({
+        url: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP",
+        title: "GDACS Current Events",
+        opacity: 0.9,
         visible: true,
-        maxScale: 1000 // Only visible at high zoom levels
+        refreshInterval: 5 // Refresh every 5 minutes
       });
 
-      // NASA MODIS Real-time imagery
+      // Enhanced NASA MODIS Real-time imagery with current date
+      const currentDate = new Date().toISOString().split('T')[0];
       const modisLayer = new TileLayer({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${currentDate}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg`,
         title: "NASA MODIS Live Imagery",
         opacity: 0.8,
-        visible: true
+        visible: true,
+        refreshInterval: 10 // Refresh every 10 minutes
       });
 
-      // Add satellite layers first (base layers)
-      webmap.add(liveSatelliteLayer);
-      webmap.add(highResSatelliteLayer);
+      // Add GDACS live satellite layers first (base layers)
+      webmap.add(gdacsLiveSatelliteLayer);
       webmap.add(modisLayer);
+      webmap.add(gdacsEventsLayer);
 
-      // Add weather layers progressively on top of satellite imagery
-      webmap.add(radarLayer);
-      if (layersToLoad > 1) webmap.add(windLayer);
-      if (layersToLoad > 2) webmap.add(temperatureLayer); 
-      if (layersToLoad > 3) webmap.add(cloudLayer);
+      // Add real-time weather forecast layers progressively
+      webmap.add(precipitationForecastLayer);
+      if (layersToLoad > 1) webmap.add(temperatureForecastLayer);
+      if (layersToLoad > 2) webmap.add(windForecastLayer); 
+      if (layersToLoad > 3) webmap.add(pressureLayer);
 
       // Create animated weather overlay panel - mobile optimized for perfect fit
       const weatherOverlayPanel = document.createElement("div");
@@ -707,25 +731,25 @@ export function ArcGISMap({
 
         // Setup layer toggle controls
         layerControlPanel.querySelector("#radar-toggle")?.addEventListener("change", (e: any) => {
-          radarLayer.visible = e.target.checked;
+          precipitationForecastLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#wind-toggle")?.addEventListener("change", (e: any) => {
-          windLayer.visible = e.target.checked;
+          windForecastLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#temp-toggle")?.addEventListener("change", (e: any) => {
-          temperatureLayer.visible = e.target.checked;
+          temperatureForecastLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#cloud-toggle")?.addEventListener("change", (e: any) => {
-          cloudLayer.visible = e.target.checked;
+          pressureLayer.visible = e.target.checked;
         });
         
         // Opacity slider for all weather layers
         layerControlPanel.querySelector("#opacity-slider")?.addEventListener("input", (e: any) => {
           const opacity = e.target.value / 100;
-          radarLayer.opacity = opacity;
-          windLayer.opacity = opacity;
-          temperatureLayer.opacity = opacity;
-          cloudLayer.opacity = opacity * 0.7; // Cloud layer slightly more transparent
+          precipitationForecastLayer.opacity = opacity;
+          windForecastLayer.opacity = opacity;
+          temperatureForecastLayer.opacity = opacity;
+          pressureLayer.opacity = opacity * 0.7; // Pressure layer slightly more transparent
         });
 
         // Initial weather data update
