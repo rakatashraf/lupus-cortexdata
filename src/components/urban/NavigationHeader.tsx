@@ -40,7 +40,7 @@ export function NavigationHeader({
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center mr-8">
+          <div className="flex items-center mr-16">
             <button 
               onClick={() => handleNavClick('dashboard')}
               className="cursor-pointer hover:opacity-80 transition-opacity"
@@ -55,27 +55,27 @@ export function NavigationHeader({
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-2">
+          <nav className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = currentSection === item.id;
               
               return (
-                <Button
-                  key={item.id}
-                  variant={isActive ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => handleNavClick(item.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 border",
-                    isActive 
-                      ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25 scale-105" 
-                      : "text-foreground hover:text-primary hover:bg-primary/5 border-transparent hover:border-primary/20 hover:shadow-md"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </Button>
+                 <Button
+                   key={item.id}
+                   variant={isActive ? "default" : "ghost"}
+                   size="sm"
+                   onClick={() => handleNavClick(item.id)}
+                   className={cn(
+                     "flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium transition-all duration-300 border",
+                     isActive 
+                       ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25 scale-105" 
+                       : "text-foreground hover:text-primary hover:bg-primary/5 border-transparent hover:border-primary/20 hover:shadow-md"
+                   )}
+                 >
+                   <Icon className="h-3 w-3" />
+                   <span>{item.label}</span>
+                 </Button>
               );
             })}
           </nav>
