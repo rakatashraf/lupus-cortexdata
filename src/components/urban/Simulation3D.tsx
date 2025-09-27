@@ -355,11 +355,11 @@ export function Simulation3D() {
               </div>
             </CardHeader>
             <CardContent>
-              <div 
+                <div 
                 ref={canvasRef}
                 className={cn(
                   "relative w-full rounded-lg overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800",
-                  isFullscreen ? "h-screen" : "h-[500px]"
+                  isFullscreen ? "h-screen" : "h-[850px]"
                 )}
               >
                 {viewMode === '3d' ? (
