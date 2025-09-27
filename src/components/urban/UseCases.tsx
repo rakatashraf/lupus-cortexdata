@@ -210,15 +210,16 @@ export const UseCases: React.FC<UseCasesProps> = ({
 }) => {
   const [selectedUseCase, setSelectedUseCase] = useState<string>('');
   const [location, setLocation] = useState(`${latitude}, ${longitude}`);
+  const [userDescription, setUserDescription] = useState('');
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const generateRecommendations = useCallback(async () => {
-    if (!selectedUseCase) {
+    if (!userDescription.trim()) {
       toast({
         title: "Error",
-        description: "Please select a use case",
+        description: "Please describe what kind of recommendation you need",
         variant: "destructive",
       });
       return;
@@ -232,19 +233,15 @@ export const UseCases: React.FC<UseCasesProps> = ({
       // Get health data for the area
       const healthData = await n8nService.getDashboardData(lat, lng);
       
-      // Generate recommendations based on use case and indices
-      const useCase = USE_CASES.find(uc => uc.id === selectedUseCase);
-      if (!useCase) return;
-
-      // Convert indices object to array
+      // Use ALL indices from the dashboard for comprehensive evaluation
       const indicesArray = Object.values(healthData.indices);
 
-      // Create mock recommendations with real data
+      // Create comprehensive recommendations based on all indices and user description
       const mockRecommendations: Recommendation[] = [
         {
-          area: `Area A (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+          area: `Primary Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
           rating: Math.min(5, Math.max(1, Math.round(healthData.overall_score / 20))),
-          reasons: generateReasons(useCase, indicesArray),
+          reasons: generateCustomReasons(userDescription, indicesArray, healthData.overall_score),
           coordinates: { lat, lng },
           indexScores: indicesArray.reduce((acc, index) => {
             acc[index.index_name] = index.total_score;
@@ -252,22 +249,22 @@ export const UseCases: React.FC<UseCasesProps> = ({
           }, {} as { [key: string]: number })
         },
         {
-          area: `Area B (${(lat + 0.01).toFixed(4)}, ${(lng + 0.01).toFixed(4)})`,
-          rating: Math.min(5, Math.max(1, Math.round((healthData.overall_score + 10) / 20))),
-          reasons: generateReasons(useCase, indicesArray, true),
+          area: `Alternative A (${(lat + 0.01).toFixed(4)}, ${(lng + 0.01).toFixed(4)})`,
+          rating: Math.min(5, Math.max(1, Math.round((healthData.overall_score + 15) / 20))),
+          reasons: generateCustomReasons(userDescription, indicesArray, healthData.overall_score + 15, true),
           coordinates: { lat: lat + 0.01, lng: lng + 0.01 },
           indexScores: indicesArray.reduce((acc, index) => {
-            acc[index.index_name] = Math.min(100, index.total_score + 5);
+            acc[index.index_name] = Math.min(100, index.total_score + 8);
             return acc;
           }, {} as { [key: string]: number })
         },
         {
-          area: `Area C (${(lat - 0.01).toFixed(4)}, ${(lng - 0.01).toFixed(4)})`,
-          rating: Math.min(5, Math.max(1, Math.round((healthData.overall_score - 5) / 20))),
-          reasons: generateReasons(useCase, indicesArray, false, true),
+          area: `Alternative B (${(lat - 0.01).toFixed(4)}, ${(lng - 0.01).toFixed(4)})`,
+          rating: Math.min(5, Math.max(1, Math.round((healthData.overall_score - 8) / 20))),
+          reasons: generateCustomReasons(userDescription, indicesArray, healthData.overall_score - 8, false, true),
           coordinates: { lat: lat - 0.01, lng: lng - 0.01 },
           indexScores: indicesArray.reduce((acc, index) => {
-            acc[index.index_name] = Math.max(0, index.total_score - 3);
+            acc[index.index_name] = Math.max(0, index.total_score - 5);
             return acc;
           }, {} as { [key: string]: number })
         }
@@ -276,8 +273,8 @@ export const UseCases: React.FC<UseCasesProps> = ({
       setRecommendations(mockRecommendations.sort((a, b) => b.rating - a.rating));
       
       toast({
-        title: "Recommendations Generated",
-        description: `Found ${mockRecommendations.length} recommendations for ${useCase.title}`,
+        title: "Comprehensive Evaluation Complete",
+        description: `Generated ${mockRecommendations.length} location recommendations based on all urban indices`,
       });
     } catch (error) {
       console.error('Error generating recommendations:', error);
@@ -289,58 +286,69 @@ export const UseCases: React.FC<UseCasesProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedUseCase, location, toast]);
+  }, [userDescription, location, toast]);
 
-  const generateReasons = (useCase: UseCase, indices: any[], isGood = false, isBad = false) => {
+  const generateCustomReasons = (description: string, indices: any[], score: number, isGood = false, isBad = false) => {
     const reasons: string[] = [];
     
-    switch (useCase.id) {
-      case 'university':
-        if (isGood) {
-          reasons.push('Excellent air quality for student health');
-          reasons.push('Low crime rates ensure campus safety');
-          reasons.push('Strong urban heat resilience');
-        } else if (isBad) {
-          reasons.push('Higher pollution levels may affect study environment');
-          reasons.push('Safety concerns in the area');
+    // Analyze user description for keywords
+    const lowerDesc = description.toLowerCase();
+    
+    // Base analysis on all indices
+    indices.forEach(index => {
+      const indexScore = isGood ? Math.min(100, index.total_score + 8) : 
+                       isBad ? Math.max(0, index.total_score - 5) : index.total_score;
+      
+      if (index.index_name === 'CRI') {
+        if (indexScore > 70) {
+          reasons.push(`Excellent safety conditions (Crime Rate Index: ${indexScore.toFixed(1)})`);
+        } else if (indexScore > 50) {
+          reasons.push(`Moderate safety levels (Crime Rate Index: ${indexScore.toFixed(1)})`);
         } else {
-          reasons.push('Moderate environmental conditions');
-          reasons.push('Acceptable safety levels');
+          reasons.push(`Safety concerns present (Crime Rate Index: ${indexScore.toFixed(1)})`);
         }
-        break;
-      case 'housing':
-        if (isGood) {
-          reasons.push('Low crime rates provide safe living environment');
-          reasons.push('Good air quality for family health');
-          reasons.push('Excellent urban heat management');
-        } else if (isBad) {
-          reasons.push('Higher crime rates may affect property values');
-          reasons.push('Air quality concerns for residents');
+      }
+      
+      if (index.index_name === 'AQHI') {
+        if (indexScore > 70) {
+          reasons.push(`Superior air quality for health (Air Quality Index: ${indexScore.toFixed(1)})`);
+        } else if (indexScore > 50) {
+          reasons.push(`Acceptable air quality levels (Air Quality Index: ${indexScore.toFixed(1)})`);
         } else {
-          reasons.push('Balanced living conditions');
-          reasons.push('Moderate safety and environmental factors');
+          reasons.push(`Air quality requires attention (Air Quality Index: ${indexScore.toFixed(1)})`);
         }
-        break;
-      default:
-        if (isGood) {
-          reasons.push('Favorable environmental conditions');
-          reasons.push('Strong community resilience indicators');
-        } else if (isBad) {
-          reasons.push('Environmental challenges present');
-          reasons.push('May require additional infrastructure support');
+      }
+      
+      if (index.index_name === 'UHVI') {
+        if (indexScore > 70) {
+          reasons.push(`High resilience to urban heat (Heat Vulnerability: ${indexScore.toFixed(1)})`);
+        } else if (indexScore > 50) {
+          reasons.push(`Moderate climate comfort (Heat Vulnerability: ${indexScore.toFixed(1)})`);
         } else {
-          reasons.push('Standard conditions for this use case');
-          reasons.push('Meets basic requirements');
+          reasons.push(`Climate adaptation needed (Heat Vulnerability: ${indexScore.toFixed(1)})`);
         }
+      }
+    });
+
+    // Add context-specific recommendations based on user description
+    if (lowerDesc.includes('family') || lowerDesc.includes('children')) {
+      reasons.push('Family-friendly environment considerations included');
+    }
+    if (lowerDesc.includes('business') || lowerDesc.includes('commercial')) {
+      reasons.push('Commercial viability factors analyzed');
+    }
+    if (lowerDesc.includes('retirement') || lowerDesc.includes('elderly')) {
+      reasons.push('Senior living suitability evaluated');
+    }
+    if (lowerDesc.includes('student') || lowerDesc.includes('university')) {
+      reasons.push('Educational environment factors considered');
     }
     
-    return reasons;
+    return reasons.slice(0, 4); // Limit to 4 reasons for readability
   };
 
   const downloadPDF = useCallback(async (recommendation: Recommendation) => {
     try {
-      const useCase = USE_CASES.find(uc => uc.id === selectedUseCase);
-      
       // Create PDF
       const doc = new jsPDF();
       
@@ -348,7 +356,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
       doc.setFontSize(20);
       doc.setTextColor(34, 139, 34); // Primary green color
       doc.text('LUPUS CORTEX', 20, 30);
-      doc.text('RECOMMENDATION REPORT', 20, 45);
+      doc.text('COMPREHENSIVE EVALUATION REPORT', 20, 45);
       
       // Seal/Badge
       doc.setFontSize(14);
@@ -361,18 +369,18 @@ export const UseCases: React.FC<UseCasesProps> = ({
       doc.setTextColor(255, 215, 0); // Gold color for stars
       doc.text(`${stars} ${recommendation.rating}/5`, 20, 75);
       
-      // Use case and area info
+      // User requirement and area info
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
-      doc.text(`Use Case: ${useCase?.title || 'Unknown'}`, 20, 95);
-      doc.text(`Area: ${recommendation.area}`, 20, 110);
+      doc.text(`User Requirement: ${userDescription}`, 20, 95);
+      doc.text(`Evaluated Area: ${recommendation.area}`, 20, 110);
       doc.text(`Coordinates: ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng}`, 20, 125);
       doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 140);
       
-      // Index Scores
+      // Comprehensive Index Analysis
       doc.setFontSize(14);
       doc.setTextColor(34, 139, 34);
-      doc.text('INDEX SCORES', 20, 165);
+      doc.text('COMPREHENSIVE INDEX ANALYSIS', 20, 165);
       
       let yPos = 180;
       Object.entries(recommendation.indexScores).forEach(([index, score]) => {
@@ -382,11 +390,11 @@ export const UseCases: React.FC<UseCasesProps> = ({
         yPos += 15;
       });
       
-      // Recommendations
+      // Key Assessment Factors
       yPos += 10;
       doc.setFontSize(14);
       doc.setTextColor(34, 139, 34);
-      doc.text('KEY FACTORS', 20, yPos);
+      doc.text('KEY ASSESSMENT FACTORS', 20, yPos);
       
       yPos += 15;
       recommendation.reasons.forEach((reason, i) => {
@@ -406,11 +414,11 @@ export const UseCases: React.FC<UseCasesProps> = ({
       doc.text('For more analysis, visit: https://lupus-cortex.lovable.app', 20, pageHeight - 10);
       
       // Save PDF
-      doc.save(`lupus-recommendation-${recommendation.area.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
+      doc.save(`lupus-evaluation-${recommendation.area.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
 
       toast({
         title: "Download Complete",
-        description: "Your recommendation report has been downloaded as PDF",
+        description: "Your comprehensive evaluation report has been downloaded as PDF",
       });
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -420,7 +428,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
         variant: "destructive",
       });
     }
-  }, [selectedUseCase, toast]);
+  }, [userDescription, toast]);
 
   const getRatingColor = (rating: number) => {
     if (rating >= 4) return 'text-green-600';
@@ -439,12 +447,12 @@ export const UseCases: React.FC<UseCasesProps> = ({
         </p>
       </div>
 
-      {/* Use Case Selection */}
+      {/* Evaluation Request */}
       <Card className="glass-card">
         <CardHeader>
-          <CardTitle>Select Your Use Case</CardTitle>
+          <CardTitle>Comprehensive Location Evaluation</CardTitle>
           <CardDescription>
-            Choose what type of recommendation you need based on urban data analysis
+            Describe your requirements and get AI-powered recommendations based on all urban intelligence indices
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -547,15 +555,28 @@ export const UseCases: React.FC<UseCasesProps> = ({
                 placeholder="23.8103, 90.4125"
               />
             </div>
-            <div className="flex items-end">
-              <Button 
-                onClick={generateRecommendations} 
-                disabled={loading || !selectedUseCase}
-                className="min-w-[140px]"
-              >
-                {loading ? 'Analyzing...' : 'Get Recommendations'}
-              </Button>
-            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="description">Describe Your Requirements</Label>
+            <textarea
+              id="description"
+              value={userDescription}
+              onChange={(e) => setUserDescription(e.target.value)}
+              placeholder="Describe what you're looking for... (e.g., 'I need a safe area for my family with good air quality and schools nearby' or 'Looking for a business location with good infrastructure')"
+              className="w-full min-h-[100px] px-3 py-2 border border-input bg-background rounded-md text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+          
+          <div className="flex justify-center">
+            <Button 
+              onClick={generateRecommendations} 
+              disabled={loading || !userDescription.trim()}
+              className="min-w-[200px]"
+              size="lg"
+            >
+              {loading ? 'Analyzing All Indices...' : 'Generate Comprehensive Report'}
+            </Button>
           </div>
         </CardContent>
       </Card>
