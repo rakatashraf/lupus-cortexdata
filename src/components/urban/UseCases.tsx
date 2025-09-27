@@ -498,17 +498,18 @@ export const UseCases: React.FC<UseCasesProps> = ({
           doc.setFillColor(52, 152, 219); // Lighter blue accent
           doc.rect(0, 42, pageWidth, 4, 'F');
           
-          // Logo (small, top right)
-          doc.addImage(logoDataUrl, 'PNG', pageWidth - 52, 8, 42, 26);
+          // White logo on the left side (larger for better visibility)
+          doc.addImage(logoDataUrl, 'PNG', 20, 8, 50, 32);
           
-          // Company branding in header
-          doc.setTextColor(255, 255, 255); // White text
-          doc.setFontSize(14);
-          doc.setFont('times', 'bold');
-          doc.text('LUPUS CORTEX', 20, 22);
+          // Company details on the right side in white
+          doc.setTextColor(255, 255, 255);
           doc.setFontSize(9);
+          doc.setFont('times', 'bold');
+          doc.text('Urban Intelligence & Analytics Solutions', pageWidth - 120, 20);
+          doc.setFontSize(7);
           doc.setFont('times', 'normal');
-          doc.text('Urban Intelligence Solutions', 20, 32);
+          doc.text('AI-Powered Location Intelligence Platform', pageWidth - 120, 28);
+          doc.text('Contact: info@lupus-cortex.com | www.lupus-cortex.com', pageWidth - 120, 36);
           
           // Professional report title with teal theme
           doc.setTextColor(20, 184, 166); // Primary teal
