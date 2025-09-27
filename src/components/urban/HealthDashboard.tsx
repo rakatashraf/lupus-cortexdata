@@ -120,43 +120,43 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
   }
 
   return (
-    <div className="space-y-8">
-      {/* Overall City Health Score */}
+    <div className="space-y-6 sm:space-y-8">
+      {/* Overall City Health Score - responsive */}
       <Card className="bg-gradient-hero shadow-glow border-0 text-white">
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold text-center">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-center">
             City Health Overview
           </CardTitle>
-          <p className="text-center text-white/80">
+          <p className="text-center text-white/80 text-sm sm:text-base">
             {healthData.location.latitude.toFixed(4)}°, {healthData.location.longitude.toFixed(4)}°
           </p>
         </CardHeader>
-        <CardContent>
-          <div className="text-center space-y-4">
-            <div className="text-6xl font-bold">
+        <CardContent className="p-4 sm:p-6">
+          <div className="text-center space-y-3 sm:space-y-4">
+            <div className="text-4xl sm:text-5xl lg:text-6xl font-bold">
               {healthData.overall_score}
             </div>
-            <div className="text-xl">
+            <div className="text-lg sm:text-xl">
               Overall Health Score
             </div>
             <Badge 
               variant="secondary" 
               className={cn(
-                "text-lg px-4 py-2 bg-white/20 text-white border-white/30",
+                "text-sm sm:text-lg px-3 py-1 sm:px-4 sm:py-2 bg-white/20 text-white border-white/30",
                 getHealthStatusColor(healthData.city_health_status)
               )}
             >
               {healthData.city_health_status}
             </Badge>
-            <div className="text-sm text-white/70 mt-4">
+            <div className="text-xs sm:text-sm text-white/70 mt-4">
               Last updated: {new Date(healthData.last_updated).toLocaleDateString()}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Index Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Index Grid - responsive columns */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {Object.entries(healthData.indices).map(([key, index]) => {
           const Icon = INDEX_ICONS[key as keyof typeof INDEX_ICONS];
           const colorClass = INDEX_COLORS[key as keyof typeof INDEX_COLORS];
@@ -164,12 +164,12 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
           return (
             <Card 
               key={key} 
-              className="bg-gradient-card shadow-card hover:shadow-interactive transition-all duration-300 hover:scale-105 cursor-pointer group"
+              className="bg-gradient-card shadow-card hover:shadow-interactive transition-all duration-300 hover:scale-105 cursor-pointer group min-h-[200px] touch-manipulation"
               onClick={() => setSelectedIndex({ index, key })}
             >
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 p-4 sm:p-6">
                 <div className="flex items-center justify-between">
-                  <Icon className={cn("h-6 w-6 group-hover:scale-110 transition-transform", `text-${colorClass}`)} />
+                  <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6 group-hover:scale-110 transition-transform", `text-${colorClass}`)} />
                   <Badge 
                     variant={getStatusVariant(index.total_score, index.target)}
                     className="text-xs"
@@ -177,18 +177,18 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                     {index.total_score}/{index.target}
                   </Badge>
                 </div>
-                <CardTitle className="text-lg leading-tight group-hover:text-primary transition-colors">
+                <CardTitle className="text-base sm:text-lg leading-tight group-hover:text-primary transition-colors">
                   {index.index_name}
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   {index.category}
                 </p>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Progress to Target</span>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs sm:text-sm font-medium">Progress to Target</span>
+                    <span className="text-xs sm:text-sm text-muted-foreground">
                       {Math.round((index.total_score / index.target) * 100)}%
                     </span>
                   </div>

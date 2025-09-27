@@ -124,23 +124,27 @@ const Index = () => {
         />
       )}
       
-      <main className={`${currentSection === 'welcome' ? 'container mx-auto px-4 py-8' : 'container mx-auto px-4 py-8'}`}>
+      <main className={`${
+        currentSection === 'welcome' 
+          ? 'container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8' 
+          : 'container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8'
+      }`}>
         {renderCurrentSection()}
       </main>
 
-      {/* Background decorative elements */}
+      {/* Background decorative elements - responsive sizing */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/4 left-1/4 w-48 h-48 sm:w-64 sm:h-64 lg:w-96 lg:h-96 bg-primary/5 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 sm:w-64 sm:h-64 lg:w-96 lg:h-96 bg-accent/5 rounded-full blur-3xl"></div>
       </div>
 
-      {/* Footer positioned outside the main border, exactly like in reference image */}
-      <div className="w-full bg-teal-100/80 py-3 mt-8">
-        <div className="text-center">
-          <div className="text-xs text-teal-700">
+      {/* Footer positioned outside the main border - responsive */}
+      <div className="w-full bg-teal-100/80 py-2 sm:py-3 mt-4 sm:mt-8">
+        <div className="text-center px-4">
+          <div className="text-xs sm:text-sm text-teal-700">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
           </div>
-          <div className="text-xs text-teal-700 mt-1">
+          <div className="text-xs sm:text-sm text-teal-700 mt-1">
             Proprietary analysis - authorized use only.
           </div>
         </div>

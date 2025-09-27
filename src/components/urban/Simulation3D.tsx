@@ -176,54 +176,56 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
   ];
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in">
-      {/* Header */}
+    <div className="min-h-screen p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 animate-fade-in">
+      {/* Header - responsive */}
       <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
           3D Urban Planning Simulator
         </h1>
-        <p className="text-muted-foreground text-lg">Design and visualize sustainable urban environments</p>
+        <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Design and visualize sustainable urban environments</p>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Stats Overview - responsive grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
         {statsCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <Card key={stat.label} className="glass-card hover-lift animate-slide-in-up" style={{ animationDelay: `${index * 0.05}s` }}>
-              <CardContent className="p-4">
+            <Card key={stat.label} className="glass-card hover-lift animate-slide-in-up touch-manipulation" style={{ animationDelay: `${index * 0.05}s` }}>
+              <CardContent className="p-2 sm:p-3 lg:p-4">
                 <div className="flex items-center justify-between">
-                  <Icon className={cn("h-5 w-5", stat.color)} />
-                  <Badge variant="outline" className="text-xs">{stat.value}</Badge>
+                  <Icon className={cn("h-4 w-4 sm:h-5 sm:w-5", stat.color)} />
+                  <Badge variant="outline" className="text-[10px] sm:text-xs">{stat.value}</Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">{stat.label}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">{stat.label}</p>
               </CardContent>
             </Card>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Control Panel */}
-        <div className="lg:col-span-1 space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        {/* Control Panel - responsive */}
+        <div className="xl:col-span-1 space-y-4 sm:space-y-6">
           {/* View Toggle */}
           <Card className="glass-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Layers3 className="h-5 w-5" />
+            <CardHeader className="pb-3 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <Layers3 className="h-4 w-4 sm:h-5 sm:w-5" />
                 View Mode
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6 pt-0">
               <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as '3d' | 'satellite')}>
-                <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="3d">
-                    <Building className="h-4 w-4 mr-2" />
-                    3D View
+                <TabsList className="w-full grid grid-cols-2 h-12">
+                  <TabsTrigger value="3d" className="text-xs sm:text-sm">
+                    <Building className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">3D View</span>
+                    <span className="sm:hidden">3D</span>
                   </TabsTrigger>
-                  <TabsTrigger value="satellite">
-                    <Satellite className="h-4 w-4 mr-2" />
-                    Satellite
+                  <TabsTrigger value="satellite" className="text-xs sm:text-sm">
+                    <Satellite className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Satellite</span>
+                    <span className="sm:hidden">Sat</span>
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
