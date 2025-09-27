@@ -364,5 +364,48 @@
       min-height: 300px;
       border-radius: 0.5rem !important;
     }
+
+    /* Weather panel mobile optimizations */
+    .esri-expand__content {
+      max-width: 90vw !important;
+      max-height: 70vh !important;
+      overflow-y: auto !important;
+    }
+    
+    /* Touch-friendly expand button sizing */
+    .esri-expand__icon-container {
+      min-width: 44px !important;
+      min-height: 44px !important;
+      border-radius: 8px !important;
+    }
+    
+    /* Mobile weather panel positioning */
+    .esri-ui-bottom-right {
+      margin: 0 8px 8px 0 !important;
+    }
+    
+    .esri-ui-bottom-left {
+      margin: 0 0 8px 8px !important;
+    }
+    
+    /* Optimize expand panel for mobile touch */
+    .esri-expand {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+      border-radius: 8px !important;
+    }
+    
+    /* Weather data grid mobile optimization */
+    .weather-mobile-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+  }
+
+  /* Tablet optimizations */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .esri-expand__content {
+      max-width: 320px !important;
+    }
   }
 }

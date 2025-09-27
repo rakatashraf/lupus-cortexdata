@@ -173,76 +173,87 @@ export function ArcGISMap({
       if (layersToLoad > 2) webmap.add(temperatureLayer); 
       if (layersToLoad > 3) webmap.add(cloudLayer);
 
-      // Create animated weather overlay panel
+      // Create animated weather overlay panel - mobile optimized
       const weatherOverlayPanel = document.createElement("div");
       weatherOverlayPanel.innerHTML = `
-        <div style="background: rgba(10, 15, 20, 0.95); padding: 12px; border-radius: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(0, 223, 252, 0.3); min-width: 280px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <div style="width: 8px; height: 8px; background: #00dffc; border-radius: 50%; animation: pulse 2s infinite;"></div>
-            <h3 style="margin: 0; font-size: 14px; color: #00dffc; font-weight: 600;">Real-Time Weather Data</h3>
+        <div style="
+          background: rgba(10, 15, 20, 0.95); 
+          padding: ${window.innerWidth < 768 ? '8px' : '12px'}; 
+          border-radius: ${window.innerWidth < 768 ? '8px' : '12px'}; 
+          backdrop-filter: blur(10px); 
+          border: 1px solid rgba(0, 223, 252, 0.3); 
+          min-width: ${window.innerWidth < 768 ? '280px' : '320px'};
+          max-width: ${window.innerWidth < 768 ? '90vw' : '380px'};
+          max-height: ${window.innerWidth < 768 ? '80vh' : 'auto'};
+          overflow-y: auto;
+          font-size: ${window.innerWidth < 768 ? '12px' : '14px'};
+        ">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <div style="width: 6px; height: 6px; background: #00dffc; border-radius: 50%; animation: pulse 2s infinite;"></div>
+            <h3 style="margin: 0; font-size: ${window.innerWidth < 768 ? '12px' : '14px'}; color: #00dffc; font-weight: 600;">Real-Time Weather</h3>
           </div>
           
-          <div style="margin-bottom: 12px; padding: 6px 8px; background: rgba(0, 223, 252, 0.1); border-radius: 8px; border: 1px solid rgba(0, 223, 252, 0.2);">
-            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+          <div style="margin-bottom: 8px; padding: 4px 6px; background: rgba(0, 223, 252, 0.1); border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
+            <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                 <circle cx="12" cy="10" r="3"/>
               </svg>
-              <span style="color: #64748b; font-size: 10px;">Location</span>
+              <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Location</span>
             </div>
-            <div id="location-name" style="color: #ffffff; font-size: 12px; font-weight: 500;">Loading location...</div>
+            <div id="location-name" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '10px' : '12px'}; font-weight: 500; line-height: 1.2;">Loading location...</div>
           </div>
           
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;">
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 8px; border-radius: 8px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-bottom: 8px;">
+            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
+              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
                   <path d="M12 2v20M17 7l-5-5-5 5M17 17l-5 5-5-5"/>
                 </svg>
-                <span style="color: #64748b; font-size: 11px;">Temperature</span>
+                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Temp</span>
               </div>
-              <div id="temp-value" style="color: #ffffff; font-size: 18px; font-weight: 600;">--°C</div>
+              <div id="temp-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">--°C</div>
             </div>
             
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 8px; border-radius: 8px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
+              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
                   <path d="M14 2.269C13.477 2.086 12.932 2 12.364 2 9.95 2 8 4.134 8 6.571c0 .524.09 1.029.254 1.489A5.5 5.5 0 003 13.5 5.5 5.5 0 008.5 19h7a4.5 4.5 0 10.41-8.983A5.002 5.002 0 0014 2.269z"/>
                 </svg>
-                <span style="color: #64748b; font-size: 11px;">Humidity</span>
+                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Humidity</span>
               </div>
-              <div id="humidity-value" style="color: #ffffff; font-size: 18px; font-weight: 600;">--%</div>
+              <div id="humidity-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">--%</div>
             </div>
             
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 8px; border-radius: 8px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
+              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
                   <path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2"/>
                 </svg>
-                <span style="color: #64748b; font-size: 11px;">Wind</span>
+                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Wind</span>
               </div>
-              <div id="wind-value" style="color: #ffffff; font-size: 18px; font-weight: 600;">-- km/h</div>
+              <div id="wind-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">-- km/h</div>
             </div>
             
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 8px; border-radius: 8px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
+              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
                   <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
                 </svg>
-                <span style="color: #64748b; font-size: 11px;">Pressure</span>
+                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Pressure</span>
               </div>
-              <div id="pressure-value" style="color: #ffffff; font-size: 18px; font-weight: 600;">-- hPa</div>
+              <div id="pressure-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">-- hPa</div>
             </div>
           </div>
           
-          <div style="background: rgba(0, 223, 252, 0.1); padding: 8px; border-radius: 8px; border: 1px solid rgba(0, 223, 252, 0.2);">
-            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+          <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
+            <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
               </svg>
-              <span style="color: #64748b; font-size: 11px;">Forecast</span>
+              <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Forecast</span>
             </div>
-            <div id="forecast-text" style="color: #ffffff; font-size: 12px; line-height: 1.4;">Loading forecast data...</div>
+            <div id="forecast-text" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '10px' : '11px'}; line-height: 1.3;">Loading forecast data...</div>
           </div>
           
           <style>
@@ -455,29 +466,59 @@ export function ArcGISMap({
 
       // Add UI components when view is ready
       view.when(() => {
-        // Add weather data panel
+        // Add weather data panel with mobile-responsive positioning
+        const isMobile = window.innerWidth < 768;
         const weatherExpand = new Expand({
           view: view,
           content: weatherOverlayPanel,
           expandTooltip: "Weather Data",
           collapseTooltip: "Close",
-          expanded: true,
-          mode: "floating",
-          group: "top-left"
+          expanded: !isMobile, // Auto-collapsed on mobile
+          mode: "floating"
         });
-        view.ui.add(weatherExpand, "top-left");
+        
+        // Position weather panel based on screen size
+        if (isMobile) {
+          view.ui.add(weatherExpand, "bottom-right");
+        } else {
+          view.ui.add(weatherExpand, "top-right");
+        }
 
-        // Add layer control panel
+        // Add layer control panel with mobile positioning
         const layerExpand = new Expand({
           view: view,
           content: layerControlPanel,
-          expandTooltip: "Layer Controls",
+          expandTooltip: "Layer Controls", 
           collapseTooltip: "Close",
           expanded: false,
-          mode: "floating",
-          group: "top-left"
+          mode: "floating"
         });
-        view.ui.add(layerExpand, "top-left");
+        
+        // Position layer controls based on screen size
+        if (isMobile) {
+          view.ui.add(layerExpand, "bottom-left");
+        } else {
+          view.ui.add(layerExpand, "top-left");
+        }
+
+        // Add resize handler to reposition controls
+        const handleResize = () => {
+          const newIsMobile = window.innerWidth < 768;
+          if (newIsMobile !== isMobile) {
+            view.ui.remove([weatherExpand, layerExpand]);
+            
+            if (newIsMobile) {
+              view.ui.add(weatherExpand, "bottom-right");
+              view.ui.add(layerExpand, "bottom-left");
+              weatherExpand.expanded = false; // Auto-collapse on mobile
+            } else {
+              view.ui.add(weatherExpand, "top-right");
+              view.ui.add(layerExpand, "top-left");
+            }
+          }
+        };
+        
+        window.addEventListener('resize', handleResize);
 
         // Setup layer toggle controls
         layerControlPanel.querySelector("#radar-toggle")?.addEventListener("change", (e: any) => {
@@ -527,33 +568,55 @@ export function ArcGISMap({
           }
         });
 
-        // Add click event listener for location selection
+        // Enhanced mobile-friendly click event listener
+        let touchTimeout: any;
+        let lastTouchTime = 0;
+        
         view.on("click", (event) => {
-          // Get the clicked location
-          const lat = event.mapPoint.latitude;
-          const lon = event.mapPoint.longitude;
+          const now = Date.now();
+          const timeDiff = now - lastTouchTime;
           
-          // Update selected location
-          selectedLocation = { lat, lon };
+          // Prevent rapid fire clicks on mobile
+          if (timeDiff < 300) return;
+          lastTouchTime = now;
           
-          // Immediately update location display with coordinates
-          document.getElementById("location-name")!.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-          
-          // Add marker at clicked location
-          addLocationMarker(lat, lon);
-          
-          // Update weather data for clicked location (this will fetch location name)
-          updateWeatherData(lat, lon);
-          
-          // Notify parent component of location change
-          if (onLocationSelect) {
-            onLocationSelect(lat, lon);
-          }
+          clearTimeout(touchTimeout);
+          touchTimeout = setTimeout(() => {
+            // Get the clicked location
+            const lat = event.mapPoint.latitude;
+            const lon = event.mapPoint.longitude;
+            
+            // Update selected location
+            selectedLocation = { lat, lon };
+            
+            // Immediately update location display with coordinates
+            document.getElementById("location-name")!.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+            
+            // Add marker at clicked location
+            addLocationMarker(lat, lon);
+            
+            // Update weather data for clicked location (this will fetch location name)
+            updateWeatherData(lat, lon);
+            
+            // Notify parent component of location change
+            if (onLocationSelect) {
+              onLocationSelect(lat, lon);
+            }
+            
+            // Auto-close weather panel on mobile after a few seconds for better UX
+            if (window.innerWidth < 768 && weatherExpand.expanded) {
+              setTimeout(() => {
+                weatherExpand.expanded = false;
+              }, 4000); // Close after 4 seconds on mobile
+            }
+          }, 150); // Small delay to prevent accidental double taps
         });
 
-        // Clean up interval on component unmount
+        // Enhanced cleanup with resize handler removal
         const originalCleanup = () => {
           clearInterval(weatherInterval);
+          clearTimeout(touchTimeout);
+          window.removeEventListener('resize', handleResize);
           if (view) {
             view.destroy();
           }
