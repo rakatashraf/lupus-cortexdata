@@ -735,14 +735,8 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           doc.text('LUPUS CORTEX AI Analytics Division', 20, yPos + 8);
           doc.text(`${currentDate} | Analysis ID: LC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, 20, yPos + 12);
           
-          // Footer section under the border (like in the reference image)
-          yPos += 5; // Small gap after certification box
-          
-          // Light background footer section spanning full width
-          doc.setFillColor(247, 254, 231); // Very light teal background like in the image
-          doc.rect(0, yPos, pageWidth, 16, 'F');
-          
-          // Footer text centered in the footer section
+          // Footer text centered inside border at bottom
+          yPos += 20;
           doc.setFontSize(8);
           doc.setFont('times', 'normal');
           doc.setTextColor(20, 184, 166); // Primary teal color
@@ -755,9 +749,12 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           const footerWidth2 = doc.getTextWidth(footerText2);
           const footerX2 = (pageWidth - footerWidth2) / 2;
           
-          // Position footer text in the footer section
-          doc.text(footerText, footerX, yPos + 6);
-          doc.text(footerText2, footerX2, yPos + 12);
+          // Add light background for footer
+          doc.setFillColor(247, 254, 231); // Very light background
+          doc.rect(18, yPos - 2, 174, 10, 'F');
+          
+          doc.text(footerText, footerX, yPos + 2);
+          doc.text(footerText2, footerX2, yPos + 6);
           
           // Save PDF
           const cleanArea = recommendation.area.replace(/[^a-zA-Z0-9]/g, '-');
