@@ -44,7 +44,7 @@ export function NavigationHeader({
             <img 
               src={lupusLogo} 
               alt="Lupus Cortex" 
-              className="h-16 w-auto"
+              className="h-14 w-auto"
               style={{ filter: 'brightness(0) invert(1)' }}
             />
           </div>
@@ -75,7 +75,7 @@ export function NavigationHeader({
             })}
           </nav>
 
-          {/* Status Badge and Location */}
+          {/* Location Badge */}
           <div className="hidden lg:flex items-center gap-3">
             {currentLocation && (
               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors">
@@ -83,10 +83,6 @@ export function NavigationHeader({
                 {currentLocation.latitude.toFixed(4)}°, {currentLocation.longitude.toFixed(4)}°
               </Badge>
             )}
-            <Badge variant="outline" className="bg-success/10 text-success border-success/30 hover:bg-success/20 transition-colors">
-              <div className="w-2 h-2 bg-success rounded-full mr-2 animate-pulse"></div>
-              System Active
-            </Badge>
           </div>
 
           {/* Mobile Menu */}
@@ -131,16 +127,6 @@ export function NavigationHeader({
                     </button>
                   );
                 })}
-                
-                <div className="pt-4 border-t border-border">
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                    <div className="text-sm">
-                      <div className="font-medium">System Status</div>
-                      <div className="text-xs text-muted-foreground">All services operational</div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </SheetContent>
           </Sheet>
