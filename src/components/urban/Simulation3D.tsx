@@ -185,8 +185,8 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
         <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Design and visualize sustainable urban environments</p>
       </div>
 
-      {/* Stats Overview - responsive grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
+      {/* Stats Overview - mobile optimized grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
         {statsCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -203,7 +203,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
         })}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {/* Control Panel - responsive */}
         <div className="xl:col-span-1 space-y-4 sm:space-y-6">
           {/* View Toggle */}
@@ -216,7 +216,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as '3d' | 'satellite')}>
-                <TabsList className="w-full grid grid-cols-2 h-12">
+                <TabsList className="w-full grid grid-cols-2 h-10 sm:h-12">
                   <TabsTrigger value="3d" className="text-xs sm:text-sm">
                     <Building className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                     <span className="hidden sm:inline">3D View</span>
@@ -430,7 +430,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
           <CardTitle className="text-xl">Environmental Impact Analysis</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Sustainability Score</span>

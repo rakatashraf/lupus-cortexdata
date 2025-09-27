@@ -326,54 +326,54 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
   };
 
   return (
-    <div className="min-h-screen p-6 space-y-8 animate-fade-in">
+    <div className="min-h-screen p-2 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in">
       {/* Header with Stats Cards */}
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
             Urban Analytics Dashboard
           </h1>
-          <p className="text-muted-foreground text-lg">Real-time satellite data visualization and analysis</p>
+          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Real-time satellite data visualization and analysis</p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="gradient-purple rounded-2xl p-6 text-white hover-lift animate-slide-in-up">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+          <div className="gradient-purple rounded-lg sm:rounded-2xl p-3 sm:p-4 lg:p-6 text-white hover-lift animate-slide-in-up">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/80 text-sm font-medium">Active Layers</p>
-                <p className="text-3xl font-bold">{totalLayers}</p>
+                <p className="text-white/80 text-xs sm:text-sm font-medium">Active Layers</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{totalLayers}</p>
                 <p className="text-white/60 text-xs mt-1">Data Sources</p>
               </div>
-              <Layers className="h-8 w-8 text-white/80" />
+              <Layers className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-white/80" />
             </div>
-            <div className="mt-4 h-2 bg-white/20 rounded-full overflow-hidden">
+            <div className="mt-2 sm:mt-4 h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden">
               <div className="h-full bg-white rounded-full" style={{ width: `${(totalLayers / DEFAULT_LAYERS.length) * 100}%` }} />
             </div>
           </div>
 
-          <div className="gradient-cyan rounded-2xl p-6 text-white hover-lift animate-slide-in-up" style={{ animationDelay: '0.1s' }}>
+          <div className="gradient-cyan rounded-lg sm:rounded-2xl p-3 sm:p-4 lg:p-6 text-white hover-lift animate-slide-in-up" style={{ animationDelay: '0.1s' }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/80 text-sm font-medium">Data Quality</p>
-                <p className="text-3xl font-bold">{avgDataQuality}%</p>
+                <p className="text-white/80 text-xs sm:text-sm font-medium">Data Quality</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{avgDataQuality}%</p>
                 <p className="text-white/60 text-xs mt-1">Accuracy</p>
               </div>
-              <Activity className="h-8 w-8 text-white/80" />
+              <Activity className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-white/80" />
             </div>
-            <div className="mt-4 h-2 bg-white/20 rounded-full overflow-hidden">
+            <div className="mt-2 sm:mt-4 h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden">
               <div className="h-full bg-white rounded-full" style={{ width: `${avgDataQuality}%` }} />
             </div>
           </div>
 
-          <div className="gradient-coral rounded-2xl p-6 text-white hover-lift animate-slide-in-up" style={{ animationDelay: '0.2s' }}>
+          <div className="gradient-coral rounded-lg sm:rounded-2xl p-3 sm:p-4 lg:p-6 text-white hover-lift animate-slide-in-up" style={{ animationDelay: '0.2s' }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/80 text-sm font-medium">Data Points</p>
-                <p className="text-3xl font-bold">{dataPoints}</p>
+                <p className="text-white/80 text-xs sm:text-sm font-medium">Data Points</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{dataPoints}</p>
                 <p className="text-white/60 text-xs mt-1">Last 30 days</p>
               </div>
-              <BarChart3 className="h-8 w-8 text-white/80" />
+              <BarChart3 className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-white/80" />
             </div>
             <div className="mt-4 flex items-center space-x-2">
               <TrendingUp className="h-4 w-4 text-white/80" />
@@ -553,19 +553,19 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
 
         {/* Summary Chart */}
         <Card className="glass-card card-glow hover-lift animate-slide-in-up" style={{ animationDelay: '0.6s' }}>
-          <CardHeader>
-            <CardTitle className="text-xl">Index Distribution</CardTitle>
+          <CardHeader className="pb-2 sm:pb-3">
+            <CardTitle className="text-lg sm:text-xl text-white">Index Distribution</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="h-[500px] w-full">
+          <CardContent className="p-2 sm:p-6">
+            <div className="h-64 sm:h-80 lg:h-[500px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={120}
+                    innerRadius={window.innerWidth < 640 ? 40 : 60}
+                    outerRadius={window.innerWidth < 640 ? 80 : 120}
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}`}
                     labelLine={false}
@@ -581,10 +581,11 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
                       borderRadius: '8px',
                       backdropFilter: 'blur(16px)',
                       color: '#ffffff',
-                      padding: '12px'
+                      padding: '8px 12px',
+                      fontSize: window.innerWidth < 640 ? '12px' : '14px'
                     }}
-                    itemStyle={{ color: '#ffffff' }}
-                    labelStyle={{ color: '#ffffff' }}
+                    itemStyle={{ color: '#ffffff', fontSize: window.innerWidth < 640 ? '11px' : '13px' }}
+                    labelStyle={{ color: '#ffffff', fontSize: window.innerWidth < 640 ? '11px' : '13px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>

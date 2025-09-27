@@ -283,4 +283,86 @@
       linear-gradient(135deg, hsl(222, 47%, 11%) 0%, hsl(217, 33%, 12%) 100%);
     min-height: 100vh;
   }
+
+  /* Mobile optimizations for charts and visualizations */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /* Mobile-optimized chart containers */
+  .mobile-chart-container {
+    width: 100%;
+    height: auto;
+    min-height: 200px;
+  }
+  
+  @media (max-width: 640px) {
+    .mobile-chart-container {
+      min-height: 160px;
+    }
+  }
+
+  /* Mobile-friendly button sizes */
+  .mobile-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Scrollable containers for mobile */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  .mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Mobile responsive text */
+  @media (max-width: 640px) {
+    .mobile-text-xs { font-size: 0.7rem; }
+    .mobile-text-sm { font-size: 0.8rem; }
+    .mobile-text-base { font-size: 0.9rem; }
+  }
+
+  /* Safe area handling for mobile devices */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-area-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Mobile card optimizations */
+  @media (max-width: 768px) {
+    .mobile-card {
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+    }
+  }
+
+  /* ArcGIS Map mobile optimizations */
+  .arcgis-map-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+  
+  @media (max-width: 768px) {
+    .arcgis-map-container {
+      min-height: 300px;
+      border-radius: 0.5rem !important;
+    }
+  }
 }

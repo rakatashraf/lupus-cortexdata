@@ -17,7 +17,7 @@ declare global {
 
 export function ArcGISMap({ 
   webmapId = '625da886dbf24a559da73840d293156d',
-  height = '750px',
+  height = '100vh',
   enableRotation = true,
   onRotationChange,
   isSimulationRunning = true,
@@ -252,33 +252,33 @@ export function ArcGISMap({
         </div>
       `;
 
-      // Weather layer controls panel
+      // Weather layer controls panel - mobile optimized
       const layerControlPanel = document.createElement("div");
       layerControlPanel.innerHTML = `
-        <div style="background: rgba(10, 15, 20, 0.95); padding: 12px; border-radius: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(0, 223, 252, 0.3);">
-          <h4 style="margin: 0 0 10px 0; color: #00dffc; font-size: 13px; font-weight: 600;">Weather Layers</h4>
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" id="radar-toggle" checked style="accent-color: #00dffc; width: 16px; height: 16px;">
-              <span style="color: #ffffff; font-size: 12px;">Precipitation Radar</span>
+        <div style="background: rgba(10, 15, 20, 0.95); padding: 8px 12px; border-radius: 8px; backdrop-filter: blur(10px); border: 1px solid rgba(0, 223, 252, 0.3); max-width: 90vw; max-height: 70vh; overflow-y: auto;">
+          <h4 style="margin: 0 0 8px 0; color: #00dffc; font-size: 12px; font-weight: 600;">Weather Layers</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px;">
+              <input type="checkbox" id="radar-toggle" checked style="accent-color: #00dffc; width: 14px; height: 14px;">
+              <span style="color: #ffffff; font-size: 10px;">Radar</span>
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" id="wind-toggle" checked style="accent-color: #00dffc; width: 16px; height: 16px;">
-              <span style="color: #ffffff; font-size: 12px;">Wind Patterns</span>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px;">
+              <input type="checkbox" id="wind-toggle" checked style="accent-color: #00dffc; width: 14px; height: 14px;">
+              <span style="color: #ffffff; font-size: 10px;">Wind</span>
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" id="temp-toggle" checked style="accent-color: #00dffc; width: 16px; height: 16px;">
-              <span style="color: #ffffff; font-size: 12px;">Temperature</span>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px;">
+              <input type="checkbox" id="temp-toggle" checked style="accent-color: #00dffc; width: 14px; height: 14px;">
+              <span style="color: #ffffff; font-size: 10px;">Temperature</span>
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" id="cloud-toggle" checked style="accent-color: #00dffc; width: 16px; height: 16px;">
-              <span style="color: #ffffff; font-size: 12px;">Cloud Cover</span>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px;">
+              <input type="checkbox" id="cloud-toggle" checked style="accent-color: #00dffc; width: 14px; height: 14px;">
+              <span style="color: #ffffff; font-size: 10px;">Clouds</span>
             </label>
           </div>
-          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0, 223, 252, 0.2);">
-            <label style="display: flex; flex-direction: column; gap: 4px;">
-              <span style="color: #64748b; font-size: 11px;">Layer Opacity</span>
-              <input type="range" id="opacity-slider" min="0" max="100" value="60" style="accent-color: #00dffc;">
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0, 223, 252, 0.2);">
+            <label style="display: flex; flex-direction: column; gap: 3px;">
+              <span style="color: #64748b; font-size: 10px;">Opacity</span>
+              <input type="range" id="opacity-slider" min="0" max="100" value="60" style="accent-color: #00dffc; width: 100%;">
             </label>
           </div>
         </div>
@@ -609,17 +609,24 @@ export function ArcGISMap({
   }, [webmapId]);
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div className="relative w-full touch-manipulation" style={{ height }}>
       <div 
         ref={mapRef} 
         style={{ 
           width: '100%', 
           height: '100%',
-          borderRadius: '0.5rem',
+          borderRadius: window.innerWidth < 768 ? '0.5rem' : '0.75rem',
           overflow: 'hidden',
-          background: 'linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--accent)/0.1) 100%)'
+          background: 'linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--accent)/0.1) 100%)',
+          minHeight: window.innerWidth < 768 ? '300px' : '400px'
         }}
+        className="w-full h-full"
       />
+      {window.innerWidth < 768 && (
+        <div className="absolute top-2 left-2 right-2 bg-black/50 text-white text-xs p-2 rounded backdrop-blur-sm pointer-events-none z-10">
+          <p className="text-center">Pinch to zoom • Drag to pan • Tap to select location</p>
+        </div>
+      )}
     </div>
   );
 }

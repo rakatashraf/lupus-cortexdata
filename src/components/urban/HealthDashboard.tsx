@@ -155,8 +155,8 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
         </CardContent>
       </Card>
 
-      {/* Index Grid - responsive columns */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+      {/* Index Grid - mobile optimized */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {Object.entries(healthData.indices).map(([key, index]) => {
           const Icon = INDEX_ICONS[key as keyof typeof INDEX_ICONS];
           const colorClass = INDEX_COLORS[key as keyof typeof INDEX_COLORS];
@@ -209,7 +209,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                 {index.components && Object.keys(index.components).length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground font-medium">Components:</p>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
                       {Object.entries(index.components).map(([component, score]) => (
                         <div key={component} className="flex justify-between">
                           <span className="truncate pr-1" title={component}>
@@ -242,7 +242,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
             {Object.entries(healthData.indices)
               .filter(([_, index]) => index.total_score < index.target)
               .map(([key, index]) => (
