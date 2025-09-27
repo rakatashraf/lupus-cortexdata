@@ -338,7 +338,7 @@ export function Simulation3D() {
 
         {/* 3D Viewport */}
         <div className="lg:col-span-3">
-          <Card className="glass-card h-full min-h-[700px] bg-gradient-to-br from-background/95 via-accent/5 to-background/95 backdrop-blur-sm border-primary/20 shadow-2xl">
+          <Card className="glass-card h-full min-h-[800px] bg-gradient-to-br from-background/95 via-accent/5 to-background/95 backdrop-blur-sm border-primary/20 shadow-2xl">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xl">
@@ -390,7 +390,7 @@ export function Simulation3D() {
                 ) : (
                   <ArcGISMap 
                     webmapId="625da886dbf24a559da73840d293156d"
-                    height={isFullscreen ? "100vh" : "750px"}
+                    height={isFullscreen ? "100vh" : "850px"}
                     enableRotation={isSimulationRunning}
                     onRotationChange={setIsSimulationRunning}
                     isSimulationRunning={isSimulationRunning}
