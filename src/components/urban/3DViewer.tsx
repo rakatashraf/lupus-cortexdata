@@ -20,7 +20,9 @@ import {
   Trash2,
   Copy,
   Eye,
-  EyeOff
+  EyeOff,
+  Menu,
+  X
 } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -156,6 +158,8 @@ export interface ViewerToolbarProps {
   onToggleVisibility: (id: string) => void;
   onDeleteObject: (id: string) => void;
   onDuplicateObject: (id: string) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 // Toolbar Component
@@ -168,7 +172,9 @@ export function ViewerToolbar({
   objects,
   onToggleVisibility,
   onDeleteObject,
-  onDuplicateObject
+  onDuplicateObject,
+  isCollapsed = false,
+  onToggleCollapse
 }: ViewerToolbarProps) {
   const objectTypes = [
     { type: 'building', label: 'Building', icon: Building, color: '#3b82f6' },
@@ -180,111 +186,126 @@ export function ViewerToolbar({
   ];
 
   return (
-    <Card className="glass-card">
-      <CardContent className="p-4">
-        <div className="flex flex-col gap-4">
-            {/* Tool Selection */}
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="text-xs">Tools:</Badge>
-              {['select', 'move', 'rotate', 'scale'].map((tool) => (
-                <Button
-                  key={tool}
-                  size="sm"
-                  variant={selectedTool === tool ? "default" : "outline"}
-                  onClick={() => onToolSelect(tool)}
-                  className="h-8 px-3"
-                >
-                  {tool === 'move' && <Move3D className="h-4 w-4" />}
-                  {tool === 'rotate' && <RotateCw className="h-4 w-4" />}
-                  {tool === 'scale' && <ZoomIn className="h-4 w-4" />}
-                  {tool === 'select' && 'Select'}
-                </Button>
-              ))}
-            </div>
+    <div className="relative">
+      {/* Hamburger Menu Button */}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onToggleCollapse}
+        className="h-8 w-8 p-0 bg-background/90 backdrop-blur-sm border shadow-sm"
+      >
+        {isCollapsed ? <Menu className="h-4 w-4" /> : <X className="h-4 w-4" />}
+      </Button>
 
-            <Separator />
-
-            {/* Object Creation */}
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="text-xs">Add Objects:</Badge>
-              {objectTypes.map((objType) => {
-                const Icon = objType.icon;
-                return (
-                  <Button
-                    key={objType.type}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onAddObject(objType.type as SceneObject['type'])}
-                    className="h-8 px-3"
-                  >
-                    <Icon className="h-4 w-4 mr-1" style={{ color: objType.color }} />
-                    {objType.label}
-                  </Button>
-                );
-              })}
-            </div>
-
-            <Separator />
-
-            {/* Scene Controls */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <Badge variant="secondary" className="text-xs">Scene:</Badge>
-              <Button size="sm" variant="outline" onClick={onResetCamera} className="h-8">
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Reset View
-              </Button>
-              <Button size="sm" variant="outline" onClick={onClearScene} className="h-8">
-                <Trash2 className="h-4 w-4 mr-1" />
-                Clear All
-              </Button>
-              <Badge variant="outline" className="ml-auto">
-                Objects: {objects.length}
-              </Badge>
-            </div>
-
-            {/* Object List (if any objects exist) */}
-            {objects.length > 0 && (
-              <>
-                <Separator />
-                <div className="max-h-32 overflow-y-auto">
-                  <Badge variant="secondary" className="text-xs mb-2">Scene Objects:</Badge>
-                  <div className="space-y-1">
-                    {objects.map((obj, index) => (
-                      <div key={obj.id} className="flex items-center gap-2 p-1 rounded bg-muted/50">
-                        <span className="text-xs flex-1">{obj.type} {index + 1}</span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onToggleVisibility(obj.id)}
-                          className="h-6 w-6 p-0"
-                        >
-                          {obj.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onDuplicateObject(obj.id)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onDeleteObject(obj.id)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
+      {/* Collapsible Toolbar Content */}
+      {!isCollapsed && (
+        <Card className="glass-card mt-2 max-w-lg">
+          <CardContent className="p-3">
+            <div className="flex flex-col gap-3">
+                {/* Tool Selection */}
+                <div className="flex flex-wrap gap-1">
+                  <Badge variant="secondary" className="text-xs">Tools:</Badge>
+                  {['select', 'move', 'rotate', 'scale'].map((tool) => (
+                    <Button
+                      key={tool}
+                      size="sm"
+                      variant={selectedTool === tool ? "default" : "outline"}
+                      onClick={() => onToolSelect(tool)}
+                      className="h-7 px-2 text-xs"
+                    >
+                      {tool === 'move' && <Move3D className="h-3 w-3" />}
+                      {tool === 'rotate' && <RotateCw className="h-3 w-3" />}
+                      {tool === 'scale' && <ZoomIn className="h-3 w-3" />}
+                      {tool === 'select' && 'Select'}
+                    </Button>
+                  ))}
                 </div>
-              </>
-            )}
-          </div>
-      </CardContent>
-    </Card>
+
+                <Separator />
+
+                {/* Object Creation */}
+                <div className="flex flex-wrap gap-1">
+                  <Badge variant="secondary" className="text-xs">Add Objects:</Badge>
+                  {objectTypes.map((objType) => {
+                    const Icon = objType.icon;
+                    return (
+                      <Button
+                        key={objType.type}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onAddObject(objType.type as SceneObject['type'])}
+                        className="h-7 px-2 text-xs"
+                      >
+                        <Icon className="h-3 w-3 mr-1" style={{ color: objType.color }} />
+                        {objType.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                <Separator />
+
+                {/* Scene Controls */}
+                <div className="flex flex-wrap gap-1 items-center">
+                  <Badge variant="secondary" className="text-xs">Scene:</Badge>
+                  <Button size="sm" variant="outline" onClick={onResetCamera} className="h-7 px-2 text-xs">
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Reset
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={onClearScene} className="h-7 px-2 text-xs">
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Clear
+                  </Button>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    Objects: {objects.length}
+                  </Badge>
+                </div>
+
+                {/* Object List (if any objects exist) */}
+                {objects.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="max-h-24 overflow-y-auto">
+                      <Badge variant="secondary" className="text-xs mb-1">Scene Objects:</Badge>
+                      <div className="space-y-1">
+                        {objects.map((obj, index) => (
+                          <div key={obj.id} className="flex items-center gap-1 p-1 rounded bg-muted/50">
+                            <span className="text-xs flex-1">{obj.type} {index + 1}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onToggleVisibility(obj.id)}
+                              className="h-5 w-5 p-0"
+                            >
+                              {obj.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDuplicateObject(obj.id)}
+                              className="h-5 w-5 p-0"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDeleteObject(obj.id)}
+                              className="h-5 w-5 p-0"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -313,6 +334,7 @@ export function ThreeDViewer({
   onDuplicateObject: onDuplicateObjectProp
 }: ThreeDViewerProps) {
   const [objects, setObjects] = useState<SceneObject[]>(objectsProp);
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(true);
   const orbitRef = useRef<any>();
 
   // Use the passed props but fall back to internal state for callback functions
@@ -463,8 +485,8 @@ export function ThreeDViewer({
         </Canvas>
       </Suspense>
       
-      {/* Compact toolbar positioned under the canvas */}
-      <div className="absolute bottom-2 left-2 right-2 z-10 scale-75 origin-bottom">
+      {/* Collapsible toolbar positioned inside the canvas */}
+      <div className="absolute top-4 left-4 z-10">
         <ViewerToolbar
           selectedTool={selectedTool}
           onToolSelect={onToolSelect}
@@ -475,6 +497,8 @@ export function ThreeDViewer({
           onToggleVisibility={toggleVisibility}
           onDeleteObject={deleteObject}
           onDuplicateObject={duplicateObject}
+          isCollapsed={isToolbarCollapsed}
+          onToggleCollapse={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
         />
       </div>
     </div>
