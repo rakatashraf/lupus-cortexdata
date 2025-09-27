@@ -368,31 +368,29 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
 
         {/* 3D Viewport */}
         <div className="lg:col-span-2">
-          <Card className="glass-card h-full min-h-[600px] bg-gradient-to-br from-background/95 via-accent/5 to-background/95 backdrop-blur-sm border-primary/20 shadow-2xl">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xl">
-                  {viewMode === '3d' ? '3D Simulation View' : 'Live Satellite Globe'}
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleFullscreen}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
+          {viewMode === '3d' ? (
+            <Card className="glass-card h-full min-h-[600px] bg-gradient-to-br from-background/95 via-accent/5 to-background/95 backdrop-blur-sm border-primary/20 shadow-2xl">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">3D Simulation View</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleFullscreen}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
                 <div 
-                ref={canvasRef}
-                className={cn(
-                  "relative w-full rounded-lg overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800",
-                  isFullscreen ? "h-screen" : "h-[550px]"
-                )}
-              >
-                {viewMode === '3d' ? (
+                  ref={canvasRef}
+                  className={cn(
+                    "relative w-full rounded-lg overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800",
+                    isFullscreen ? "h-screen" : "h-[550px]"
+                  )}
+                >
                   <ThreeDViewer
                     selectedTool={selectedTool}
                     onToolSelect={setSelectedTool}
@@ -404,18 +402,26 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                     onDeleteObject={handle3DDeleteObject}
                     onDuplicateObject={handle3DDuplicateObject}
                   />
-                ) : (
-                  <NASAEarthMap 
-                    height={isFullscreen ? "100vh" : "950px"}
-                    enableRotation={isSimulationRunning}
-                    onRotationChange={setIsSimulationRunning}
-                    isSimulationRunning={isSimulationRunning}
-                    onLocationSelect={onLocationSelect}
-                  />
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div 
+              ref={canvasRef}
+              className={cn(
+                "relative w-full rounded-lg overflow-hidden",
+                isFullscreen ? "h-screen" : "h-[950px]"
+              )}
+            >
+              <NASAEarthMap 
+                height={isFullscreen ? "100vh" : "950px"}
+                enableRotation={isSimulationRunning}
+                onRotationChange={setIsSimulationRunning}
+                isSimulationRunning={isSimulationRunning}
+                onLocationSelect={onLocationSelect}
+              />
+            </div>
+          )}
         </div>
       </div>
 
