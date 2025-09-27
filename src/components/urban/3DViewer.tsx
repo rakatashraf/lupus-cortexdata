@@ -463,8 +463,8 @@ export function ThreeDViewer({
         </Canvas>
       </Suspense>
       
-      {/* Toolbar positioned under the canvas */}
-      <div className="absolute bottom-4 left-4 right-4 z-10">
+      {/* Compact toolbar positioned under the canvas */}
+      <div className="absolute bottom-2 left-2 right-2 z-10 scale-75 origin-bottom">
         <ViewerToolbar
           selectedTool={selectedTool}
           onToolSelect={onToolSelect}
