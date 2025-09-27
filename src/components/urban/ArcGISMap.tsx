@@ -42,21 +42,42 @@ export function ArcGISMap({
     window.require([
       "esri/config"
     ], function(esriConfig: any) {
-      // Enable CORS for better loading
-      esriConfig.request.corsEnabledServers.push("a.tile.openstreetmap.org");
-      esriConfig.request.corsEnabledServers.push("b.tile.openstreetmap.org");  
-      esriConfig.request.corsEnabledServers.push("c.tile.openstreetmap.org");
-      
-      // Optimize request handling
-      esriConfig.request.timeout = 60000;
-      esriConfig.request.maxUrlLength = 2000;
-      
-      // Enable worker for better performance
-      esriConfig.workers.loaderConfig = {
-        has: {
-          "esri-featurelayer-webgl": 1
+      try {
+        // Safely initialize request config if it doesn't exist
+        if (!esriConfig.request) {
+          esriConfig.request = {};
         }
-      };
+        
+        // Initialize corsEnabledServers array if it doesn't exist
+        if (!esriConfig.request.corsEnabledServers) {
+          esriConfig.request.corsEnabledServers = [];
+        }
+        
+        // Enable CORS for better loading - only if array exists
+        if (Array.isArray(esriConfig.request.corsEnabledServers)) {
+          esriConfig.request.corsEnabledServers.push("a.tile.openstreetmap.org");
+          esriConfig.request.corsEnabledServers.push("b.tile.openstreetmap.org");  
+          esriConfig.request.corsEnabledServers.push("c.tile.openstreetmap.org");
+        }
+        
+        // Optimize request handling - safely set properties
+        if (esriConfig.request) {
+          esriConfig.request.timeout = 60000;
+          esriConfig.request.maxUrlLength = 2000;
+        }
+        
+        // Enable worker for better performance - safely check workers exists
+        if (esriConfig.workers) {
+          esriConfig.workers.loaderConfig = {
+            has: {
+              "esri-featurelayer-webgl": 1
+            }
+          };
+        }
+      } catch (error) {
+        console.warn('ArcGIS config setup warning:', error);
+        // Continue without CORS config if there's an issue
+      }
     });
     
     window.require([
