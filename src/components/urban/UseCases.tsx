@@ -437,20 +437,48 @@ export const UseCases: React.FC<UseCasesProps> = ({
       doc.setLineWidth(1);
       doc.rect(10, 10, pageWidth - 20, pageHeight - 20);
       
-      // Add Company Logo
+      // Create a canvas to convert logo to black
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
       const img = new Image();
-      img.src = lupusLogoPdf;
       
-      // Wait for image to load and add to PDF
       img.onload = () => {
-        // Add logo at top left (scaled appropriately)
-        doc.addImage(img, 'PNG', 20, 18, 40, 20);
+        // Set canvas size
+        canvas.width = img.width;
+        canvas.height = img.height;
         
-        // Continue with rest of PDF generation after logo is added
-        generateRestOfPDF();
+        // Draw the original image
+        ctx.drawImage(img, 0, 0);
+        
+        // Get image data to manipulate pixels
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // Convert to black (keep transparency)
+        for (let i = 0; i < data.length; i += 4) {
+          // If pixel is not transparent
+          if (data[i + 3] > 0) {
+            data[i] = 0;     // Red to 0
+            data[i + 1] = 0; // Green to 0
+            data[i + 2] = 0; // Blue to 0
+            // Keep alpha (transparency) as is
+          }
+        }
+        
+        // Put the modified image data back
+        ctx.putImageData(imageData, 0, 0);
+        
+        // Convert canvas to data URL
+        const blackLogoDataUrl = canvas.toDataURL('image/png');
+        
+        // Continue with PDF generation
+        generateRestOfPDF(blackLogoDataUrl);
       };
       
-      const generateRestOfPDF = () => {
+      const generateRestOfPDF = (logoDataUrl: string) => {
+        // Add black logo at top left (scaled appropriately)
+        doc.addImage(logoDataUrl, 'PNG', 20, 18, 40, 20);
+        
         // Header - Company Details (positioned after logo)
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
