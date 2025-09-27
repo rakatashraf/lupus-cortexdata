@@ -291,60 +291,137 @@ export const UseCases: React.FC<UseCasesProps> = ({
   const generateCustomReasons = (description: string, indices: any[], score: number, isGood = false, isBad = false) => {
     const reasons: string[] = [];
     
-    // Analyze user description for keywords
+    // Analyze user description for keywords and context
     const lowerDesc = description.toLowerCase();
     
-    // Base analysis on all indices
+    // Determine relevance of each index based on scenario
+    const isRelevantForScenario = (indexName: string, description: string) => {
+      const desc = description.toLowerCase();
+      
+      switch (indexName) {
+        case 'CRI':
+          // Crime rate is relevant for most scenarios except pure environmental assessments
+          if (desc.includes('pollution only') || desc.includes('environmental monitoring') || desc.includes('air quality only')) {
+            return false;
+          }
+          return true;
+          
+        case 'AQHI':
+          // Air quality is relevant for health, living, but less for pure security or infrastructure
+          if (desc.includes('security only') || desc.includes('crime prevention') || desc.includes('police') || desc.includes('infrastructure maintenance')) {
+            return false;
+          }
+          return true;
+          
+        case 'UHVI':
+          // Heat vulnerability relevant for living, health, but less for underground facilities or industrial
+          if (desc.includes('underground') || desc.includes('basement') || desc.includes('indoor only') || desc.includes('warehouse')) {
+            return false;
+          }
+          return true;
+          
+        default:
+          return true;
+      }
+    };
+    
+    // Base analysis on all indices with relevance check
     indices.forEach(index => {
       const indexScore = isGood ? Math.min(100, index.total_score + 8) : 
                        isBad ? Math.max(0, index.total_score - 5) : index.total_score;
       
+      const isRelevant = isRelevantForScenario(index.index_name, description);
+      
       if (index.index_name === 'CRI') {
-        if (indexScore > 70) {
+        if (!isRelevant) {
+          reasons.push(`Crime Rate Index: Not applicable for this scenario`);
+        } else if (indexScore > 70) {
           reasons.push(`Excellent safety conditions (Crime Rate Index: ${indexScore.toFixed(1)})`);
         } else if (indexScore > 50) {
           reasons.push(`Moderate safety levels (Crime Rate Index: ${indexScore.toFixed(1)})`);
         } else {
-          reasons.push(`Safety concerns present (Crime Rate Index: ${indexScore.toFixed(1)})`);
+          reasons.push(`⚠️ Safety concerns present (Crime Rate Index: ${indexScore.toFixed(1)}) - Not recommended`);
         }
       }
       
       if (index.index_name === 'AQHI') {
-        if (indexScore > 70) {
+        if (!isRelevant) {
+          reasons.push(`Air Quality Index: Not applicable for this scenario`);
+        } else if (indexScore > 70) {
           reasons.push(`Superior air quality for health (Air Quality Index: ${indexScore.toFixed(1)})`);
         } else if (indexScore > 50) {
           reasons.push(`Acceptable air quality levels (Air Quality Index: ${indexScore.toFixed(1)})`);
         } else {
-          reasons.push(`Air quality requires attention (Air Quality Index: ${indexScore.toFixed(1)})`);
+          reasons.push(`⚠️ Air quality requires attention (Air Quality Index: ${indexScore.toFixed(1)}) - Health risk present`);
         }
       }
       
       if (index.index_name === 'UHVI') {
-        if (indexScore > 70) {
+        if (!isRelevant) {
+          reasons.push(`Heat Vulnerability Index: Not applicable for this scenario`);
+        } else if (indexScore > 70) {
           reasons.push(`High resilience to urban heat (Heat Vulnerability: ${indexScore.toFixed(1)})`);
         } else if (indexScore > 50) {
           reasons.push(`Moderate climate comfort (Heat Vulnerability: ${indexScore.toFixed(1)})`);
         } else {
-          reasons.push(`Climate adaptation needed (Heat Vulnerability: ${indexScore.toFixed(1)})`);
+          reasons.push(`⚠️ Climate adaptation needed (Heat Vulnerability: ${indexScore.toFixed(1)}) - Not suitable for heat-sensitive activities`);
         }
       }
     });
 
     // Add context-specific recommendations based on user description
     if (lowerDesc.includes('family') || lowerDesc.includes('children')) {
-      reasons.push('Family-friendly environment considerations included');
-    }
-    if (lowerDesc.includes('business') || lowerDesc.includes('commercial')) {
-      reasons.push('Commercial viability factors analyzed');
-    }
-    if (lowerDesc.includes('retirement') || lowerDesc.includes('elderly')) {
-      reasons.push('Senior living suitability evaluated');
-    }
-    if (lowerDesc.includes('student') || lowerDesc.includes('university')) {
-      reasons.push('Educational environment factors considered');
+      const hasGoodSafety = indices.find(i => i.index_name === 'CRI')?.total_score > 60;
+      const hasGoodAir = indices.find(i => i.index_name === 'AQHI')?.total_score > 60;
+      
+      if (hasGoodSafety && hasGoodAir) {
+        reasons.push('✅ Excellent for family with children - Safe and healthy environment');
+      } else if (!hasGoodSafety) {
+        reasons.push('❌ Not recommended for families - Safety concerns present');
+      } else if (!hasGoodAir) {
+        reasons.push('⚠️ Limited suitability for families - Air quality concerns');
+      }
     }
     
-    return reasons.slice(0, 4); // Limit to 4 reasons for readability
+    if (lowerDesc.includes('business') || lowerDesc.includes('commercial')) {
+      const hasGoodSafety = indices.find(i => i.index_name === 'CRI')?.total_score > 50;
+      if (hasGoodSafety) {
+        reasons.push('✅ Good for business operations - Adequate security conditions');
+      } else {
+        reasons.push('❌ Not recommended for business - Security risks may affect operations');
+      }
+    }
+    
+    if (lowerDesc.includes('retirement') || lowerDesc.includes('elderly')) {
+      const hasGoodAir = indices.find(i => i.index_name === 'AQHI')?.total_score > 65;
+      const hasGoodClimate = indices.find(i => i.index_name === 'UHVI')?.total_score > 65;
+      
+      if (hasGoodAir && hasGoodClimate) {
+        reasons.push('✅ Excellent for seniors - Health-supportive environment');
+      } else {
+        reasons.push('❌ Not recommended for elderly residents - Health concerns present');
+      }
+    }
+    
+    if (lowerDesc.includes('student') || lowerDesc.includes('university')) {
+      const hasGoodSafety = indices.find(i => i.index_name === 'CRI')?.total_score > 55;
+      if (hasGoodSafety) {
+        reasons.push('✅ Suitable for students - Safe learning environment');
+      } else {
+        reasons.push('❌ Not recommended for students - Safety concerns present');
+      }
+    }
+    
+    // Add specific "not applicable" cases based on scenario
+    if (lowerDesc.includes('underground') || lowerDesc.includes('basement')) {
+      reasons.push('🔍 Heat Vulnerability Index: Not applicable for underground facilities');
+    }
+    
+    if (lowerDesc.includes('industrial') && lowerDesc.includes('no residents')) {
+      reasons.push('🔍 Air Quality Index: Limited relevance for non-residential industrial use');
+    }
+    
+    return reasons.slice(0, 6); // Increased to 6 reasons to show more context
   };
 
   const downloadPDF = useCallback(async (recommendation: Recommendation) => {
@@ -545,27 +622,54 @@ export const UseCases: React.FC<UseCasesProps> = ({
             ))}
           </div>
 
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label htmlFor="location">Location (Latitude, Longitude)</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="location">Exact Location (Latitude, Longitude)</Label>
               <Input
                 id="location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="23.8103, 90.4125"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Provide precise coordinates for accurate analysis
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="locationName">Location Name/Address (Optional)</Label>
+              <Input
+                id="locationName"
+                placeholder="e.g., Dhaka University Area, Gulshan-2, etc."
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Helps provide context for the analysis
+              </p>
             </div>
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="description">Describe Your Requirements</Label>
+            <Label htmlFor="description">Detailed Scenario Description</Label>
             <textarea
               id="description"
               value={userDescription}
               onChange={(e) => setUserDescription(e.target.value)}
-              placeholder="Describe what you're looking for... (e.g., 'I need a safe area for my family with good air quality and schools nearby' or 'Looking for a business location with good infrastructure')"
-              className="w-full min-h-[100px] px-3 py-2 border border-input bg-background rounded-md text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Provide a detailed description of your scenario and requirements. Include:
+              
+• Purpose: What will this location be used for?
+• Specific needs: Safety, air quality, climate considerations?
+• Target users: Families, elderly, students, business clients?
+• Duration: Temporary visit, permanent residence, business operations?
+• Special considerations: Health conditions, accessibility needs, etc.
+
+Example scenarios:
+- 'I'm planning to open a daycare center for children ages 2-6. Need excellent air quality and very low crime rates. The facility will operate 12 hours daily with outdoor play areas.'
+- 'Looking for a retirement home location for my 75-year-old father with respiratory issues. He needs clean air, mild climate, and safe walking areas for daily exercise.'
+- 'Evaluating sites for an outdoor event venue. Need assessment for 500+ attendee capacity, considering air quality for outdoor activities and safety for evening events.'"
+              className="w-full min-h-[200px] px-3 py-2 border border-input bg-background rounded-md text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
             />
+            <p className="text-xs text-muted-foreground">
+              More detailed descriptions lead to more accurate recommendations and "not applicable" assessments
+            </p>
           </div>
           
           <div className="flex justify-center">
