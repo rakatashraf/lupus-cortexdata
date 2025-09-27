@@ -516,7 +516,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
           doc.setFont('times', 'bold');
           doc.text('LOCATION EVALUATION REPORT', 20, 70);
           
-          // Rating display with teal theme color coding
+          // Rating display with visual stars and teal theme color coding
           doc.setFontSize(16);
           doc.setFont('times', 'bold');
           if (recommendation.rating >= 4) {
@@ -526,7 +526,13 @@ export const UseCases: React.FC<UseCasesProps> = ({
           } else {
             doc.setTextColor(239, 68, 68); // Red for conditional
           }
-          doc.text(`${recommendation.rating}/5 STARS`, 20, 82);
+          
+          // Create visual star representation
+          const filledStars = '⭐'.repeat(recommendation.rating);
+          const emptyStars = '☆'.repeat(5 - recommendation.rating);
+          const starDisplay = filledStars + emptyStars;
+          
+          doc.text(`${recommendation.rating}/5 STARS ${starDisplay}`, 20, 82);
           
           // Executive Summary with teal header
           doc.setFillColor(240, 253, 250); // Very light teal background
