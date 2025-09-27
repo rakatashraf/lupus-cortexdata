@@ -80,12 +80,12 @@ export function ArcGISMap({
         viewingMode: "global",
         camera: {
           position: {
-            x: 90.4125,
-            y: 23.8103,
-            z: 15000000 // altitude in meters
+            x: 0, // Center longitude (Prime Meridian)
+            y: 0, // Center latitude (Equator)
+            z: 20000000 // Higher altitude for better global view
           },
           heading: 0,
-          tilt: 0
+          tilt: 15 // Slight tilt for better 3D perspective
         },
         environment: {
           background: {
