@@ -477,67 +477,64 @@ export const UseCases: React.FC<UseCasesProps> = ({
       
       const generateRestOfPDF = (logoDataUrl: string) => {
         // Add black logo at top left (scaled appropriately)
-        doc.addImage(logoDataUrl, 'PNG', 20, 18, 40, 20);
+        doc.addImage(logoDataUrl, 'PNG', 20, 18, 35, 18);
         
-        // Header - Company Details (positioned after logo)
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(34, 139, 34);
-        doc.text('LUPUS CORTEX', 70, 25);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
+        // Company Details under the logo
+        doc.setFont('times', 'bold');
+        doc.setFontSize(9);
         doc.setTextColor(100, 100, 100);
-        doc.text('Urban Intelligence & Analytics Solutions', 70, 32);
-        doc.text('AI-Powered Location Intelligence Platform', 70, 38);
-        doc.text('Contact: info@lupus-cortex.com | www.lupus-cortex.com', 70, 44);
+        doc.text('Urban Intelligence & Analytics Solutions', 20, 42);
+        doc.setFontSize(8);
+        doc.text('AI-Powered Location Intelligence Platform', 20, 48);
+        doc.text('Contact: info@lupus-cortex.com | www.lupus-cortex.com', 20, 54);
         
         // Date in top right
         const currentDate = new Date().toISOString().split('T')[0];
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(100, 100, 100);
-        doc.text(currentDate, pageWidth - 40, 25);
+        doc.text(currentDate, pageWidth - 35, 25);
         
         // Main Title
-        doc.setFontSize(18);
+        doc.setFontSize(14);
         doc.setTextColor(0, 0, 0);
-        doc.setFont('helvetica', 'bold');
-        doc.text('INDEPENDENT EVALUATION REPORT', 20, 60);
+        doc.setFont('times', 'bold');
+        doc.text('INDEPENDENT EVALUATION REPORT', 20, 68);
         
-        // Subtitle with more appeal
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
+        // Subtitle
+        doc.setFontSize(8);
+        doc.setFont('times', 'normal');
         doc.setTextColor(34, 139, 34);
         const subtitle = `Premium Location Intelligence Assessment`;
-        doc.text(subtitle, 20, 70);
+        doc.text(subtitle, 20, 76);
         
         // Executive Summary
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setFont('times', 'bold');
         doc.setTextColor(0, 0, 0);
-        doc.text('EXECUTIVE SUMMARY', 20, 90);
+        doc.text('EXECUTIVE SUMMARY', 20, 88);
         
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setFont('times', 'normal');
         const overallScore = Object.values(recommendation.indexScores).reduce((a, b) => a + b, 0) / Object.keys(recommendation.indexScores).length;
         const ratingText = recommendation.rating >= 4 ? 'PREMIUM EXCELLENCE' : recommendation.rating >= 3 ? 'SUPERIOR QUALITY' : 'STRATEGIC CONSIDERATION';
         const summaryText = `This comprehensive location intelligence assessment leveraged advanced AI algorithms and multi-dimensional urban analytics to evaluate coordinates ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng}. Our proprietary evaluation framework yielded an overall rating of ${recommendation.rating}/5 stars, achieving ${ratingText} classification. Based on our rigorous analysis, we provide strategic insights and actionable recommendations for optimal location utilization.`;
         
         const summaryLines = doc.splitTextToSize(summaryText, 170);
-        let yPos = 100;
+        let yPos = 96;
         summaryLines.forEach(line => {
           doc.text(line, 20, yPos);
-          yPos += 12;
+          yPos += 8;
         });
         
-        // Key Findings with more appealing language
-        yPos += 15;
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
+        // Key Findings
+        yPos += 8;
+        doc.setFontSize(10);
+        doc.setFont('times', 'bold');
         doc.text('KEY PERFORMANCE INDICATORS', 20, yPos);
         
-        yPos += 15;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
+        yPos += 10;
+        doc.setFontSize(7);
+        doc.setFont('times', 'normal');
         
         // Enhanced findings with better language
         const findings = [];
@@ -551,60 +548,63 @@ export const UseCases: React.FC<UseCasesProps> = ({
           }
         });
         
-        findings.slice(0, 3).forEach((finding) => {
+        findings.slice(0, 2).forEach((finding) => { // Reduced to 2 findings to fit page
           const findingLines = doc.splitTextToSize(finding, 170);
           findingLines.forEach(line => {
             doc.text(line, 20, yPos);
-            yPos += 10;
+            yPos += 7;
           });
-          yPos += 5;
+          yPos += 3;
         });
         
         // AI Analysis Section
-        yPos += 15;
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
+        yPos += 8;
+        doc.setFontSize(10);
+        doc.setFont('times', 'bold');
         doc.text('ADVANCED AI INTELLIGENCE METRICS', 20, yPos);
         
-        yPos += 15;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
+        yPos += 10;
+        doc.setFontSize(7);
+        doc.setFont('times', 'normal');
         doc.text('Our cutting-edge AI system analyzed comprehensive urban intelligence indices:', 20, yPos);
-        yPos += 12;
+        yPos += 8;
         
         Object.entries(recommendation.indexScores).forEach(([index, score]) => {
           const performance = score > 70 ? 'PREMIUM' : score > 50 ? 'COMPETITIVE' : 'DEVELOPMENT';
           doc.text(`• ${index}: ${score.toFixed(1)}/100 - ${performance} Classification`, 25, yPos);
-          yPos += 10;
+          yPos += 7;
         });
         
         // Strategic Recommendations
-        yPos += 15;
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
+        yPos += 8;
+        doc.setFontSize(10);
+        doc.setFont('times', 'bold');
         doc.text('STRATEGIC RECOMMENDATIONS', 20, yPos);
         
-        yPos += 15;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
+        yPos += 10;
+        doc.setFontSize(7);
+        doc.setFont('times', 'normal');
         
-        const recommendations = recommendation.reasons.slice(0, 4);
+        const recommendations = recommendation.reasons.slice(0, 3); // Reduced to 3 recommendations
         recommendations.forEach((rec, index) => {
           const cleanRec = rec.replace(/[✅❌⚠️🔍]/g, '').trim();
           const enhancedRec = cleanRec.charAt(0).toUpperCase() + cleanRec.slice(1);
-          doc.text(`${index + 1}. ${enhancedRec}`, 20, yPos);
-          yPos += 12;
+          const recLines = doc.splitTextToSize(`${index + 1}. ${enhancedRec}`, 170);
+          recLines.forEach(line => {
+            doc.text(line, 20, yPos);
+            yPos += 7;
+          });
         });
         
         // Professional Conclusion
-        yPos += 15;
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
+        yPos += 8;
+        doc.setFontSize(10);
+        doc.setFont('times', 'bold');
         doc.text('PROFESSIONAL CONCLUSION', 20, yPos);
         
-        yPos += 15;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
+        yPos += 10;
+        doc.setFontSize(7);
+        doc.setFont('times', 'normal');
         const conclusionText = recommendation.rating >= 4 
           ? `Our comprehensive analysis reveals this location as an EXCEPTIONAL OPPORTUNITY with outstanding potential for successful implementation. The superior performance across key metrics positions this as a PREMIUM CHOICE for strategic development.`
           : recommendation.rating >= 3 
@@ -614,80 +614,64 @@ export const UseCases: React.FC<UseCasesProps> = ({
         const conclusionLines = doc.splitTextToSize(conclusionText, 170);
         conclusionLines.forEach(line => {
           doc.text(line, 20, yPos);
-          yPos += 12;
+          yPos += 7;
         });
         
         // Professional Sign-off
-        yPos += 15;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
+        yPos += 10;
+        doc.setFontSize(8);
+        doc.setFont('times', 'bold');
         doc.text('PROFESSIONAL CERTIFICATION', 20, yPos);
         
-        yPos += 12;
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
+        yPos += 8;
+        doc.setFontSize(6);
+        doc.setFont('times', 'normal');
         doc.text('Prepared by: LUPUS CORTEX AI Analytics Division', 20, yPos);
-        doc.text('Lead Urban Intelligence Specialist', 20, yPos + 8);
-        doc.text(`Certification Date: ${currentDate}`, 20, yPos + 16);
-        doc.text('Report ID: LC-' + Math.random().toString(36).substr(2, 9).toUpperCase(), 20, yPos + 24);
+        doc.text('Lead Urban Intelligence Specialist', 20, yPos + 6);
+        doc.text(`Certification Date: ${currentDate}`, 20, yPos + 12);
+        doc.text('Report ID: LC-' + Math.random().toString(36).substr(2, 9).toUpperCase(), 20, yPos + 18);
         
         // Create Professional Rubber Stamp Style Seal (positioned to not block text)
         if (recommendation.rating >= 3) {
-          const stampX = pageWidth - 55;
-          const stampY = 80; // Positioned in top right, away from text
-          
-          // Outer distressed circle
-          doc.setDrawColor(220, 53, 69); // Bootstrap danger red
-          doc.setFillColor(220, 53, 69);
-          doc.setLineWidth(2);
-          
-          // Create jagged/distressed edge effect
-          const angles = [];
-          for (let i = 0; i < 360; i += 15) {
-            const radius = 25 + (Math.sin(i * 4 * Math.PI / 180) * 3);
-            angles.push({
-              x: stampX + Math.cos(i * Math.PI / 180) * radius,
-              y: stampY + Math.sin(i * Math.PI / 180) * radius
-            });
-          }
+          const stampX = pageWidth - 45;
+          const stampY = 70; // Positioned in top right, away from text
           
           // Draw jagged circle
           doc.setFillColor(255, 255, 255);
-          doc.circle(stampX, stampY, 24);
-          doc.setDrawColor(220, 53, 69);
-          doc.setLineWidth(3);
-          doc.circle(stampX, stampY, 24);
           doc.circle(stampX, stampY, 20);
+          doc.setDrawColor(220, 53, 69);
+          doc.setLineWidth(2);
+          doc.circle(stampX, stampY, 20);
+          doc.circle(stampX, stampY, 17);
           
           // Add stars around the seal
-          doc.setFontSize(8);
+          doc.setFontSize(6);
           doc.setTextColor(220, 53, 69);
-          doc.text('★', stampX - 15, stampY - 15);
-          doc.text('★', stampX + 12, stampY - 15);
-          doc.text('★', stampX - 15, stampY + 20);
-          doc.text('★', stampX + 12, stampY + 20);
-          doc.text('★', stampX - 3, stampY - 20);
+          doc.text('★', stampX - 12, stampY - 12);
+          doc.text('★', stampX + 9, stampY - 12);
+          doc.text('★', stampX - 12, stampY + 16);
+          doc.text('★', stampX + 9, stampY + 16);
+          doc.text('★', stampX - 2, stampY - 16);
           
-          // Main RECOMMENDED text with distressed effect
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'bold');
+          // Main RECOMMENDED text
+          doc.setFontSize(6);
+          doc.setFont('times', 'bold');
           doc.setTextColor(220, 53, 69);
-          
-          // Create tilted text effect for "RECOMMENDED"
-          doc.text('RECOMMENDED', stampX - 18, stampY - 2, { angle: -15 });
+          doc.text('RECOMMENDED', stampX - 15, stampY - 1, { angle: -15 });
           
           // Add "LUPUS CORTEX" in smaller text
-          doc.setFontSize(5);
-          doc.text('LUPUS CORTEX', stampX - 12, stampY + 8);
-          doc.text('CERTIFIED', stampX - 8, stampY + 12);
+          doc.setFontSize(4);
+          doc.text('LUPUS CORTEX', stampX - 10, stampY + 6);
+          doc.text('CERTIFIED', stampX - 7, stampY + 10);
         }
         
         // Footer with enhanced branding
-        doc.setFontSize(7);
+        doc.setFontSize(6);
+        doc.setFont('times', 'normal');
         doc.setTextColor(128, 128, 128);
-        doc.text('© 2024 LUPUS CORTEX - Premium Urban Intelligence Solutions', 20, pageHeight - 30);
-        doc.text('Powered by Advanced AI Analytics | www.lupus-cortex.com', 20, pageHeight - 22);
-        doc.text('This report contains proprietary analysis and is intended for authorized use only.', 20, pageHeight - 14);
+        doc.text('© 2024 LUPUS CORTEX - Premium Urban Intelligence Solutions', 20, pageHeight - 25);
+        doc.text('Powered by Advanced AI Analytics | www.lupus-cortex.com', 20, pageHeight - 19);
+        doc.text('This report contains proprietary analysis and is intended for authorized use only.', 20, pageHeight - 13);
         
         // Save PDF with enhanced filename
         const cleanArea = recommendation.area.replace(/[^a-zA-Z0-9]/g, '-');
