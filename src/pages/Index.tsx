@@ -124,7 +124,7 @@ const Index = () => {
         />
       )}
       
-      <main className={`${currentSection === 'welcome' ? 'container mx-auto px-4 py-8' : 'container mx-auto px-4 py-8'} flex-grow`}>
+      <main className={`${currentSection === 'welcome' ? 'container mx-auto px-4 py-8 pb-4' : 'container mx-auto px-4 py-8 pb-4'} flex-grow`}>
         {renderCurrentSection()}
       </main>
 
@@ -134,8 +134,8 @@ const Index = () => {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
       </div>
       
-      {/* Footer positioned at very bottom of page */}
-      <div className="w-full py-3 mt-auto">
+      {/* Footer positioned with more space from content */}
+      <div className="w-full py-3 mt-12">
         <div className="text-center">
           <div className="text-xs text-muted-foreground">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
