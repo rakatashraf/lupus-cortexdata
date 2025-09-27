@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Play, Pause, Calendar, Settings, Search, ChevronUp, ChevronDown, Lightbulb, Menu } from 'lucide-react';
+import { getCurrentEarthImagery, fetchEarthImagery, formatDateForNASA } from '@/services/nasa-api';
 
 interface NASAEarthMapProps {
   height?: string;
@@ -29,12 +30,15 @@ interface Satellite {
   };
 }
 
+// NASA API Configuration
+const NASA_API_KEY = 'GXcqYeyqgnHgWfdabi6RYhLPhdY1uIyiPsB922ZV';
+
 // Real-time NASA Earth Component with proper GIBS layer switching
 function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; selectedLayer: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   
-  // NASA GIBS layer configurations
+  // NASA GIBS layer configurations with proper identifiers
   const layerConfigs = {
     'Visible Earth': 'VIIRS_SNPP_CorrectedReflectance_TrueColor',
     'Air Temperature': 'AIRS_L2_Surface_Air_Temperature_Day',
@@ -63,58 +67,84 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
     yesterday.setDate(today.getDate() - 1);
     const dateStr = yesterday.toISOString().split('T')[0];
     
-    // Create Earth texture using NASA GIBS
+    // Create Earth texture using NASA GIBS with API key
     const createEarthTexture = async () => {
       try {
-        // NASA GIBS WMTS endpoint - using a simpler approach with REST API
+        // NASA GIBS WMTS endpoints with API key authentication
         const gibsUrls = [
-          // Primary GIBS endpoint with proper layer
-          `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${layerId}/default/${dateStr}/250m/0/0/0.jpg`,
+          // NASA Worldview snapshot API with API key
+          `https://worldview.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&TIME=${dateStr}&BBOX=-180,-90,180,90&CRS=EPSG:4326&LAYERS=${layerId}&WRAP=day&FORMAT=image/jpeg&WIDTH=2048&HEIGHT=1024&api_key=${NASA_API_KEY}`,
           
-          // Fallback to Worldview snapshot API 
-          `https://worldview.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&TIME=${dateStr}&BBOX=-180,-90,180,90&CRS=EPSG:4326&LAYERS=${layerId}&WRAP=day&FORMAT=image/jpeg&WIDTH=2048&HEIGHT=1024`,
+          // NASA APOD API for Earth imagery (alternative approach)
+          `https://api.nasa.gov/planetary/earth/imagery?lon=0&lat=0&date=${dateStr}&dim=0.5&api_key=${NASA_API_KEY}`,
+          
+          // NASA GIBS WMTS endpoint (no auth required)
+          `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${layerId}/default/${dateStr}/250m/0/0/0.jpg`,
           
           // Static NASA Blue Marble as final fallback
           'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg'
         ];
 
-        let success = false;
-        for (const url of gibsUrls) {
-          try {
-            console.log(`🔄 Trying GIBS URL: ${url.substring(0, 80)}...`);
-            await new Promise((resolve, reject) => {
-              loader.load(
-                url,
-                (loadedTexture) => {
-                  console.log(`✅ NASA ${selectedLayer} layer loaded successfully!`);
-                  loadedTexture.wrapS = THREE.RepeatWrapping;
-                  loadedTexture.wrapT = THREE.RepeatWrapping;
-                  loadedTexture.flipY = false;
-                  setTexture(loadedTexture);
-                  success = true;
-                  resolve(loadedTexture);
-                },
-                (progress) => {
-                  if (progress.total > 0) {
-                    console.log('📊 Loading progress:', Math.round(progress.loaded / progress.total * 100) + '%');
-                  }
-                },
-                (error) => {
-                  console.warn(`⚠️ Failed to load from URL: ${error}`);
-                  reject(error);
+        // Try to get the best available imagery using NASA API service
+        try {
+          const nasaImageUrl = await getCurrentEarthImagery(layerId);
+          console.log(`🔄 Loading NASA ${selectedLayer} imagery...`);
+          
+          await new Promise((resolve, reject) => {
+            loader.load(
+              nasaImageUrl,
+              (loadedTexture) => {
+                console.log(`✅ NASA ${selectedLayer} layer loaded successfully!`);
+                loadedTexture.wrapS = THREE.RepeatWrapping;
+                loadedTexture.wrapT = THREE.RepeatWrapping;
+                loadedTexture.flipY = false;
+                setTexture(loadedTexture);
+                resolve(loadedTexture);
+              },
+              (progress) => {
+                if (progress.total > 0) {
+                  console.log('📊 Loading progress:', Math.round(progress.loaded / progress.total * 100) + '%');
                 }
-              );
-            });
-            if (success) break;
-          } catch (error) {
-            console.warn(`Failed URL: ${url.substring(0, 80)}...`);
-            continue;
+              },
+              (error) => {
+                console.warn(`⚠️ Failed to load NASA imagery: ${error}`);
+                reject(error);
+              }
+            );
+          });
+        } catch (error) {
+          console.warn('NASA API failed, trying fallback URLs...');
+          
+          // Fallback to direct URLs
+          let success = false;
+          for (const url of gibsUrls) {
+            try {
+              console.log(`🔄 Trying fallback URL: ${url.substring(0, 80)}...`);
+              await new Promise((resolve, reject) => {
+                loader.load(
+                  url,
+                  (loadedTexture) => {
+                    console.log(`✅ Fallback ${selectedLayer} layer loaded!`);
+                    loadedTexture.wrapS = THREE.RepeatWrapping;
+                    loadedTexture.wrapT = THREE.RepeatWrapping;
+                    loadedTexture.flipY = false;
+                    setTexture(loadedTexture);
+                    success = true;
+                    resolve(loadedTexture);
+                  },
+                  undefined,
+                  reject
+                );
+              });
+              if (success) break;
+            } catch (error) {
+              continue;
+            }
           }
-        }
-        
-        if (!success) {
-          console.log('🎨 Creating fallback texture for layer:', selectedLayer);
-          createFallbackTexture();
+          
+          if (!success) {
+            throw new Error('All URLs failed');
+          }
         }
       } catch (error) {
         console.error('Error creating Earth texture:', error);
@@ -450,25 +480,53 @@ export function NASAEarthMap({
     { name: 'NISAR', noradId: 0, position: [-1.5, 2.8, 1.2], velocity: [0, 0, 0], type: 'Radar', active: false, altitude: 747 },
   ]);
   
-  // Fetch real-time satellite positions
+  // Fetch real-time satellite positions using NASA APIs
   useEffect(() => {
     const fetchSatelliteData = async () => {
       try {
-        console.log('🛰️ Fetching real-time satellite positions...');
-        // Note: In production, you would fetch from TLE API
-        // const response = await fetch('https://tle.ivanstanojevic.me/api/tle');
-        // const tleData = await response.json();
+        console.log('🛰️ Fetching real-time satellite positions from NASA APIs...');
         
-        // For demo, we'll simulate orbital updates
-        setSatellites(prev => prev.map(sat => ({
-          ...sat,
-          // Add slight randomization to simulate orbital motion
-          position: [
-            sat.position[0] + (Math.random() - 0.5) * 0.1,
-            sat.position[1] + (Math.random() - 0.5) * 0.1,
-            sat.position[2] + (Math.random() - 0.5) * 0.1
-          ] as [number, number, number]
-        })));
+        // Fetch real satellite data using NASA APIs
+        const promises = satellites.map(async (sat) => {
+          if (sat.noradId > 0) {
+            try {
+              // Try TLE API for real orbital data
+              const tleResponse = await fetch(`https://tle.ivanstanojevic.me/api/tle/${sat.noradId}`);
+              if (tleResponse.ok) {
+                const tleData = await tleResponse.json();
+                console.log(`📡 Updated ${sat.name} orbital data`);
+                return {
+                  ...sat,
+                  tle: {
+                    line1: tleData.line1,
+                    line2: tleData.line2
+                  }
+                };
+              }
+            } catch (error) {
+              console.warn(`Failed to fetch TLE for ${sat.name}:`, error);
+            }
+          }
+          
+          // Fallback: simulate realistic orbital motion
+          const time = Date.now() / 1000;
+          const period = 90 * 60; // 90 minutes in seconds
+          const angle = (time / period) * Math.PI * 2;
+          const baseRadius = Math.sqrt(sat.position[0]**2 + sat.position[1]**2 + sat.position[2]**2);
+          
+          return {
+            ...sat,
+            position: [
+              Math.cos(angle + sat.noradId * 0.1) * (baseRadius + Math.sin(time * 0.01) * 0.1),
+              sat.position[1] + Math.sin(time * 0.02) * 0.05,
+              Math.sin(angle + sat.noradId * 0.1) * (baseRadius + Math.cos(time * 0.01) * 0.1)
+            ] as [number, number, number]
+          };
+        });
+        
+        const updatedSatellites = await Promise.all(promises);
+        setSatellites(updatedSatellites);
+        
       } catch (error) {
         console.error('Failed to fetch satellite data:', error);
       }
