@@ -115,27 +115,29 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-ambient flex flex-col">
-      {currentSection !== 'welcome' && (
-        <NavigationHeader
-          currentSection={currentSection}
-          onSectionChange={setCurrentSection}
-          currentLocation={currentLocation}
-        />
-      )}
-      
-      <main className={`${currentSection === 'welcome' ? 'container mx-auto px-4 py-8' : 'container mx-auto px-4 py-8'} flex-grow`}>
-        {renderCurrentSection()}
-      </main>
+    <>
+      <div className="min-h-screen bg-gradient-ambient flex flex-col">
+        {currentSection !== 'welcome' && (
+          <NavigationHeader
+            currentSection={currentSection}
+            onSectionChange={setCurrentSection}
+            currentLocation={currentLocation}
+          />
+        )}
+        
+        <main className={`${currentSection === 'welcome' ? 'container mx-auto px-4 py-8' : 'container mx-auto px-4 py-8'} flex-grow`}>
+          {renderCurrentSection()}
+        </main>
 
-      {/* Background decorative elements */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
+        {/* Background decorative elements */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
+        </div>
       </div>
       
-      {/* Footer completely outside main content - at absolute bottom */}
-      <div className="w-full py-3">
+      {/* Footer completely separate from main content and borders */}
+      <div className="w-full py-3 bg-background">
         <div className="text-center">
           <div className="text-xs text-muted-foreground">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
@@ -145,7 +147,7 @@ const Index = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
