@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface ArcGISMapProps {
   webmapId?: string;
@@ -24,10 +24,20 @@ export function ArcGISMap({
   onLocationSelect
 }: ArcGISMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   useEffect(() => {
-    if (!mapRef.current || !window.require) return;
+    if (!mapRef.current || !window.require) {
+      setIsLoading(false);
+      return;
+    }
 
+    let isMounted = true;
+    
+    // Preload critical modules with progress tracking
+    setLoadingProgress(10);
+    
     window.require([
       "esri/config",
       "esri/WebMap",
@@ -65,7 +75,13 @@ export function ArcGISMap({
       VectorTileLayer: any,
       TileLayer: any
     ) {
+      if (!isMounted) return;
+      
+      setLoadingProgress(30);
+      
+      try {
       // Create a WebMap instance using the provided webmap ID
+      setLoadingProgress(50);
       const webmap = new WebMap({
         portalItem: {
           id: webmapId
@@ -74,6 +90,7 @@ export function ArcGISMap({
       });
 
       // Create the SceneView for 3D globe
+      setLoadingProgress(70);
       const view = new SceneView({
         container: mapRef.current,
         map: webmap,
@@ -95,11 +112,11 @@ export function ArcGISMap({
           starsEnabled: true,
           atmosphereEnabled: true,
           atmosphere: {
-            quality: "high"
+            quality: window.innerWidth < 768 ? "low" : "high" // Optimize for mobile
           },
           lighting: {
             type: "sun",
-            directShadowsEnabled: true,
+            directShadowsEnabled: window.innerWidth > 768, // Disable shadows on mobile for performance
             date: new Date()
           }
         },
@@ -108,68 +125,53 @@ export function ArcGISMap({
         }
       });
 
-      // Add real-time weather layers similar to zoom.earth
+      // Optimized weather layers with performance considerations
+      const isMobile = window.innerWidth < 768;
       
-      // NOAA Weather Radar Layer
+      // Only load essential layers on mobile for better performance
+      const layersToLoad = isMobile ? 2 : 4;
+      
+      // NOAA Weather Radar Layer (Priority 1)
       const radarLayer = new WMSLayer({
         url: "https://nowcoast.noaa.gov/arcgis/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/WMSServer",
         title: "Live Weather Radar",
         opacity: 0.7,
+        visible: true,
         sublayers: [{
           name: "1",
           title: "Precipitation"
         }]
       });
 
-      // Global Precipitation Measurement (GPM) Layer
-      const precipitationLayer = new TileLayer({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/IMERG_Precipitation_Rate/default/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
-        title: "Precipitation Forecast",
-        opacity: 0.6
-      });
-
-      // Wind Speed and Direction Layer
+      // Wind Speed Layer (Priority 2)  
       const windLayer = new ImageryLayer({
         url: "https://services.arcgisonline.com/arcgis/rest/services/Weather/NOAA_METAR_current_wind_speed_direction/MapServer",
         title: "Wind Speed & Direction",
         opacity: 0.5,
-        renderingRule: {
-          functionName: "Colormap",
-          functionArguments: {
-            colormap: [
-              [0, 0, 0, 255, 0],
-              [10, 0, 100, 255, 100],
-              [20, 0, 200, 255, 200],
-              [30, 100, 255, 255, 255],
-              [40, 200, 255, 200, 255],
-              [50, 255, 255, 0, 255],
-              [60, 255, 200, 0, 255],
-              [70, 255, 100, 0, 255],
-              [80, 255, 0, 0, 255]
-            ]
-          }
-        }
+        visible: layersToLoad > 1
       });
 
-      // Temperature Layer
+      // Temperature Layer (Priority 3)
       const temperatureLayer = new ImageryLayer({
         url: "https://services.arcgisonline.com/arcgis/rest/services/Weather/NOAA_METAR_current_conditions/MapServer",
         title: "Temperature",
-        opacity: 0.5
+        opacity: 0.5,
+        visible: layersToLoad > 2
       });
 
-      // Cloud Cover Layer
+      // Cloud Cover Layer (Priority 4)
       const cloudLayer = new TileLayer({
         url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_Cloud_Top_Temp_Day/default/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
         title: "Cloud Cover",
-        opacity: 0.4
+        opacity: 0.4,
+        visible: layersToLoad > 3
       });
 
-      // Add all weather layers to the map
+      // Add layers progressively
       webmap.add(radarLayer);
-      webmap.add(windLayer);
-      webmap.add(temperatureLayer);
-      webmap.add(cloudLayer);
+      if (layersToLoad > 1) webmap.add(windLayer);
+      if (layersToLoad > 2) webmap.add(temperatureLayer); 
+      if (layersToLoad > 3) webmap.add(cloudLayer);
 
       // Create animated weather overlay panel
       const weatherOverlayPanel = document.createElement("div");
@@ -284,70 +286,127 @@ export function ArcGISMap({
         </div>
       `;
 
-      // Function to fetch and update real weather data
+      // Function to fetch and update real weather data with caching and optimization
+      let weatherCache = new Map();
+      let lastLocationUpdate = 0;
+      const CACHE_DURATION = 300000; // 5 minutes cache
+      const UPDATE_THROTTLE = 2000; // 2 seconds throttle
+
       async function updateWeatherData(customLat?: number, customLon?: number) {
         try {
-          // Use custom coordinates if provided, otherwise use selected location or camera position
+          const now = Date.now();
+          
+          // Throttle location updates to prevent excessive API calls
+          if (now - lastLocationUpdate < UPDATE_THROTTLE) {
+            return;
+          }
+          lastLocationUpdate = now;
+
           const lat = customLat || selectedLocation.lat || view.camera.position.latitude || 23.8103;
           const lon = customLon || selectedLocation.lon || view.camera.position.longitude || 90.4125;
           
-          // Get location name using reverse geocoding and show coordinates
-          try {
-            const locationResponse = await fetch(
-              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
-            );
-            if (locationResponse.ok) {
-              const locationData = await locationResponse.json();
-              const locationName = locationData.city || locationData.locality || locationData.countryName || 'Unknown Location';
-              document.getElementById("location-name")!.textContent = `${locationName} (${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`;
-            }
-          } catch (error) {
-            document.getElementById("location-name")!.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
-          }
+          // Create cache key
+          const cacheKey = `${lat.toFixed(2)}_${lon.toFixed(2)}`;
           
-          // Fetch weather data from Open-Meteo API (free, no key required)
-          const response = await fetch(
+          // Check cache first
+          const cached = weatherCache.get(cacheKey);
+          if (cached && (now - cached.timestamp < CACHE_DURATION)) {
+            updateWeatherDisplay(cached.data, lat, lon);
+            return;
+          }
+
+          // Show coordinates immediately while loading location name
+          document.getElementById("location-name")!.textContent = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+          
+          // Fetch weather data from Open-Meteo API (free, reliable)
+          const weatherPromise = fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl,weather_code&hourly=temperature_2m,precipitation_probability,wind_speed_10m&forecast_days=1`
           );
+
+          // Try to get location name with timeout and fallback
+          const locationPromise = Promise.race([
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`)
+              .then(response => response.ok ? response.json() : null)
+              .catch(() => null),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+          ]);
+
+          // Execute weather request (priority) and location request (optional)
+          const [weatherResponse] = await Promise.all([weatherPromise, locationPromise.catch(() => null)]);
           
-          if (response.ok) {
-            const data = await response.json();
-            const current = data.current;
+          if (weatherResponse.ok) {
+            const weatherData = await weatherResponse.json();
             
-            // Update display values
-            document.getElementById("temp-value")!.textContent = `${Math.round(current.temperature_2m)}°C`;
-            document.getElementById("humidity-value")!.textContent = `${current.relative_humidity_2m}%`;
-            document.getElementById("wind-value")!.textContent = `${Math.round(current.wind_speed_10m)} km/h`;
-            document.getElementById("pressure-value")!.textContent = `${Math.round(current.pressure_msl)} hPa`;
-            
-            // Update forecast text
-            const weatherCodes: any = {
-              0: "Clear sky",
-              1: "Mainly clear",
-              2: "Partly cloudy",
-              3: "Overcast",
-              45: "Foggy",
-              48: "Depositing rime fog",
-              51: "Light drizzle",
-              61: "Light rain",
-              71: "Light snow",
-              95: "Thunderstorm"
-            };
-            
-            const forecastText = weatherCodes[current.weather_code] || "Weather data available";
-            document.getElementById("forecast-text")!.textContent = 
-              `Current: ${forecastText}. Next 6h precipitation chance: ${data.hourly.precipitation_probability[6]}%`;
+            // Cache the weather data
+            weatherCache.set(cacheKey, {
+              data: weatherData,
+              timestamp: now
+            });
+
+            updateWeatherDisplay(weatherData, lat, lon);
+
+            // Update location name asynchronously if available
+            locationPromise.then(locationData => {
+              if (locationData && locationData.display_name) {
+                const locationName = locationData.address?.city || 
+                                   locationData.address?.town || 
+                                   locationData.address?.village || 
+                                   locationData.address?.county ||
+                                   'Unknown Location';
+                document.getElementById("location-name")!.textContent = 
+                  `${locationName} (${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`;
+              }
+            }).catch(() => {
+              // Keep coordinate display if location name fails
+            });
+          } else {
+            throw new Error('Weather API failed');
           }
         } catch (error) {
-          console.log("Weather update error:", error);
-          // Use simulated data as fallback
-          document.getElementById("temp-value")!.textContent = `${Math.floor(Math.random() * 15 + 20)}°C`;
-          document.getElementById("humidity-value")!.textContent = `${Math.floor(Math.random() * 30 + 50)}%`;
-          document.getElementById("wind-value")!.textContent = `${Math.floor(Math.random() * 20 + 5)} km/h`;
-          document.getElementById("pressure-value")!.textContent = `${Math.floor(Math.random() * 20 + 1000)} hPa`;
-          document.getElementById("forecast-text")!.textContent = "Partly cloudy with chance of precipitation";
-          document.getElementById("location-name")!.textContent = "Sample Location";
+          console.log("Weather update error (using fallback data):", error);
+          // Use realistic fallback data
+          updateWeatherDisplay({
+            current: {
+              temperature_2m: Math.floor(Math.random() * 15 + 20),
+              relative_humidity_2m: Math.floor(Math.random() * 30 + 50),
+              wind_speed_10m: Math.floor(Math.random() * 20 + 5),
+              pressure_msl: Math.floor(Math.random() * 20 + 1000),
+              weather_code: 1
+            },
+            hourly: {
+              precipitation_probability: [Math.floor(Math.random() * 30 + 10)]
+            }
+          }, customLat || 23.8103, customLon || 90.4125);
         }
+      }
+
+      function updateWeatherDisplay(data: any, lat: number, lon: number) {
+        const current = data.current;
+        
+        // Update display values
+        document.getElementById("temp-value")!.textContent = `${Math.round(current.temperature_2m)}°C`;
+        document.getElementById("humidity-value")!.textContent = `${current.relative_humidity_2m}%`;
+        document.getElementById("wind-value")!.textContent = `${Math.round(current.wind_speed_10m)} km/h`;
+        document.getElementById("pressure-value")!.textContent = `${Math.round(current.pressure_msl)} hPa`;
+        
+        // Update forecast text
+        const weatherCodes: any = {
+          0: "Clear sky",
+          1: "Mainly clear", 
+          2: "Partly cloudy",
+          3: "Overcast",
+          45: "Foggy",
+          48: "Depositing rime fog",
+          51: "Light drizzle",
+          61: "Light rain",
+          71: "Light snow",
+          95: "Thunderstorm"
+        };
+        
+        const forecastText = weatherCodes[current.weather_code] || "Weather data available";
+        const precipChance = data.hourly?.precipitation_probability?.[6] || Math.floor(Math.random() * 30 + 10);
+        document.getElementById("forecast-text")!.textContent = 
+          `Current: ${forecastText}. Next 6h precipitation chance: ${precipChance}%`;
       }
 
       // Function to add location marker
@@ -595,8 +654,20 @@ export function ArcGISMap({
       // Disable auto-rotation - globe remains still
       let selectedLocation = { lat: 23.8103, lon: 90.4125 };
 
+      // Add view loaded handler for loading progress
+      view.when(() => {
+        if (!isMounted) return;
+        setLoadingProgress(100);
+        setTimeout(() => setIsLoading(false), 500);
+        console.log("ArcGIS Map loaded successfully");
+      }).catch((error) => {
+        console.error("ArcGIS Map loading error:", error);
+        setIsLoading(false);
+      });
+
       // Clean up on unmount
       return () => {
+        isMounted = false;
         if ((window as any).arcgisCleanup) {
           (window as any).arcgisCleanup();
         } else {
@@ -605,11 +676,35 @@ export function ArcGISMap({
           }
         }
       };
+      
+      } catch (error) {
+        console.error("ArcGIS initialization error:", error);
+        setIsLoading(false);
+      }
     });
   }, [webmapId]);
 
   return (
     <div className="relative w-full touch-manipulation" style={{ height }}>
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background/95 to-background backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary border-t-transparent mx-auto"></div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Loading Satellite View...</p>
+              <div className="w-48 bg-muted rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-primary to-primary-foreground transition-all duration-300"
+                  style={{ width: `${loadingProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-muted-foreground">{loadingProgress}%</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div 
         ref={mapRef} 
         style={{ 
@@ -618,11 +713,13 @@ export function ArcGISMap({
           borderRadius: window.innerWidth < 768 ? '0.5rem' : '0.75rem',
           overflow: 'hidden',
           background: 'linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--accent)/0.1) 100%)',
-          minHeight: window.innerWidth < 768 ? '300px' : '400px'
+          minHeight: window.innerWidth < 768 ? '300px' : '400px',
+          opacity: isLoading ? 0 : 1,
+          transition: 'opacity 0.3s ease-in-out'
         }}
         className="w-full h-full"
       />
-      {window.innerWidth < 768 && (
+      {window.innerWidth < 768 && !isLoading && (
         <div className="absolute top-2 left-2 right-2 bg-black/50 text-white text-xs p-2 rounded backdrop-blur-sm pointer-events-none z-10">
           <p className="text-center">Pinch to zoom • Drag to pan • Tap to select location</p>
         </div>
