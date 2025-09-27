@@ -5,9 +5,9 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain, Search } from 'lucide-react';
+import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain } from 'lucide-react';
 import { fetchWeatherData, WeatherData, getWeatherDescription, getWeatherIcon, getWindDirection } from '@/services/weather-service';
+import { LocationSearch } from '@/components/urban/LocationSearch';
 
 interface NASAEarthMapProps {
   height?: string;
@@ -40,7 +40,7 @@ interface SelectedLocation {
 // NASA API Configuration
 const NASA_API_KEY = 'GXcqYeyqgnHgWfdabi6RYhLPhdY1uIyiPsB922ZV';
 
-  // Enhanced Earth Component with NASA imagery and OpenStreetMap fallback
+// Enhanced Earth Component with NASA imagery and OpenStreetMap fallback
 function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; selectedLayer: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
@@ -347,6 +347,7 @@ function LocationMarker({ location }: { location: SelectedLocation }) {
     </group>
   );
 }
+
 function SatellitePoint({ satellite, isPlaying }: { satellite: Satellite; isPlaying: boolean }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [realPosition, setRealPosition] = useState(satellite.position);
@@ -485,68 +486,78 @@ function Scene({
           requestAnimationFrame(animateCamera);
         }
       };
+      
       animateCamera();
     }
   }, [focusLocation, camera]);
 
-  // Handle globe clicks for location selection
-  const handleGlobeClick = useCallback((event: any) => {
+  // Handle Earth click for location selection
+  const handleEarthClick = useCallback((event: any) => {
     event.stopPropagation();
     
-    // Get intersection point on the sphere
-    const earthRadius = 2;
-    const intersectionPoint = event.point;
+    // Calculate intersection point with Earth sphere
+    raycaster.setFromCamera(pointer, camera);
     
-    // Convert 3D point to lat/lon
-    const phi = Math.acos(-intersectionPoint.y / earthRadius);
-    const theta = Math.atan2(-intersectionPoint.z, intersectionPoint.x) + Math.PI;
+    // Create a sphere geometry to intersect with (same as Earth)
+    const sphereGeometry = new THREE.SphereGeometry(2, 32, 32);
+    const sphereMesh = new THREE.Mesh(sphereGeometry);
     
-    const latitude = (phi * 180 / Math.PI) - 90;
-    const longitude = (theta * 180 / Math.PI) - 180;
+    const intersects = raycaster.intersectObject(sphereMesh);
     
-    console.log(`🌍 Location selected: ${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`);
-    onLocationSelect(latitude, longitude);
-  }, [onLocationSelect]);
+    if (intersects.length > 0) {
+      const point = intersects[0].point;
+      
+      // Convert 3D coordinates back to lat/lng
+      const radius = 2;
+      const lat = Math.asin(point.y / radius) * (180 / Math.PI);
+      const lng = Math.atan2(-point.z, -point.x) * (180 / Math.PI);
+      
+      onLocationSelect(lat, lng);
+    }
+  }, [camera, raycaster, pointer, onLocationSelect]);
 
   return (
     <>
-      <Stars radius={100} depth={50} count={1000} factor={4} saturation={0.5} fade speed={1} />
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[5, 5, 5]} intensity={1} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[10, 10, 5]} intensity={1} />
+      <pointLight position={[10, 10, 10]} intensity={0.5} />
       
-      {/* Earth with clickable surface */}
-      <group onClick={handleGlobeClick}>
-        <Earth rotationSpeed={isPlaying ? 0.005 : 0} selectedLayer={selectedLayer} />
-      </group>
+      <Stars 
+        radius={300} 
+        depth={60} 
+        count={20000} 
+        factor={7} 
+        saturation={0} 
+        fade 
+        speed={0.5}
+      />
       
-      {/* Enhanced atmosphere glow effect */}
-      <mesh>
-        <sphereGeometry args={[2.05, 64, 64]} />
-        <meshBasicMaterial 
-          color="#87CEEB" 
-          transparent 
-          opacity={0.15} 
-          side={THREE.BackSide}
-        />
-      </mesh>
-      
-      {/* Orbital paths */}
-      <group>
-        <OrbitalPath radius={2.4} color="#00ff41" inclination={0.1} />
-        <OrbitalPath radius={2.8} color="#ff6b35" inclination={0.3} />
-        <OrbitalPath radius={3.2} color="#4fc3f7" inclination={-0.2} />
-        <OrbitalPath radius={3.6} color="#ffd54f" inclination={0.4} />
+      {/* Earth with click handler */}
+      <group onClick={handleEarthClick}>
+        <Earth rotationSpeed={isPlaying ? 0.001 : 0} selectedLayer={selectedLayer} />
       </group>
       
       {/* Satellites */}
       {satellites.map((satellite, index) => (
-        <SatellitePoint key={index} satellite={satellite} isPlaying={isPlaying} />
+        <SatellitePoint 
+          key={`${satellite.name}-${index}`} 
+          satellite={satellite} 
+          isPlaying={isPlaying}
+        />
       ))}
       
-      {/* Selected location marker */}
-      {selectedLocation && (
-        <LocationMarker location={selectedLocation} />
-      )}
+      {/* Orbital paths */}
+      {satellites.map((satellite, index) => (
+        <OrbitalPath 
+          key={`orbit-${satellite.name}-${index}`}
+          radius={2.2 + (satellite.altitude / 1000)}
+          color="#00ff41"
+          inclination={satellite.noradId * 0.01}
+        />
+      ))}
+      
+      {/* Location marker */}
+      {selectedLocation && <LocationMarker location={selectedLocation} />}
       
       <OrbitControls 
         enablePan={true} 
@@ -568,510 +579,316 @@ export function NASAEarthMap({
 }: NASAEarthMapProps) {
   const [isPlaying, setIsPlaying] = useState(isSimulationRunning);
   const [currentDate] = useState(new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long', 
-    day: 'numeric'
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   }));
-  
-  // Simplified data layers
-  const dataLayers = [
-    'Visible Earth',
-    'Air Temperature', 
-    'Visible Light',
-    'Infrared'
-  ];
-
-  // Update selected layer state to trigger Earth texture reload
   const [selectedLayer, setSelectedLayer] = useState('Visible Earth');
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  
-  // Weather and location state
+  const [satellites, setSatellites] = useState<Satellite[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
-  
-  // Search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
   const [focusLocation, setFocusLocation] = useState<SelectedLocation | null>(null);
-  
-  // Handle location selection
-  const handleLocationSelect = useCallback(async (lat: number, lon: number) => {
+
+  // Enhanced location selection with weather data
+  const handleLocationSelectWithWeather = useCallback(async (lat: number, lon: number, locationInfo?: any) => {
     console.log(`🌍 Location selected: ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`);
     
-    // Convert lat/lon to 3D position on sphere
-    const earthRadius = 2;
+    // Update location
+    if (onLocationSelect) {
+      onLocationSelect(lat, lon);
+    }
+
+    // Convert to 3D coordinates for Earth
     const phi = (90 - lat) * (Math.PI / 180);
     const theta = (lon + 180) * (Math.PI / 180);
-    
-    const x = earthRadius * Math.sin(phi) * Math.cos(theta);
-    const y = earthRadius * Math.cos(phi);
-    const z = earthRadius * Math.sin(phi) * Math.sin(theta);
-    
+
+    const x = -2.02 * Math.sin(phi) * Math.cos(theta);
+    const y = 2.02 * Math.cos(phi);
+    const z = 2.02 * Math.sin(phi) * Math.sin(theta);
+
     const newLocation: SelectedLocation = {
       latitude: lat,
       longitude: lon,
       position: [x, y, z]
     };
-    
+
     setSelectedLocation(newLocation);
-    setFocusLocation(newLocation); // Focus camera on the location
-    onLocationSelect?.(lat, lon);
-    
-    // Fetch weather data for the selected location
+    setFocusLocation(newLocation);
+
+    // Fetch weather data for selected location
     setWeatherLoading(true);
     try {
+      console.log(`🌤️ Fetching weather data for ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
       const weather = await fetchWeatherData(lat, lon);
       setWeatherData(weather);
       console.log('✅ Weather data loaded for selected location');
     } catch (error) {
-      console.error('❌ Failed to load weather data:', error);
+      console.error('Failed to fetch weather data:', error);
     } finally {
       setWeatherLoading(false);
     }
   }, [onLocationSelect]);
 
-  // Auto-update weather data every 5 minutes
-  useEffect(() => {
-    if (selectedLocation && weatherData) {
-      const interval = setInterval(async () => {
-        console.log('🔄 Updating weather data...');
-        try {
-          const updatedWeather = await fetchWeatherData(selectedLocation.latitude, selectedLocation.longitude);
-          setWeatherData(updatedWeather);
-        } catch (error) {
-          console.error('Failed to update weather data:', error);
-        }
-      }, 5 * 60 * 1000); // 5 minutes
-
-      return () => clearInterval(interval);
-    }
-  }, [selectedLocation, weatherData]);
-  const [satellites, setSatellites] = useState<Satellite[]>([
-    { name: 'PACE', noradId: 59043, position: [0, 1, 2.4], velocity: [0, 0, 0], type: 'Earth Science', active: true, altitude: 676 },
-    { name: 'NOAA 20', noradId: 43013, position: [2.6, 0.5, 0], velocity: [0, 0, 0], type: 'Weather', active: true, altitude: 824 },
-    { name: 'Landsat 8', noradId: 39084, position: [-2.4, 0, 1.5], velocity: [0, 0, 0], type: 'Earth Observation', active: true, altitude: 705 },
-    { name: 'Landsat 9', noradId: 49260, position: [-2.6, 0.2, 1.3], velocity: [0, 0, 0], type: 'Earth Observation', active: true, altitude: 705 },
-    { name: 'Jason-3', noradId: 41240, position: [0, -2.6, 1], velocity: [0, 0, 0], type: 'Ocean', active: true, altitude: 1336 },
-    { name: 'CYGNSS 1', noradId: 41884, position: [3.0, -0.8, -1], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'CYGNSS 2', noradId: 41885, position: [-2.8, 1.2, 0.5], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'CYGNSS 3', noradId: 41886, position: [2.2, 2.0, -1.8], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'CYGNSS 4', noradId: 41887, position: [1.8, -1.5, 2.2], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'CYGNSS 5', noradId: 41888, position: [-1.2, 2.8, 1.0], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'CYGNSS 7', noradId: 41890, position: [0.5, -3.2, -0.8], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'CYGNSS 8', noradId: 41891, position: [-3.4, -0.2, 1.1], velocity: [0, 0, 0], type: 'Hurricane', active: true, altitude: 510 },
-    { name: 'SWOT', noradId: 54234, position: [1, -3.4, -0.5], velocity: [0, 0, 0], type: 'Water', active: true, altitude: 857 },
-    { name: 'SMAP', noradId: 40376, position: [-2.2, -2.8, 1.8], velocity: [0, 0, 0], type: 'Soil Moisture', active: true, altitude: 685 },
-    { name: 'Terra', noradId: 25994, position: [2.8, 1.5, -1.2], velocity: [0, 0, 0], type: 'Earth Science', active: true, altitude: 705 },
-    { name: 'Aqua', noradId: 27424, position: [-1.8, -2.2, 2.5], velocity: [0, 0, 0], type: 'Earth Science', active: true, altitude: 705 },
-    { name: 'Aura', noradId: 28376, position: [3.2, 0.8, 1.8], velocity: [0, 0, 0], type: 'Atmospheric', active: true, altitude: 705 },
-    { name: 'OCO-2', noradId: 40059, position: [-0.8, 3.0, -1.5], velocity: [0, 0, 0], type: 'Carbon', active: true, altitude: 705 },
-    { name: 'GRACE-FO 1', noradId: 43476, position: [2.5, -1.8, 2.0], velocity: [0, 0, 0], type: 'Gravity', active: true, altitude: 490 },
-    { name: 'GRACE-FO 2', noradId: 43477, position: [2.3, -1.6, 2.2], velocity: [0, 0, 0], type: 'Gravity', active: true, altitude: 490 },
-    { name: 'ICESat-2', noradId: 43613, position: [-3.0, 1.0, -1.8], velocity: [0, 0, 0], type: 'Ice', active: true, altitude: 496 },
-    { name: 'Sentinel-6 Michael Freilich', noradId: 46984, position: [2.2, -2.5, -1.8], velocity: [0, 0, 0], type: 'Ocean', active: true, altitude: 1336 },
-    { name: 'NISAR', noradId: 0, position: [-1.5, 2.8, 1.2], velocity: [0, 0, 0], type: 'Radar', active: false, altitude: 747 },
-  ]);
-  
-  // Fetch real-time satellite positions using NASA APIs
-  useEffect(() => {
-    const fetchSatelliteData = async () => {
-      try {
-        console.log('🛰️ Fetching real-time satellite positions from NASA APIs...');
-        
-        // Fetch real satellite data using NASA APIs
-        const promises = satellites.map(async (sat) => {
-          if (sat.noradId > 0) {
-            try {
-              // Try TLE API for real orbital data
-              const tleResponse = await fetch(`https://tle.ivanstanojevic.me/api/tle/${sat.noradId}`);
-              if (tleResponse.ok) {
-                const tleData = await tleResponse.json();
-                console.log(`📡 Updated ${sat.name} orbital data`);
-                return {
-                  ...sat,
-                  tle: {
-                    line1: tleData.line1,
-                    line2: tleData.line2
-                  }
-                };
-              }
-            } catch (error) {
-              console.warn(`Failed to fetch TLE for ${sat.name}:`, error);
-            }
-          }
-          
-          // Fallback: simulate realistic orbital motion
-          const time = Date.now() / 1000;
-          const period = 90 * 60; // 90 minutes in seconds
-          const angle = (time / period) * Math.PI * 2;
-          const baseRadius = Math.sqrt(sat.position[0]**2 + sat.position[1]**2 + sat.position[2]**2);
-          
-          return {
-            ...sat,
-            position: [
-              Math.cos(angle + sat.noradId * 0.1) * (baseRadius + Math.sin(time * 0.01) * 0.1),
-              sat.position[1] + Math.sin(time * 0.02) * 0.05,
-              Math.sin(angle + sat.noradId * 0.1) * (baseRadius + Math.cos(time * 0.01) * 0.1)
-            ] as [number, number, number]
-          };
-        });
-        
-        const updatedSatellites = await Promise.all(promises);
-        setSatellites(updatedSatellites);
-        
-      } catch (error) {
-        console.error('Failed to fetch satellite data:', error);
-      }
-    };
-
-    fetchSatelliteData();
-    const interval = setInterval(fetchSatelliteData, 30000); // Update every 30 seconds
+  // Fetch satellite data from NASA APIs
+  const fetchSatelliteData = useCallback(async () => {
+    console.log('🛰️ Fetching real-time satellite positions from NASA APIs...');
     
-    return () => clearInterval(interval);
+    try {
+      const satelliteList = [
+        { name: 'PACE', noradId: 59009, type: 'Climate', altitude: 676 },
+        { name: 'Jason-3', noradId: 41240, type: 'Ocean', altitude: 1336 },
+        { name: 'SMAP', noradId: 40376, type: 'Earth Science', altitude: 685 },
+        { name: 'Landsat 8', noradId: 39084, type: 'Earth Observation', altitude: 705 },
+        { name: 'Landsat 9', noradId: 49260, type: 'Earth Observation', altitude: 705 },
+        { name: 'SWOT', noradId: 54754, type: 'Ocean', altitude: 857 },
+        { name: 'Sentinel-6 Michael Freilich', noradId: 46984, type: 'Ocean', altitude: 1336 },
+        { name: 'CYGNSS 1', noradId: 41884, type: 'Weather', altitude: 510 },
+        { name: 'CYGNSS 2', noradId: 41885, type: 'Weather', altitude: 510 },
+        { name: 'CYGNSS 3', noradId: 41886, type: 'Weather', altitude: 510 },
+        { name: 'CYGNSS 5', noradId: 41888, type: 'Weather', altitude: 510 },
+        { name: 'CYGNSS 7', noradId: 41890, type: 'Weather', altitude: 510 },
+        { name: 'CYGNSS 8', noradId: 41891, type: 'Weather', altitude: 510 },
+        { name: 'NOAA 20', noradId: 43013, type: 'Weather', altitude: 824 }
+      ];
+
+      const tlePromises = satelliteList.map(async (sat) => {
+        try {
+          const response = await fetch(`https://tle.ivanstanojevic.me/api/tle/${sat.noradId}`);
+          const tleData = await response.json();
+          
+          if (tleData && tleData.line1 && tleData.line2) {
+            console.log(`📡 Updated ${sat.name} orbital data`);
+            
+            // Generate initial position based on TLE data
+            const meanMotion = parseFloat(tleData.line2.substring(52, 63));
+            const currentTime = Date.now() / 1000;
+            const angle = (currentTime * meanMotion * 2 * Math.PI) / 86400;
+            
+            const radius = 2.2 + (sat.altitude / 1000);
+            const inclination = sat.noradId * 0.01;
+            
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * Math.sin(inclination) * 0.5;
+            const z = Math.sin(angle) * radius;
+            
+            return {
+              ...sat,
+              position: [x, y, z] as [number, number, number],
+              velocity: [0, 0, 0] as [number, number, number],
+              active: true,
+              tle: {
+                line1: tleData.line1,
+                line2: tleData.line2
+              }
+            };
+          }
+          return null;
+        } catch (error) {
+          console.warn(`Failed to fetch TLE for ${sat.name}:`, error);
+          return null;
+        }
+      });
+
+      const satelliteData = await Promise.all(tlePromises);
+      const validSatellites = satelliteData.filter(sat => sat !== null) as Satellite[];
+      
+      setSatellites(validSatellites);
+      
+    } catch (error) {
+      console.error('Failed to fetch satellite data:', error);
+    }
   }, []);
 
-  const handlePlayPause = useCallback(() => {
+  // Initial satellite data fetch and periodic updates
+  useEffect(() => {
+    fetchSatelliteData();
+    const interval = setInterval(fetchSatelliteData, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchSatelliteData]);
+
+  // Handle toggle play/pause
+  const handleTogglePlay = useCallback(() => {
     setIsPlaying(!isPlaying);
-    onRotationChange?.(!isPlaying);
+    if (onRotationChange) {
+      onRotationChange(!isPlaying);
+    }
   }, [isPlaying, onRotationChange]);
 
   const handleSatelliteClick = useCallback((satellite: Satellite) => {
     console.log('Satellite clicked:', satellite.name);
   }, []);
 
-  // Geocoding service for place name search
-  const geocodePlace = async (placeName: string): Promise<{lat: number; lon: number; displayName: string} | null> => {
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}&limit=1&addressdetails=1`;
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'NASA-Earth-Weather-App'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.length > 0) {
-          return {
-            lat: parseFloat(data[0].lat),
-            lon: parseFloat(data[0].lon),
-            displayName: data[0].display_name
-          };
-        }
-      }
-    } catch (error) {
-      console.error('Geocoding failed:', error);
-    }
-    return null;
-  };
-
-  // Parse coordinate input (lat,lon format)
-  const parseCoordinates = (input: string): {lat: number; lon: number} | null => {
-    const coordRegex = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/;
-    const match = input.trim().match(coordRegex);
-    
-    if (match) {
-      const lat = parseFloat(match[1]);
-      const lon = parseFloat(match[2]);
-      
-      if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-        return { lat, lon };
-      }
-    }
-    return null;
-  };
-
-  // Handle search functionality
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
-    setSearchLoading(true);
-    console.log(`🔍 Searching for: ${searchQuery}`);
-    
-    try {
-      // First, try to parse as coordinates
-      const coords = parseCoordinates(searchQuery);
-      
-      if (coords) {
-        console.log(`📍 Parsed coordinates: ${coords.lat}, ${coords.lon}`);
-        await handleLocationSelect(coords.lat, coords.lon);
-        setSearchQuery(''); // Clear search after successful search
-      } else {
-        // Try geocoding as place name
-        const result = await geocodePlace(searchQuery);
-        
-        if (result) {
-          console.log(`🌍 Found location: ${result.displayName}`);
-          await handleLocationSelect(result.lat, result.lon);
-          setSearchQuery(''); // Clear search after successful search
-        } else {
-          console.warn('❌ Location not found');
-          // You could show a toast notification here
-        }
-      }
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  // Handle search input keypress
-  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
   return (
-    <div className="relative w-full bg-black" style={{ height }}>
-      {/* Enhanced Header with Search Bar */}
-      <div className="absolute top-0 left-0 right-0 z-50 bg-black/95 border-b border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <Satellite className="w-6 h-6 text-blue-400" />
-            <div>
-              <h1 className="text-white font-bold text-lg">Live NASA Satellite Imagery</h1>
-              <p className="text-gray-400 text-sm">Real-time Earth observation data</p>
-            </div>
-          </div>
-          
+    <div style={{ height }} className="relative bg-black overflow-hidden">
+      {/* Header Controls */}
+      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent p-4">
+        <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto">
+          {/* Left: Date and Controls */}
           <div className="flex items-center gap-4">
-            <Badge className="bg-green-600 text-white animate-pulse">
-              LIVE DATA
-            </Badge>
+            <div className="text-white">
+              <div className="text-sm text-gray-300">NASA Earth Observatory</div>
+              <div className="text-xs text-gray-400">{currentDate}</div>
+            </div>
+            
             <Button 
-              variant="ghost" 
+              variant="outline" 
               size="sm"
-              onClick={handlePlayPause}
-              className="text-white hover:bg-gray-700"
+              onClick={handleTogglePlay}
+              className="bg-black/50 border-gray-600 text-white hover:bg-gray-800"
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             </Button>
           </div>
-        </div>
-        
-        {/* Prominent Search Bar */}
-        <div className="flex items-center justify-center">
-          <div className="flex items-center gap-3 bg-gray-800/90 border border-gray-600 rounded-lg p-3 w-full max-w-2xl">
-            <Search className="w-5 h-5 text-blue-400" />
-            <Input
-              type="text"
+          
+          {/* Center: Enhanced Location Search */}
+          <div className="flex-1 max-w-2xl">
+            <LocationSearch
+              onLocationSelect={handleLocationSelectWithWeather}
               placeholder="🔍 Search by location name or coordinates (e.g., 'New York' or '40.7589,-73.9851')"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={handleSearchKeyPress}
-              className="flex-1 text-white bg-transparent border-none focus:ring-0 placeholder-gray-400"
+              className="w-full"
+              showCurrentLocationButton={true}
             />
-            <Button
-              size="sm"
-              onClick={handleSearch}
-              disabled={searchLoading || !searchQuery.trim()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4"
+          </div>
+
+          {/* Right: Layer Controls */}
+          <div className="flex items-center gap-2">
+            <select 
+              value={selectedLayer} 
+              onChange={(e) => setSelectedLayer(e.target.value)}
+              className="bg-black/50 border border-gray-600 text-white text-sm rounded px-3 py-2"
             >
-              {searchLoading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                'Search'
-              )}
-            </Button>
+              <option value="Visible Earth">🌍 Visible Earth</option>
+              <option value="Air Temperature">🌡️ Temperature</option>
+              <option value="Visible Light">💡 Visible Light</option>
+              <option value="Infrared">🔴 Infrared</option>
+            </select>
           </div>
         </div>
-      </div>
-
-      {/* Enhanced Left Panel with Weather Data */}
-      <div className="absolute left-6 top-32 bottom-16 w-80 z-40">
-        <Card className="bg-black/90 border-gray-700 h-full overflow-y-auto">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm flex items-center gap-2">
-              <Satellite className="w-4 h-4" />
-              SATELLITE DATA LAYERS
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            
-            <div className="space-y-3">
-              <h3 className="text-white text-sm font-medium mb-3">Data Layers</h3>
-              {dataLayers.map((layer) => (
-                <Button
-                  key={layer}
-                  variant={selectedLayer === layer ? "default" : "outline"}
-                  className={`w-full justify-start text-sm ${
-                    selectedLayer === layer 
-                      ? 'bg-blue-600 text-white border-blue-600' 
-                      : 'text-gray-300 border-gray-600 hover:bg-gray-800 hover:text-white'
-                  }`}
-                  onClick={() => setSelectedLayer(layer)}
-                >
-                  {layer}
-                </Button>
-              ))}
-            </div>
-            
-            {/* Weather Data Section */}
-            {weatherData && (
-              <div className="mt-6 pt-4 border-t border-gray-700">
-                <div className="flex items-center gap-2 mb-3">
-                  <MapPin className="w-4 h-4 text-red-400" />
-                  <h3 className="text-white text-sm font-medium">Weather Data</h3>
-                  {weatherLoading && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-                  )}
-                </div>
-                
-                <div className="bg-gray-800 rounded-lg p-3 space-y-3">
-                  <div className="text-center border-b border-gray-600 pb-2">
-                    <p className="text-cyan-400 font-medium text-sm">
-                      {weatherData.location.city}, {weatherData.location.country}
-                    </p>
-                    <p className="text-gray-400 text-xs">
-                      {weatherData.location.latitude.toFixed(2)}°, {weatherData.location.longitude.toFixed(2)}°
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Temperature */}
-                    <div className="flex items-center gap-2 bg-red-600/20 p-2 rounded">
-                      <Thermometer className="w-4 h-4 text-red-400" />
-                      <div>
-                        <p className="text-white font-bold">{weatherData.current.temperature}°C</p>
-                        <p className="text-gray-400 text-xs">Temperature</p>
-                      </div>
-                    </div>
-                    
-                    {/* Wind */}
-                    <div className="flex items-center gap-2 bg-blue-600/20 p-2 rounded">
-                      <Wind className="w-4 h-4 text-blue-400" />
-                      <div>
-                        <p className="text-white font-bold">{weatherData.current.windSpeed} km/h</p>
-                        <p className="text-gray-400 text-xs">{getWindDirection(weatherData.current.windDirection)}</p>
-                      </div>
-                    </div>
-                    
-                    {/* Pressure */}
-                    <div className="flex items-center gap-2 bg-purple-600/20 p-2 rounded">
-                      <Gauge className="w-4 h-4 text-purple-400" />
-                      <div>
-                        <p className="text-white font-bold">{weatherData.current.pressure} hPa</p>
-                        <p className="text-gray-400 text-xs">Pressure</p>
-                      </div>
-                    </div>
-                    
-                    {/* Precipitation */}
-                    <div className="flex items-center gap-2 bg-green-600/20 p-2 rounded">
-                      <CloudRain className="w-4 h-4 text-green-400" />
-                      <div>
-                        <p className="text-white font-bold">{weatherData.current.precipitation} mm</p>
-                        <p className="text-gray-400 text-xs">Precipitation</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-center pt-2 border-t border-gray-600">
-                    <p className="text-gray-400 text-xs flex items-center justify-center gap-1">
-                      {getWeatherIcon(weatherData.current.weatherCode)}
-                      {getWeatherDescription(weatherData.current.weatherCode)}
-                    </p>
-                    <p className="text-gray-500 text-xs mt-1">
-                      Humidity: {weatherData.current.humidity}% • Clouds: {weatherData.current.cloudCover}%
-                    </p>
-                    <p className="text-gray-500 text-xs">
-                      Updated: {new Date(weatherData.lastUpdated).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {!weatherData && (
-              <div className="mt-6 pt-4 border-t border-gray-700 text-center">
-                <MapPin className="w-8 h-8 text-gray-500 mx-auto mb-2" />
-                <p className="text-gray-400 text-sm">Click on the globe to get weather data</p>
-              </div>
-            )}
-            
-            <div className="mt-6 pt-4 border-t border-gray-700">
-              <h3 className="text-white text-sm font-medium mb-3">Active Satellites</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center p-2 bg-gray-800 rounded">
-                  <div className="text-green-400 text-xl font-bold">{satellites.filter(s => s.active).length}</div>
-                  <div className="text-gray-400 text-xs">Online</div>
-                </div>
-                <div className="text-center p-2 bg-gray-800 rounded">
-                  <div className="text-orange-400 text-xl font-bold">{satellites.length}</div>
-                  <div className="text-gray-400 text-xs">Total</div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Right Panel - Status */}
-      <div className="absolute right-6 top-32 w-64 z-40">
-        <Card className="bg-blue-600 border-blue-500">
-          <CardContent className="p-4">
-            <div className="text-center">
-              <Calendar className="w-8 h-8 text-white mx-auto mb-2" />
-              <p className="text-white text-sm">Current Layer</p>
-              <p className="text-white font-bold text-lg">{selectedLayer}</p>
-              <p className="text-blue-200 text-xs mt-2">{currentDate}</p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* 3D Canvas */}
       <Suspense fallback={
-        <div className="absolute inset-0 flex items-center justify-center bg-black">
+        <div className="flex items-center justify-center h-full bg-black">
           <div className="text-white text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
-            <p>Loading NASA Satellite Data...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-4"></div>
+            <p>Loading NASA Earth Observatory...</p>
           </div>
         </div>
       }>
-        <Canvas 
-          className="absolute inset-0"
+        <Canvas
+          gl={{ 
+            antialias: true, 
+            alpha: true,
+            preserveDrawingBuffer: false,
+            powerPreference: 'high-performance'
+          }}
           camera={{ 
             position: [0, 0, 6], 
-            fov: 75,
+            fov: 45,
             near: 0.1,
-            far: 1000 
+            far: 1000
+          }}
+          onCreated={({ gl }) => {
+            gl.setClearColor(0x000011, 1);
+            console.log('🎮 3D Canvas initialized');
           }}
         >
           <Scene 
-            isPlaying={isPlaying} 
+            isPlaying={isPlaying}
             satellites={satellites}
             onSatelliteClick={handleSatelliteClick}
             selectedLayer={selectedLayer}
             selectedLocation={selectedLocation}
-            onLocationSelect={handleLocationSelect}
+            onLocationSelect={handleLocationSelectWithWeather}
             focusLocation={focusLocation}
           />
         </Canvas>
       </Suspense>
 
-      {/* Bottom Controls */}
-      <div className="absolute bottom-0 left-0 right-0 z-40 bg-black/95 border-t border-gray-700 px-6 py-3">
-        <div className="flex items-center justify-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={handlePlayPause}
-            className="text-white hover:bg-gray-700"
-          >
-            {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-            {isPlaying ? 'Pause' : 'Play'} Simulation
-          </Button>
-          <Button variant="ghost" size="sm" className="text-white hover:bg-gray-700">
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset View
-          </Button>
-          <Button variant="ghost" size="sm" className="text-white hover:bg-gray-700">
-            <Settings className="w-4 h-4 mr-2" />
-            Settings
-          </Button>
+      {/* Weather Info Panel */}
+      {weatherData && selectedLocation && (
+        <Card className="absolute top-20 right-4 w-80 bg-black/80 border-gray-600 text-white">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MapPin className="w-5 h-5 text-blue-400" />
+              {weatherData.location.city}, {weatherData.location.country}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Current Weather */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{getWeatherIcon(weatherData.current.weatherCode)}</span>
+                <div>
+                  <div className="text-2xl font-bold">{weatherData.current.temperature}°C</div>
+                  <div className="text-sm text-gray-300">{getWeatherDescription(weatherData.current.weatherCode)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Weather Details */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Wind className="w-4 h-4 text-blue-400" />
+                <div>
+                  <div className="text-gray-300">Wind</div>
+                  <div>{weatherData.current.windSpeed} km/h {getWindDirection(weatherData.current.windDirection)}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-blue-400" />
+                <div>
+                  <div className="text-gray-300">Pressure</div>
+                  <div>{weatherData.current.pressure} hPa</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Thermometer className="w-4 h-4 text-blue-400" />
+                <div>
+                  <div className="text-gray-300">Humidity</div>
+                  <div>{weatherData.current.humidity}%</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <CloudRain className="w-4 h-4 text-blue-400" />
+                <div>
+                  <div className="text-gray-300">Precipitation</div>
+                  <div>{weatherData.current.precipitation} mm</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400 mt-2">
+              Coordinates: {selectedLocation.latitude.toFixed(4)}, {selectedLocation.longitude.toFixed(4)}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading indicator for weather */}
+      {weatherLoading && (
+        <div className="absolute top-20 right-4 w-80">
+          <Card className="bg-black/80 border-gray-600 text-white">
+            <CardContent className="flex items-center justify-center p-6">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400 mr-3"></div>
+              <span>Loading weather data...</span>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Satellite Count Info */}
+      <div className="absolute bottom-4 left-4 text-white text-sm bg-black/50 px-3 py-2 rounded-lg border border-gray-600">
+        <div className="flex items-center gap-2">
+          <Satellite className="w-4 h-4 text-green-400" />
+          <span>{satellites.length} Active Satellites</span>
+        </div>
+      </div>
+
+      {/* Layer Info */}
+      <div className="absolute bottom-4 right-4 text-white text-sm bg-black/50 px-3 py-2 rounded-lg border border-gray-600">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+          <span>Layer: {selectedLayer}</span>
         </div>
       </div>
     </div>
