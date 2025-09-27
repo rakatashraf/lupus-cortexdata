@@ -48,7 +48,11 @@ interface SimulationStats {
   wellbeingScore: number;
 }
 
-export function Simulation3D() {
+interface Simulation3DProps {
+  onLocationSelect?: (lat: number, lon: number) => void;
+}
+
+export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
   const [viewMode, setViewMode] = useState<'3d' | 'satellite'>('3d');
   const [isSimulationRunning, setIsSimulationRunning] = useState(true);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingConfig>({
@@ -394,6 +398,7 @@ export function Simulation3D() {
                     enableRotation={isSimulationRunning}
                     onRotationChange={setIsSimulationRunning}
                     isSimulationRunning={isSimulationRunning}
+                    onLocationSelect={onLocationSelect}
                   />
                 )}
 

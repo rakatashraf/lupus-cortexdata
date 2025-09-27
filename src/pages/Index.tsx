@@ -100,7 +100,7 @@ const Index = () => {
           />
         );
       case 'simulation':
-        return <Simulation3D />;
+        return <Simulation3D onLocationSelect={handleLocationSelect} />;
       default:
         return <WelcomeSection onGetStarted={handleGetStarted} />;
     }
@@ -112,6 +112,7 @@ const Index = () => {
         <NavigationHeader
           currentSection={currentSection}
           onSectionChange={setCurrentSection}
+          currentLocation={currentLocation}
         />
       )}
       

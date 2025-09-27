@@ -6,6 +6,7 @@ interface ArcGISMapProps {
   enableRotation?: boolean;
   onRotationChange?: (isRotating: boolean) => void;
   isSimulationRunning?: boolean;
+  onLocationSelect?: (lat: number, lon: number) => void;
 }
 
 declare global {
@@ -19,7 +20,8 @@ export function ArcGISMap({
   height = '750px',
   enableRotation = true,
   onRotationChange,
-  isSimulationRunning = true
+  isSimulationRunning = true,
+  onLocationSelect
 }: ArcGISMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
 
@@ -480,6 +482,11 @@ export function ArcGISMap({
           
           // Update weather data for clicked location
           updateWeatherData(lat, lon);
+          
+          // Notify parent component of location change
+          if (onLocationSelect) {
+            onLocationSelect(lat, lon);
+          }
         });
 
         // Clean up interval on component unmount

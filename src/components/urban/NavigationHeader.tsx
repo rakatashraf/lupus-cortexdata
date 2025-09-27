@@ -9,6 +9,7 @@ import lupusLogo from '@/assets/lupus-cortex-logo.png';
 interface NavigationHeaderProps {
   currentSection: string;
   onSectionChange: (section: string) => void;
+  currentLocation?: { latitude: number; longitude: number };
 }
 
 const NAV_ITEMS = [
@@ -19,7 +20,11 @@ const NAV_ITEMS = [
   { id: 'simulation', label: '3D Simulation', icon: Box, description: 'Urban planning & design' },
 ];
 
-export function NavigationHeader({ currentSection, onSectionChange }: NavigationHeaderProps) {
+export function NavigationHeader({ 
+  currentSection, 
+  onSectionChange, 
+  currentLocation 
+}: NavigationHeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleNavClick = (sectionId: string) => {
@@ -69,8 +74,14 @@ export function NavigationHeader({ currentSection, onSectionChange }: Navigation
             })}
           </nav>
 
-          {/* Status Badge */}
-          <div className="hidden lg:flex items-center gap-2">
+          {/* Status Badge and Location */}
+          <div className="hidden lg:flex items-center gap-3">
+            {currentLocation && (
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors">
+                <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                {currentLocation.latitude.toFixed(4)}°, {currentLocation.longitude.toFixed(4)}°
+              </Badge>
+            )}
             <Badge variant="outline" className="bg-success/10 text-success border-success/30 hover:bg-success/20 transition-colors">
               <div className="w-2 h-2 bg-success rounded-full mr-2 animate-pulse"></div>
               System Active
