@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Play, Pause, Calendar, Settings, RotateCcw, Satellite } from 'lucide-react';
+import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain } from 'lucide-react';
+import { fetchWeatherData, WeatherData, getWeatherDescription, getWeatherIcon, getWindDirection } from '@/services/weather-service';
 
 interface NASAEarthMapProps {
   height?: string;
@@ -27,6 +28,12 @@ interface Satellite {
     line1: string;
     line2: string;
   };
+}
+
+interface SelectedLocation {
+  latitude: number;
+  longitude: number;
+  position: [number, number, number];
 }
 
 // NASA API Configuration
@@ -255,7 +262,33 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
   );
 }
 
-// Simplified Satellite Component
+// Location Marker Component
+function LocationMarker({ location }: { location: SelectedLocation }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  
+  useFrame((state) => {
+    if (meshRef.current) {
+      // Pulse animation
+      const scale = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.2;
+      meshRef.current.scale.setScalar(scale);
+    }
+  });
+
+  return (
+    <group position={location.position}>
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[0.03, 16, 16]} />
+        <meshBasicMaterial color="#ff4444" />
+      </mesh>
+      
+      <Html position={[0, 0.1, 0]}>
+        <div className="text-white text-xs bg-red-600/80 px-2 py-1 rounded-lg border border-red-400 whitespace-nowrap pointer-events-none">
+          📍 {location.latitude.toFixed(2)}°, {location.longitude.toFixed(2)}°
+        </div>
+      </Html>
+    </group>
+  );
+}
 function SatellitePoint({ satellite, isPlaying }: { satellite: Satellite; isPlaying: boolean }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [realPosition, setRealPosition] = useState(satellite.position);
@@ -319,19 +352,23 @@ function OrbitalPath({ radius, color, inclination = 0 }: { radius: number; color
   );
 }
 
-// Main Scene Component with layer support
+// Main Scene Component with location selection
 function Scene({ 
   isPlaying, 
   satellites, 
   onSatelliteClick,
-  selectedLayer 
+  selectedLayer,
+  selectedLocation,
+  onLocationSelect
 }: { 
   isPlaying: boolean;
   satellites: Satellite[];
   onSatelliteClick: (satellite: Satellite) => void;
   selectedLayer: string;
+  selectedLocation: SelectedLocation | null;
+  onLocationSelect: (lat: number, lon: number) => void;
 }) {
-  const { camera, gl } = useThree();
+  const { camera, gl, raycaster, pointer } = useThree();
   
   useEffect(() => {
     console.log('🎮 Initializing 3D scene...');
@@ -360,14 +397,35 @@ function Scene({
     };
   }, [camera, gl]);
 
+  // Handle globe clicks for location selection
+  const handleGlobeClick = useCallback((event: any) => {
+    event.stopPropagation();
+    
+    // Get intersection point on the sphere
+    const earthRadius = 2;
+    const intersectionPoint = event.point;
+    
+    // Convert 3D point to lat/lon
+    const phi = Math.acos(-intersectionPoint.y / earthRadius);
+    const theta = Math.atan2(-intersectionPoint.z, intersectionPoint.x) + Math.PI;
+    
+    const latitude = (phi * 180 / Math.PI) - 90;
+    const longitude = (theta * 180 / Math.PI) - 180;
+    
+    console.log(`🌍 Location selected: ${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`);
+    onLocationSelect(latitude, longitude);
+  }, [onLocationSelect]);
+
   return (
     <>
       <Stars radius={100} depth={50} count={1000} factor={4} saturation={0.5} fade speed={1} />
       <ambientLight intensity={0.3} />
       <directionalLight position={[5, 5, 5]} intensity={1} />
       
-      {/* Earth with visible atmosphere glow */}
-      <Earth rotationSpeed={isPlaying ? 0.005 : 0} selectedLayer={selectedLayer} />
+      {/* Earth with clickable surface */}
+      <group onClick={handleGlobeClick}>
+        <Earth rotationSpeed={isPlaying ? 0.005 : 0} selectedLayer={selectedLayer} />
+      </group>
       
       {/* Enhanced atmosphere glow effect */}
       <mesh>
@@ -392,6 +450,11 @@ function Scene({
       {satellites.map((satellite, index) => (
         <SatellitePoint key={index} satellite={satellite} isPlaying={isPlaying} />
       ))}
+      
+      {/* Selected location marker */}
+      {selectedLocation && (
+        <LocationMarker location={selectedLocation} />
+      )}
       
       <OrbitControls 
         enablePan={true} 
@@ -430,7 +493,62 @@ export function NASAEarthMap({
   const [selectedLayer, setSelectedLayer] = useState('Visible Earth');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   
-  // Real NASA satellites with actual data
+  // Weather and location state
+  const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  
+  // Handle location selection
+  const handleLocationSelect = useCallback(async (lat: number, lon: number) => {
+    console.log(`🌍 Location selected: ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`);
+    
+    // Convert lat/lon to 3D position on sphere
+    const earthRadius = 2;
+    const phi = (90 - lat) * (Math.PI / 180);
+    const theta = (lon + 180) * (Math.PI / 180);
+    
+    const x = earthRadius * Math.sin(phi) * Math.cos(theta);
+    const y = earthRadius * Math.cos(phi);
+    const z = earthRadius * Math.sin(phi) * Math.sin(theta);
+    
+    const newLocation: SelectedLocation = {
+      latitude: lat,
+      longitude: lon,
+      position: [x, y, z]
+    };
+    
+    setSelectedLocation(newLocation);
+    onLocationSelect?.(lat, lon);
+    
+    // Fetch weather data for the selected location
+    setWeatherLoading(true);
+    try {
+      const weather = await fetchWeatherData(lat, lon);
+      setWeatherData(weather);
+      console.log('✅ Weather data loaded for selected location');
+    } catch (error) {
+      console.error('❌ Failed to load weather data:', error);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, [onLocationSelect]);
+
+  // Auto-update weather data every 5 minutes
+  useEffect(() => {
+    if (selectedLocation && weatherData) {
+      const interval = setInterval(async () => {
+        console.log('🔄 Updating weather data...');
+        try {
+          const updatedWeather = await fetchWeatherData(selectedLocation.latitude, selectedLocation.longitude);
+          setWeatherData(updatedWeather);
+        } catch (error) {
+          console.error('Failed to update weather data:', error);
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+
+      return () => clearInterval(interval);
+    }
+  }, [selectedLocation, weatherData]);
   const [satellites, setSatellites] = useState<Satellite[]>([
     { name: 'PACE', noradId: 59043, position: [0, 1, 2.4], velocity: [0, 0, 0], type: 'Earth Science', active: true, altitude: 676 },
     { name: 'NOAA 20', noradId: 43013, position: [2.6, 0.5, 0], velocity: [0, 0, 0], type: 'Weather', active: true, altitude: 824 },
@@ -553,9 +671,9 @@ export function NASAEarthMap({
         </div>
       </div>
 
-      {/* Simplified Left Panel */}
+      {/* Enhanced Left Panel with Weather Data */}
       <div className="absolute left-6 top-20 bottom-16 w-80 z-40">
-        <Card className="bg-black/90 border-gray-700 h-full">
+        <Card className="bg-black/90 border-gray-700 h-full overflow-y-auto">
           <CardHeader className="pb-3">
             <CardTitle className="text-white text-sm flex items-center gap-2">
               <Satellite className="w-4 h-4" />
@@ -577,6 +695,88 @@ export function NASAEarthMap({
                 {layer}
               </Button>
             ))}
+            
+            {/* Weather Data Section */}
+            {weatherData && (
+              <div className="mt-6 pt-4 border-t border-gray-700">
+                <div className="flex items-center gap-2 mb-3">
+                  <MapPin className="w-4 h-4 text-red-400" />
+                  <h3 className="text-white text-sm font-medium">Weather Data</h3>
+                  {weatherLoading && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                  )}
+                </div>
+                
+                <div className="bg-gray-800 rounded-lg p-3 space-y-3">
+                  <div className="text-center border-b border-gray-600 pb-2">
+                    <p className="text-cyan-400 font-medium text-sm">
+                      {weatherData.location.city}, {weatherData.location.country}
+                    </p>
+                    <p className="text-gray-400 text-xs">
+                      {weatherData.location.latitude.toFixed(2)}°, {weatherData.location.longitude.toFixed(2)}°
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Temperature */}
+                    <div className="flex items-center gap-2 bg-red-600/20 p-2 rounded">
+                      <Thermometer className="w-4 h-4 text-red-400" />
+                      <div>
+                        <p className="text-white font-bold">{weatherData.current.temperature}°C</p>
+                        <p className="text-gray-400 text-xs">Temperature</p>
+                      </div>
+                    </div>
+                    
+                    {/* Wind */}
+                    <div className="flex items-center gap-2 bg-blue-600/20 p-2 rounded">
+                      <Wind className="w-4 h-4 text-blue-400" />
+                      <div>
+                        <p className="text-white font-bold">{weatherData.current.windSpeed} km/h</p>
+                        <p className="text-gray-400 text-xs">{getWindDirection(weatherData.current.windDirection)}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Pressure */}
+                    <div className="flex items-center gap-2 bg-purple-600/20 p-2 rounded">
+                      <Gauge className="w-4 h-4 text-purple-400" />
+                      <div>
+                        <p className="text-white font-bold">{weatherData.current.pressure} hPa</p>
+                        <p className="text-gray-400 text-xs">Pressure</p>
+                      </div>
+                    </div>
+                    
+                    {/* Precipitation */}
+                    <div className="flex items-center gap-2 bg-green-600/20 p-2 rounded">
+                      <CloudRain className="w-4 h-4 text-green-400" />
+                      <div>
+                        <p className="text-white font-bold">{weatherData.current.precipitation} mm</p>
+                        <p className="text-gray-400 text-xs">Precipitation</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center pt-2 border-t border-gray-600">
+                    <p className="text-gray-400 text-xs flex items-center justify-center gap-1">
+                      {getWeatherIcon(weatherData.current.weatherCode)}
+                      {getWeatherDescription(weatherData.current.weatherCode)}
+                    </p>
+                    <p className="text-gray-500 text-xs mt-1">
+                      Humidity: {weatherData.current.humidity}% • Clouds: {weatherData.current.cloudCover}%
+                    </p>
+                    <p className="text-gray-500 text-xs">
+                      Updated: {new Date(weatherData.lastUpdated).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {!weatherData && (
+              <div className="mt-6 pt-4 border-t border-gray-700 text-center">
+                <MapPin className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                <p className="text-gray-400 text-sm">Click on the globe to get weather data</p>
+              </div>
+            )}
             
             <div className="mt-6 pt-4 border-t border-gray-700">
               <h3 className="text-white text-sm font-medium mb-3">Active Satellites</h3>
@@ -632,6 +832,8 @@ export function NASAEarthMap({
             satellites={satellites}
             onSatelliteClick={handleSatelliteClick}
             selectedLayer={selectedLayer}
+            selectedLocation={selectedLocation}
+            onLocationSelect={handleLocationSelect}
           />
         </Canvas>
       </Suspense>
