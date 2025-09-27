@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArcGISMap } from './ArcGISMap';
-import { ThreeDViewer } from './3DViewer';
+import { ThreeDViewer, ViewerToolbar } from './3DViewer';
 import { 
   Map, 
   Satellite, 
@@ -72,8 +72,35 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  
+  // 3D Viewer state
+  const [selectedTool, setSelectedTool] = useState('select');
+  const [sceneObjects, setSceneObjects] = useState<any[]>([]);
 
-  // Update stats based on building changes
+  // 3D Viewer callbacks
+  const handle3DAddObject = (type: any) => {
+    console.log('Adding object:', type);
+  };
+  
+  const handle3DResetCamera = () => {
+    console.log('Resetting camera');
+  };
+  
+  const handle3DClearScene = () => {
+    setSceneObjects([]);
+  };
+  
+  const handle3DToggleVisibility = (id: string) => {
+    console.log('Toggling visibility:', id);
+  };
+  
+  const handle3DDeleteObject = (id: string) => {
+    console.log('Deleting object:', id);
+  };
+  
+  const handle3DDuplicateObject = (id: string) => {
+    console.log('Duplicating object:', id);
+  };
   useEffect(() => {
     const updateStats = () => {
       const baseStats = { ...simulationStats };
@@ -312,6 +339,28 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
             </Card>
           )}
 
+          {/* 3D Tools */}
+          {viewMode === '3d' && (
+            <Card className="glass-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">3D Tools</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ViewerToolbar
+                  selectedTool={selectedTool}
+                  onToolSelect={setSelectedTool}
+                  onAddObject={handle3DAddObject}
+                  onResetCamera={handle3DResetCamera}
+                  onClearScene={handle3DClearScene}
+                  objects={sceneObjects}
+                  onToggleVisibility={handle3DToggleVisibility}
+                  onDeleteObject={handle3DDeleteObject}
+                  onDuplicateObject={handle3DDuplicateObject}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {/* Actions */}
           <div className="space-y-3">
             <Button 
@@ -368,7 +417,17 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                 )}
               >
                 {viewMode === '3d' ? (
-                  <ThreeDViewer />
+                  <ThreeDViewer
+                    selectedTool={selectedTool}
+                    onToolSelect={setSelectedTool}
+                    onAddObject={handle3DAddObject}
+                    onResetCamera={handle3DResetCamera}
+                    onClearScene={handle3DClearScene}
+                    objects={sceneObjects}
+                    onToggleVisibility={handle3DToggleVisibility}
+                    onDeleteObject={handle3DDeleteObject}
+                    onDuplicateObject={handle3DDuplicateObject}
+                  />
                 ) : (
                   <ArcGISMap 
                     webmapId="625da886dbf24a559da73840d293156d"

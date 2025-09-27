@@ -146,7 +146,7 @@ function LoadingFallback() {
   );
 }
 
-interface ViewerToolbarProps {
+export interface ViewerToolbarProps {
   selectedTool: string;
   onToolSelect: (tool: string) => void;
   onAddObject: (type: SceneObject['type']) => void;
@@ -159,7 +159,7 @@ interface ViewerToolbarProps {
 }
 
 // Toolbar Component
-function ViewerToolbar({ 
+export function ViewerToolbar({ 
   selectedTool, 
   onToolSelect, 
   onAddObject, 
@@ -180,10 +180,9 @@ function ViewerToolbar({
   ];
 
   return (
-    <div className="absolute top-4 left-4 right-4 z-10">
-      <Card className="bg-background/95 backdrop-blur-sm border-primary/20">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-4">
+    <Card className="glass-card">
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-4">
             {/* Tool Selection */}
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="text-xs">Tools:</Badge>
@@ -284,18 +283,39 @@ function ViewerToolbar({
               </>
             )}
           </div>
-        </CardContent>
-      </Card>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
-// Main 3D Viewer Component
-export function ThreeDViewer() {
-  const [objects, setObjects] = useState<SceneObject[]>([]);
-  const [selectedTool, setSelectedTool] = useState('select');
+// Main 3D Viewer Component  
+interface ThreeDViewerProps {
+  selectedTool: string;
+  onToolSelect: (tool: string) => void;
+  onAddObject: (type: SceneObject['type']) => void;
+  onResetCamera: () => void;
+  onClearScene: () => void;
+  objects: SceneObject[];
+  onToggleVisibility: (id: string) => void;
+  onDeleteObject: (id: string) => void;
+  onDuplicateObject: (id: string) => void;
+}
+
+export function ThreeDViewer({
+  selectedTool,
+  onToolSelect,
+  onAddObject: onAddObjectProp,
+  onResetCamera: onResetCameraProp,
+  onClearScene: onClearSceneProp,
+  objects: objectsProp,
+  onToggleVisibility: onToggleVisibilityProp,
+  onDeleteObject: onDeleteObjectProp,
+  onDuplicateObject: onDuplicateObjectProp
+}: ThreeDViewerProps) {
+  const [objects, setObjects] = useState<SceneObject[]>(objectsProp);
   const orbitRef = useRef<any>();
 
+  // Use the passed props but fall back to internal state for callback functions
   const addObject = useCallback((type: SceneObject['type']) => {
     const colors = {
       building: '#3b82f6',
@@ -321,27 +341,32 @@ export function ThreeDViewer() {
     };
 
     setObjects(prev => [...prev, newObject]);
-  }, []);
+    onAddObjectProp?.(type);
+  }, [onAddObjectProp]);
 
   const resetCamera = useCallback(() => {
     if (orbitRef.current) {
       orbitRef.current.reset();
     }
-  }, []);
+    onResetCameraProp?.();
+  }, [onResetCameraProp]);
 
   const clearScene = useCallback(() => {
     setObjects([]);
-  }, []);
+    onClearSceneProp?.();
+  }, [onClearSceneProp]);
 
   const toggleVisibility = useCallback((id: string) => {
     setObjects(prev => prev.map(obj => 
       obj.id === id ? { ...obj, visible: !obj.visible } : obj
     ));
-  }, []);
+    onToggleVisibilityProp?.(id);
+  }, [onToggleVisibilityProp]);
 
   const deleteObject = useCallback((id: string) => {
     setObjects(prev => prev.filter(obj => obj.id !== id));
-  }, []);
+    onDeleteObjectProp?.(id);
+  }, [onDeleteObjectProp]);
 
   const duplicateObject = useCallback((id: string) => {
     const objToDuplicate = objects.find(obj => obj.id === id);
@@ -356,23 +381,12 @@ export function ThreeDViewer() {
         ]
       };
       setObjects(prev => [...prev, newObject]);
+      onDuplicateObjectProp?.(id);
     }
-  }, [objects]);
+  }, [objects, onDuplicateObjectProp]);
 
   return (
     <div className="relative w-full h-full">
-      <ViewerToolbar
-        selectedTool={selectedTool}
-        onToolSelect={setSelectedTool}
-        onAddObject={addObject}
-        onResetCamera={resetCamera}
-        onClearScene={clearScene}
-        objects={objects}
-        onToggleVisibility={toggleVisibility}
-        onDeleteObject={deleteObject}
-        onDuplicateObject={duplicateObject}
-      />
-      
       <Suspense fallback={<LoadingFallback />}>
         <Canvas className="w-full h-full">
           <PerspectiveCamera makeDefault position={[10, 10, 10]} fov={60} />
