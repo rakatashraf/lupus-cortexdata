@@ -1,14 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { MapPin, Settings, Eye, EyeOff } from 'lucide-react';
+import { Html } from '@react-three/drei';
 
 interface MapboxEarthProps {
   rotationSpeed: number;
   selectedLayer: string;
+  mapboxToken?: string;
 }
 
 interface MapTileConfig {
@@ -18,14 +15,10 @@ interface MapTileConfig {
   requiresToken?: boolean;
 }
 
-export const MapboxEarth: React.FC<MapboxEarthProps> = ({ rotationSpeed, selectedLayer }) => {
+export const MapboxEarth: React.FC<MapboxEarthProps> = ({ rotationSpeed, selectedLayer, mapboxToken = '' }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mapboxToken, setMapboxToken] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(false);
-  const [currentMapStyle, setCurrentMapStyle] = useState('satellite');
-  const [error, setError] = useState('');
 
   // Beautiful map tile configurations
   const mapConfigs: Record<string, MapTileConfig> = {
@@ -81,7 +74,6 @@ export const MapboxEarth: React.FC<MapboxEarthProps> = ({ rotationSpeed, selecte
 
   const createGorgeousEarthTexture = useCallback(async () => {
     setLoading(true);
-    setError('');
     console.log(`🗺️ Creating gorgeous Earth texture for ${selectedLayer}...`);
 
     try {
@@ -95,7 +87,6 @@ export const MapboxEarth: React.FC<MapboxEarthProps> = ({ rotationSpeed, selecte
       }
     } catch (error) {
       console.error('Failed to load map tiles:', error);
-      setError('Failed to load map. Please check your connection.');
       await createStyledFallbackTexture();
     }
   }, [selectedLayer, mapboxToken]);
@@ -394,99 +385,16 @@ export const MapboxEarth: React.FC<MapboxEarthProps> = ({ rotationSpeed, selecte
         
         {/* Loading indicator */}
         {loading && (
-          <mesh position={[0, 0, 2.2]}>
-            <planeGeometry args={[1, 0.3]} />
-            <meshBasicMaterial transparent={true} opacity={0}>
-              <primitive object={(() => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 512;
-                canvas.height = 128;
-                const ctx = canvas.getContext('2d')!;
-                
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                ctx.fillRect(0, 0, 512, 128);
-                
-                ctx.fillStyle = 'white';
-                ctx.font = '24px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Loading gorgeous Earth...', 256, 70);
-                
-                return new THREE.CanvasTexture(canvas);
-              })()} />
-            </meshBasicMaterial>
-          </mesh>
+          <Html center>
+            <div className="text-white text-sm bg-black/70 px-3 py-2 rounded-lg border border-blue-500">
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                Loading gorgeous Earth...
+              </div>
+            </div>
+          </Html>
         )}
       </group>
-
-      {/* Mapbox Token Input Panel */}
-      {!mapboxToken && (
-        <div style={{ position: 'absolute', top: '100px', right: '20px', zIndex: 1000 }}>
-          <Card className="w-80 bg-black/90 border-gray-600 text-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <MapPin className="w-4 h-4" />
-                Enhanced Map Quality
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Alert>
-                <Settings className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  For gorgeous Mapbox satellite imagery, add your public token from{' '}
-                  <a href="https://mapbox.com/" target="_blank" rel="noopener noreferrer" className="underline text-blue-400">
-                    mapbox.com
-                  </a>
-                </AlertDescription>
-              </Alert>
-              
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowTokenInput(!showTokenInput)}
-                  >
-                    {showTokenInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 w-4" />}
-                    {showTokenInput ? 'Hide' : 'Add Token'}
-                  </Button>
-                </div>
-                
-                {showTokenInput && (
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="pk.eyJ1IjoieW91cnVzZXJuYW1lIiwi..."
-                      value={mapboxToken}
-                      onChange={(e) => setMapboxToken(e.target.value)}
-                      className="text-xs bg-gray-800"
-                      type="password"
-                    />
-                    <Button 
-                      onClick={createGorgeousEarthTexture}
-                      size="sm" 
-                      className="w-full"
-                      disabled={!mapboxToken}
-                    >
-                      Apply Premium Maps
-                    </Button>
-                  </div>
-                )}
-              </div>
-              
-              {error && (
-                <Alert>
-                  <AlertDescription className="text-xs text-red-300">
-                    {error}
-                  </AlertDescription>
-                </Alert>
-              )}
-              
-              <div className="text-xs text-gray-400">
-                Currently using enhanced fallback tiles
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </>
   );
 };
