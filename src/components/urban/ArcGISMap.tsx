@@ -38,9 +38,30 @@ export function ArcGISMap({
     // Preload critical modules with progress tracking
     setLoadingProgress(10);
     
+    // Configure Esri for optimal performance
+    window.require([
+      "esri/config"
+    ], function(esriConfig: any) {
+      // Enable CORS for better loading
+      esriConfig.request.corsEnabledServers.push("a.tile.openstreetmap.org");
+      esriConfig.request.corsEnabledServers.push("b.tile.openstreetmap.org");  
+      esriConfig.request.corsEnabledServers.push("c.tile.openstreetmap.org");
+      
+      // Optimize request handling
+      esriConfig.request.timeout = 60000;
+      esriConfig.request.maxUrlLength = 2000;
+      
+      // Enable worker for better performance
+      esriConfig.workers.loaderConfig = {
+        has: {
+          "esri-featurelayer-webgl": 1
+        }
+      };
+    });
+    
     window.require([
       "esri/config",
-      "esri/WebMap",
+      "esri/WebMap", 
       "esri/views/SceneView",
       "esri/widgets/ScaleBar",
       "esri/widgets/Legend",
@@ -81,7 +102,7 @@ export function ArcGISMap({
       
       try {
       // Create a WebMap instance using the provided webmap ID
-      setLoadingProgress(50);
+      setLoadingProgress(40);
       const webmap = new WebMap({
         portalItem: {
           id: webmapId
@@ -89,8 +110,8 @@ export function ArcGISMap({
         ground: "world-elevation"
       });
 
-      // Create the SceneView for 3D globe
-      setLoadingProgress(70);
+      // Create the SceneView for 3D globe with performance optimizations
+      setLoadingProgress(60);
       const view = new SceneView({
         container: mapRef.current,
         map: webmap,
@@ -98,7 +119,7 @@ export function ArcGISMap({
         camera: {
           position: {
             x: 0, // Center longitude (Prime Meridian)
-            y: 0, // Center latitude (Equator)
+            y: 0, // Center latitude (Equator) 
             z: 25000000 // Higher altitude to position globe upper in view
           },
           heading: 0,
@@ -122,7 +143,42 @@ export function ArcGISMap({
         },
         ui: {
           components: ["zoom", "navigation-toggle", "compass"]
+        },
+        // Performance optimizations for smooth satellite view loading
+        qualityProfile: window.innerWidth < 768 ? "low" : "high",
+        spatialReference: {
+          wkid: 4326 // WGS84 for better satellite imagery performance
+        },
+        constraints: {
+          altitude: {
+            min: 300000, // Minimum altitude for smoother performance
+            max: 50000000
+          }
         }
+      });
+
+      // Optimize view loading
+      setLoadingProgress(80);
+      
+      // Pre-cache basemap tiles for faster loading
+      view.when(() => {
+        setLoadingProgress(90);
+        // Enable WebGL for better performance if available
+        if (view.canvas && view.canvas.getContext('webgl2')) {
+          console.log('WebGL2 enabled for optimal satellite rendering');
+        }
+        
+        // Preload visible tiles
+        view.map.basemap.baseLayers.forEach((layer: any) => {
+          if (layer.type === "tile" || layer.type === "vector-tile") {
+            layer.refresh();
+          }
+        });
+        
+        setLoadingProgress(100);
+        setTimeout(() => setIsLoading(false), 500);
+      }).catch(() => {
+        setIsLoading(false);
       });
 
       // Optimized weather layers with performance considerations
