@@ -128,8 +128,14 @@ const Index = () => {
         {renderCurrentSection()}
       </main>
 
-      {/* Footer positioned exactly like the PDF reference */}
-      <footer className="w-full py-3 mt-auto">
+      {/* Background decorative elements */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
+      </div>
+      
+      {/* Footer completely outside main content - at absolute bottom */}
+      <div className="w-full py-3">
         <div className="text-center">
           <div className="text-xs text-muted-foreground">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
@@ -138,12 +144,6 @@ const Index = () => {
             Proprietary analysis - authorized use only.
           </div>
         </div>
-      </footer>
-
-      {/* Background decorative elements */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
       </div>
     </div>
   );
