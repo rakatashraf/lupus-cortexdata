@@ -16,7 +16,7 @@ declare global {
 }
 
 export function ArcGISMap({ 
-  webmapId = '625da886dbf24a559da73840d293156d',
+  webmapId = '9a831d64a1a64a169378c9e44f8d30a7', // Live satellite imagery web app
   height = '100vh',
   enableRotation = true,
   onRotationChange,
@@ -244,7 +244,38 @@ export function ArcGISMap({
         visible: layersToLoad > 3
       });
 
-      // Add layers progressively
+      // Live Satellite Imagery Layer from the specific ArcGIS web app
+      const liveSatelliteLayer = new ImageryLayer({
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+        title: "Live Satellite Imagery",
+        opacity: 1.0,
+        visible: true,
+        refreshInterval: 0.5 // Refresh every 30 seconds for live data
+      });
+
+      // High-resolution satellite layer for detailed view
+      const highResSatelliteLayer = new TileLayer({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+        title: "High Resolution Satellite",
+        opacity: 1.0,
+        visible: true,
+        maxScale: 1000 // Only visible at high zoom levels
+      });
+
+      // NASA MODIS Real-time imagery
+      const modisLayer = new TileLayer({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        title: "NASA MODIS Live Imagery",
+        opacity: 0.8,
+        visible: true
+      });
+
+      // Add satellite layers first (base layers)
+      webmap.add(liveSatelliteLayer);
+      webmap.add(highResSatelliteLayer);
+      webmap.add(modisLayer);
+
+      // Add weather layers progressively on top of satellite imagery
       webmap.add(radarLayer);
       if (layersToLoad > 1) webmap.add(windLayer);
       if (layersToLoad > 2) webmap.add(temperatureLayer); 
