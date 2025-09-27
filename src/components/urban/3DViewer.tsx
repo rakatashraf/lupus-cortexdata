@@ -462,6 +462,21 @@ export function ThreeDViewer({
           />
         </Canvas>
       </Suspense>
+      
+      {/* Toolbar positioned under the canvas */}
+      <div className="absolute bottom-4 left-4 right-4 z-10">
+        <ViewerToolbar
+          selectedTool={selectedTool}
+          onToolSelect={onToolSelect}
+          onAddObject={addObject}
+          onResetCamera={resetCamera}
+          onClearScene={clearScene}
+          objects={objects}
+          onToggleVisibility={toggleVisibility}
+          onDeleteObject={deleteObject}
+          onDuplicateObject={duplicateObject}
+        />
+      </div>
     </div>
   );
 }

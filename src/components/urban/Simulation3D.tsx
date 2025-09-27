@@ -339,28 +339,6 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
             </Card>
           )}
 
-          {/* 3D Tools */}
-          {viewMode === '3d' && (
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">3D Tools</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ViewerToolbar
-                  selectedTool={selectedTool}
-                  onToolSelect={setSelectedTool}
-                  onAddObject={handle3DAddObject}
-                  onResetCamera={handle3DResetCamera}
-                  onClearScene={handle3DClearScene}
-                  objects={sceneObjects}
-                  onToggleVisibility={handle3DToggleVisibility}
-                  onDeleteObject={handle3DDeleteObject}
-                  onDuplicateObject={handle3DDuplicateObject}
-                />
-              </CardContent>
-            </Card>
-          )}
-
           {/* Actions */}
           <div className="space-y-3">
             <Button 
