@@ -526,13 +526,13 @@ export const UseCases: React.FC<UseCasesProps> = ({
         const generatePDFContent = () => {
           // Define current date for use throughout the PDF
           const currentDate = new Date().toISOString().split('T')[0];
-          // Corporate header with gradient-like effect
-          doc.setFillColor(41, 128, 185); // Corporate blue
-          doc.rect(0, 0, pageWidth, 42, 'F');
+          // Website theme teal gradient header
+          doc.setFillColor(20, 184, 166); // Primary teal from website theme (hsl(173, 80%, 40%))
+          doc.rect(0, 0, pageWidth, 50, 'F');
           
-          // Accent stripe for modern corporate look
-          doc.setFillColor(52, 152, 219); // Lighter blue accent
-          doc.rect(0, 42, pageWidth, 4, 'F');
+          // Accent gradient stripe with cyan
+          doc.setFillColor(6, 182, 212); // Cyan accent from website theme  
+          doc.rect(0, 50, pageWidth, 4, 'F');
           
           // New logo at the most left side (smaller and high resolution)
           doc.addImage(newLogoDataUrl, 'PNG', 8, 12, 35, 22);
