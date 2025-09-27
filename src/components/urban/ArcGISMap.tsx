@@ -173,96 +173,173 @@ export function ArcGISMap({
       if (layersToLoad > 2) webmap.add(temperatureLayer); 
       if (layersToLoad > 3) webmap.add(cloudLayer);
 
-      // Create animated weather overlay panel - mobile optimized
+      // Create animated weather overlay panel - mobile optimized for perfect fit
       const weatherOverlayPanel = document.createElement("div");
+      const mobileViewport = window.innerWidth < 768;
+      const smallMobileViewport = window.innerWidth < 480;
+      const tinyMobileViewport = window.innerWidth < 360;
+      
       weatherOverlayPanel.innerHTML = `
         <div style="
           background: rgba(10, 15, 20, 0.95); 
-          padding: ${window.innerWidth < 768 ? '8px' : '12px'}; 
-          border-radius: ${window.innerWidth < 768 ? '8px' : '12px'}; 
+          padding: ${tinyMobileViewport ? '4px' : smallMobileViewport ? '6px' : mobileViewport ? '8px' : '12px'}; 
+          border-radius: ${tinyMobileViewport ? '4px' : smallMobileViewport ? '6px' : mobileViewport ? '8px' : '12px'}; 
           backdrop-filter: blur(10px); 
           border: 1px solid rgba(0, 223, 252, 0.3); 
-          min-width: ${window.innerWidth < 768 ? '280px' : '320px'};
-          max-width: ${window.innerWidth < 768 ? '90vw' : '380px'};
-          max-height: ${window.innerWidth < 768 ? '80vh' : 'auto'};
+          min-width: ${tinyMobileViewport ? '140px' : smallMobileViewport ? '160px' : mobileViewport ? '180px' : '320px'};
+          max-width: ${tinyMobileViewport ? 'calc(100vw - 16px)' : smallMobileViewport ? 'calc(100vw - 20px)' : mobileViewport ? 'calc(100vw - 24px)' : '380px'};
+          max-height: ${mobileViewport ? '60vh' : 'auto'};
           overflow-y: auto;
-          font-size: ${window.innerWidth < 768 ? '12px' : '14px'};
+          font-size: ${tinyMobileViewport ? '10px' : smallMobileViewport ? '11px' : mobileViewport ? '12px' : '14px'};
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         ">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-            <div style="width: 6px; height: 6px; background: #00dffc; border-radius: 50%; animation: pulse 2s infinite;"></div>
-            <h3 style="margin: 0; font-size: ${window.innerWidth < 768 ? '12px' : '14px'}; color: #00dffc; font-weight: 600;">Real-Time Weather</h3>
+          <div style="display: flex; align-items: center; gap: ${tinyMobileViewport ? '3px' : '6px'}; margin-bottom: ${tinyMobileViewport ? '4px' : '6px'};">
+            <div style="width: ${tinyMobileViewport ? '4px' : '6px'}; height: ${tinyMobileViewport ? '4px' : '6px'}; background: #00dffc; border-radius: 50%; animation: pulse 2s infinite;"></div>
+            <h3 style="margin: 0; font-size: ${tinyMobileViewport ? '9px' : smallMobileViewport ? '10px' : mobileViewport ? '12px' : '14px'}; color: #00dffc; font-weight: 600; white-space: nowrap;">Real-Time Weather</h3>
           </div>
           
-          <div style="margin-bottom: 8px; padding: 4px 6px; background: rgba(0, 223, 252, 0.1); border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
-            <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 2px;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-              <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Location</span>
-            </div>
-            <div id="location-name" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '10px' : '12px'}; font-weight: 500; line-height: 1.2;">Loading location...</div>
-          </div>
-          
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-bottom: 8px;">
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
-                  <path d="M12 2v20M17 7l-5-5-5 5M17 17l-5 5-5-5"/>
-                </svg>
-                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Temp</span>
-              </div>
-              <div id="temp-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">--°C</div>
-            </div>
-            
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
-                  <path d="M14 2.269C13.477 2.086 12.932 2 12.364 2 9.95 2 8 4.134 8 6.571c0 .524.09 1.029.254 1.489A5.5 5.5 0 003 13.5 5.5 5.5 0 008.5 19h7a4.5 4.5 0 10.41-8.983A5.002 5.002 0 0014 2.269z"/>
-                </svg>
-                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Humidity</span>
-              </div>
-              <div id="humidity-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">--%</div>
-            </div>
-            
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
-                  <path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2"/>
-                </svg>
-                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Wind</span>
-              </div>
-              <div id="wind-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">-- km/h</div>
-            </div>
-            
-            <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
-              <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 3px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-                </svg>
-                <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Pressure</span>
-              </div>
-              <div id="pressure-value" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '14px' : '16px'}; font-weight: 600;">-- hPa</div>
-            </div>
-          </div>
-          
-          <div style="background: rgba(0, 223, 252, 0.1); padding: 6px; border-radius: 6px; border: 1px solid rgba(0, 223, 252, 0.2);">
-            <div style="display: flex; align-items: center; gap: 3px; margin-bottom: 4px;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
-              </svg>
-              <span style="color: #64748b; font-size: ${window.innerWidth < 768 ? '9px' : '10px'};">Forecast</span>
-            </div>
-            <div id="forecast-text" style="color: #ffffff; font-size: ${window.innerWidth < 768 ? '10px' : '11px'}; line-height: 1.3;">Loading forecast data...</div>
-          </div>
-          
-          <style>
-            @keyframes pulse {
-              0%, 100% { opacity: 1; }
-              50% { opacity: 0.5; }
-            }
-          </style>
-        </div>
+          <div style="
+            margin-bottom: ${tinyMobileViewport ? '4px' : '8px'}; 
+            padding: ${tinyMobileViewport ? '3px 4px' : '4px 6px'}; 
+            background: rgba(0, 223, 252, 0.1); 
+            border-radius: ${tinyMobileViewport ? '3px' : '6px'}; 
+            border: 1px solid rgba(0, 223, 252, 0.2);
+          ">
+             <div style="display: flex; align-items: center; gap: 2px; margin-bottom: 2px;">
+               <svg width="${tinyMobileViewport ? '8' : '12'}" height="${tinyMobileViewport ? '8' : '12'}" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                 <circle cx="12" cy="10" r="3"/>
+               </svg>
+               <span style="color: #64748b; font-size: ${tinyMobileViewport ? '6px' : smallMobileViewport ? '7px' : mobileViewport ? '8px' : '10px'};">Location</span>
+             </div>
+             <div id="location-name" style="
+               color: #ffffff; 
+               font-size: ${tinyMobileViewport ? '7px' : smallMobileViewport ? '8px' : mobileViewport ? '10px' : '12px'}; 
+               font-weight: 500; 
+               line-height: 1.2;
+               word-break: break-all;
+               overflow: hidden;
+               text-overflow: ellipsis;
+             ">Loading...</div>
+           </div>
+           
+           <div style="
+             display: grid; 
+             grid-template-columns: repeat(2, 1fr); 
+             gap: ${tinyMobileViewport ? '2px' : '4px'}; 
+             margin-bottom: ${tinyMobileViewport ? '4px' : '8px'};
+           ">
+             <div style="
+               background: rgba(0, 223, 252, 0.1); 
+               padding: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border-radius: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border: 1px solid rgba(0, 223, 252, 0.2);
+             ">
+               <div style="display: flex; align-items: center; gap: 1px; margin-bottom: 1px;">
+                 <svg width="${tinyMobileViewport ? '6' : '12'}" height="${tinyMobileViewport ? '6' : '12'}" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+                   <path d="M12 2v20M17 7l-5-5-5 5M17 17l-5 5-5-5"/>
+                 </svg>
+                 <span style="color: #64748b; font-size: ${tinyMobileViewport ? '6px' : smallMobileViewport ? '7px' : mobileViewport ? '8px' : '10px'};">Temp</span>
+               </div>
+               <div id="temp-value" style="
+                 color: #ffffff; 
+                 font-size: ${tinyMobileViewport ? '9px' : smallMobileViewport ? '11px' : mobileViewport ? '14px' : '16px'}; 
+                 font-weight: 600;
+                 line-height: 1;
+               ">--°C</div>
+             </div>
+             
+             <div style="
+               background: rgba(0, 223, 252, 0.1); 
+               padding: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border-radius: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border: 1px solid rgba(0, 223, 252, 0.2);
+             ">
+               <div style="display: flex; align-items: center; gap: 1px; margin-bottom: 1px;">
+                 <svg width="${tinyMobileViewport ? '6' : '12'}" height="${tinyMobileViewport ? '6' : '12'}" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+                   <path d="M14 2.269C13.477 2.086 12.932 2 12.364 2 9.95 2 8 4.134 8 6.571c0 .524.09 1.029.254 1.489A5.5 5.5 0 003 13.5 5.5 5.5 0 008.5 19h7a4.5 4.5 0 10.41-8.983A5.002 5.002 0 0014 2.269z"/>
+                 </svg>
+                 <span style="color: #64748b; font-size: ${tinyMobileViewport ? '6px' : smallMobileViewport ? '7px' : mobileViewport ? '8px' : '10px'};">Humidity</span>
+               </div>
+               <div id="humidity-value" style="
+                 color: #ffffff; 
+                 font-size: ${tinyMobileViewport ? '9px' : smallMobileViewport ? '11px' : mobileViewport ? '14px' : '16px'}; 
+                 font-weight: 600;
+                 line-height: 1;
+               ">--%</div>
+             </div>
+             
+             <div style="
+               background: rgba(0, 223, 252, 0.1); 
+               padding: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border-radius: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border: 1px solid rgba(0, 223, 252, 0.2);
+             ">
+               <div style="display: flex; align-items: center; gap: 1px; margin-bottom: 1px;">
+                 <svg width="${tinyMobileViewport ? '6' : '12'}" height="${tinyMobileViewport ? '6' : '12'}" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+                   <path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2"/>
+                 </svg>
+                 <span style="color: #64748b; font-size: ${tinyMobileViewport ? '6px' : smallMobileViewport ? '7px' : mobileViewport ? '8px' : '10px'};">Wind</span>
+               </div>
+               <div id="wind-value" style="
+                 color: #ffffff; 
+                 font-size: ${tinyMobileViewport ? '9px' : smallMobileViewport ? '11px' : mobileViewport ? '14px' : '16px'}; 
+                 font-weight: 600;
+                 line-height: 1;
+               ">-- km/h</div>
+             </div>
+             
+             <div style="
+               background: rgba(0, 223, 252, 0.1); 
+               padding: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border-radius: ${tinyMobileViewport ? '3px' : '6px'}; 
+               border: 1px solid rgba(0, 223, 252, 0.2);
+             ">
+               <div style="display: flex; align-items: center; gap: 1px; margin-bottom: 1px;">
+                 <svg width="${tinyMobileViewport ? '6' : '12'}" height="${tinyMobileViewport ? '6' : '12'}" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+                   <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                 </svg>
+                 <span style="color: #64748b; font-size: ${tinyMobileViewport ? '6px' : smallMobileViewport ? '7px' : mobileViewport ? '8px' : '10px'};">Pressure</span>
+               </div>
+               <div id="pressure-value" style="
+                 color: #ffffff; 
+                 font-size: ${tinyMobileViewport ? '9px' : smallMobileViewport ? '11px' : mobileViewport ? '14px' : '16px'}; 
+                 font-weight: 600;
+                 line-height: 1;
+               ">-- hPa</div>
+             </div>
+           </div>
+           
+           <div style="
+             background: rgba(0, 223, 252, 0.1); 
+             padding: ${tinyMobileViewport ? '3px' : '6px'}; 
+             border-radius: ${tinyMobileViewport ? '3px' : '6px'}; 
+             border: 1px solid rgba(0, 223, 252, 0.2);
+           ">
+             <div style="display: flex; align-items: center; gap: 2px; margin-bottom: ${tinyMobileViewport ? '2px' : '4px'};">
+               <svg width="${tinyMobileViewport ? '6' : '12'}" height="${tinyMobileViewport ? '6' : '12'}" viewBox="0 0 24 24" fill="none" stroke="#00dffc" stroke-width="2">
+                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+               </svg>
+               <span style="color: #64748b; font-size: ${tinyMobileViewport ? '6px' : smallMobileViewport ? '7px' : mobileViewport ? '8px' : '10px'};">Forecast</span>
+             </div>
+             <div id="forecast-text" style="
+               color: #ffffff; 
+               font-size: ${tinyMobileViewport ? '7px' : smallMobileViewport ? '8px' : mobileViewport ? '10px' : '11px'}; 
+               line-height: 1.3;
+               word-break: break-word;
+               display: -webkit-box;
+               -webkit-line-clamp: ${tinyMobileViewport ? '2' : '3'};
+               -webkit-box-orient: vertical;
+             ">Loading...</div>
+           </div>
+           
+           <style>
+             @keyframes pulse {
+               0%, 100% { opacity: 1; }
+               50% { opacity: 0.5; }
+             }
+           </style>
+         </div>
       `;
 
       // Weather layer controls panel - mobile optimized
