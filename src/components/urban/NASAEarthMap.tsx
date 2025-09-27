@@ -5,12 +5,9 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Play, Pause, Calendar, Settings, RotateCcw, Satellite, MapPin, Thermometer, Wind, Gauge, CloudRain } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { fetchWeatherData, WeatherData, getWeatherDescription, getWeatherIcon, getWindDirection } from '@/services/weather-service';
 import { LocationSearch } from '@/components/urban/LocationSearch';
-import { MapboxEarth } from '@/components/urban/MapboxEarth';
 
 interface NASAEarthMapProps {
   height?: string;
@@ -422,8 +419,7 @@ function Scene({
   selectedLayer,
   selectedLocation,
   onLocationSelect,
-  focusLocation,
-  mapboxToken
+  focusLocation
 }: { 
   isPlaying: boolean;
   satellites: Satellite[];
@@ -432,7 +428,6 @@ function Scene({
   selectedLocation: SelectedLocation | null;
   onLocationSelect: (lat: number, lon: number) => void;
   focusLocation?: SelectedLocation;
-  mapboxToken?: string;
 }) {
   const { camera, gl, raycaster, pointer } = useThree();
   
@@ -537,13 +532,9 @@ function Scene({
         speed={0.5}
       />
       
-      {/* Gorgeous Map-based Earth with click handler */}
+      {/* Earth with click handler */}
       <group onClick={handleEarthClick}>
-        <MapboxEarth 
-          rotationSpeed={isPlaying ? 0.001 : 0} 
-          selectedLayer={selectedLayer} 
-          mapboxToken={mapboxToken}
-        />
+        <Earth rotationSpeed={isPlaying ? 0.001 : 0} selectedLayer={selectedLayer} />
       </group>
       
       {/* Satellites */}
@@ -596,8 +587,6 @@ export function NASAEarthMap({
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [focusLocation, setFocusLocation] = useState<SelectedLocation | null>(null);
-  const [mapboxToken, setMapboxToken] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(false);
 
   // Enhanced location selection with weather data
   const handleLocationSelectWithWeather = useCallback(async (lat: number, lon: number, locationInfo?: any) => {
@@ -767,10 +756,10 @@ export function NASAEarthMap({
               onChange={(e) => setSelectedLayer(e.target.value)}
               className="bg-black/50 border border-gray-600 text-white text-sm rounded px-3 py-2"
             >
-              <option value="Visible Earth">🛰️ Satellite View</option>
-              <option value="Air Temperature">🗺️ Outdoor Map</option>
-              <option value="Visible Light">🏘️ Street Map</option>
-              <option value="Infrared">🌃 Dark Theme</option>
+              <option value="Visible Earth">🌍 Visible Earth</option>
+              <option value="Air Temperature">🌡️ Temperature</option>
+              <option value="Visible Light">💡 Visible Light</option>
+              <option value="Infrared">🔴 Infrared</option>
             </select>
           </div>
         </div>
@@ -811,7 +800,6 @@ export function NASAEarthMap({
             selectedLocation={selectedLocation}
             onLocationSelect={handleLocationSelectWithWeather}
             focusLocation={focusLocation}
-            mapboxToken={mapboxToken}
           />
         </Canvas>
       </Suspense>
@@ -883,69 +871,6 @@ export function NASAEarthMap({
             <CardContent className="flex items-center justify-center p-6">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400 mr-3"></div>
               <span>Loading weather data...</span>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Mapbox Token Input Panel */}
-      {!mapboxToken && (
-        <div className="absolute top-20 left-4 w-80 z-20">
-          <Card className="bg-black/90 border-gray-600 text-white">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <MapPin className="w-4 h-4" />
-                Enhanced Map Quality
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Alert>
-                <Settings className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  For gorgeous Mapbox satellite imagery, add your public token from{' '}
-                  <a href="https://mapbox.com/" target="_blank" rel="noopener noreferrer" className="underline text-blue-400">
-                    mapbox.com
-                  </a>
-                </AlertDescription>
-              </Alert>
-              
-              <div className="space-y-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowTokenInput(!showTokenInput)}
-                  className="w-full justify-center"
-                >
-                  {showTokenInput ? 'Hide Token Input' : 'Add Mapbox Token'}
-                </Button>
-                
-                {showTokenInput && (
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="pk.eyJ1IjoieW91cnVzZXJuYW1lIiwi..."
-                      value={mapboxToken}
-                      onChange={(e) => setMapboxToken(e.target.value)}
-                      className="text-xs bg-gray-800"
-                      type="password"
-                    />
-                    <Button 
-                      onClick={() => {
-                        // Token will be automatically used by MapboxEarth component
-                        console.log('Mapbox token applied');
-                      }}
-                      size="sm" 
-                      className="w-full"
-                      disabled={!mapboxToken}
-                    >
-                      Apply Premium Maps
-                    </Button>
-                  </div>
-                )}
-              </div>
-              
-              <div className="text-xs text-gray-400">
-                Currently using enhanced fallback tiles
-              </div>
             </CardContent>
           </Card>
         </div>
