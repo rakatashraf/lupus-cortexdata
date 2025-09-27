@@ -769,9 +769,9 @@ export function NASAEarthMap({
 
   return (
     <div className="relative w-full bg-black" style={{ height }}>
-      {/* Simplified Header */}
-      <div className="absolute top-0 left-0 right-0 z-50 bg-black/90 border-b border-gray-700 px-6 py-3">
-        <div className="flex items-center justify-between">
+      {/* Enhanced Header with Search Bar */}
+      <div className="absolute top-0 left-0 right-0 z-50 bg-black/95 border-b border-gray-700 px-6 py-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <Satellite className="w-6 h-6 text-blue-400" />
             <div>
@@ -794,10 +794,37 @@ export function NASAEarthMap({
             </Button>
           </div>
         </div>
+        
+        {/* Prominent Search Bar */}
+        <div className="flex items-center justify-center">
+          <div className="flex items-center gap-3 bg-gray-800/90 border border-gray-600 rounded-lg p-3 w-full max-w-2xl">
+            <Search className="w-5 h-5 text-blue-400" />
+            <Input
+              type="text"
+              placeholder="🔍 Search by location name or coordinates (e.g., 'New York' or '40.7589,-73.9851')"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={handleSearchKeyPress}
+              className="flex-1 text-white bg-transparent border-none focus:ring-0 placeholder-gray-400"
+            />
+            <Button
+              size="sm"
+              onClick={handleSearch}
+              disabled={searchLoading || !searchQuery.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4"
+            >
+              {searchLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                'Search'
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Enhanced Left Panel with Weather Data */}
-      <div className="absolute left-6 top-20 bottom-16 w-80 z-40">
+      <div className="absolute left-6 top-32 bottom-16 w-80 z-40">
         <Card className="bg-black/90 border-gray-700 h-full overflow-y-auto">
           <CardHeader className="pb-3">
             <CardTitle className="text-white text-sm flex items-center gap-2">
@@ -806,40 +833,8 @@ export function NASAEarthMap({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Search Bar */}
-            <div className="space-y-2">
-              <h3 className="text-white text-sm font-medium flex items-center gap-2">
-                <Search className="w-4 h-4" />
-                Location Search
-              </h3>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="Enter place name or lat,lon (e.g. 40.7589,-73.9851)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={handleSearchKeyPress}
-                  className="text-sm bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
-                />
-                <Button
-                  size="sm"
-                  onClick={handleSearch}
-                  disabled={searchLoading || !searchQuery.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {searchLoading ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  ) : (
-                    <Search className="w-4 h-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-gray-500 text-xs">
-                Search by city name or coordinates (latitude,longitude)
-              </p>
-            </div>
             
-            <div className="border-t border-gray-700 pt-3">
+            <div className="space-y-3">
               <h3 className="text-white text-sm font-medium mb-3">Data Layers</h3>
               {dataLayers.map((layer) => (
                 <Button
@@ -957,7 +952,7 @@ export function NASAEarthMap({
       </div>
 
       {/* Right Panel - Status */}
-      <div className="absolute right-6 top-20 w-64 z-40">
+      <div className="absolute right-6 top-32 w-64 z-40">
         <Card className="bg-blue-600 border-blue-500">
           <CardContent className="p-4">
             <div className="text-center">
