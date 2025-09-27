@@ -500,79 +500,68 @@ export const UseCases: React.FC<UseCasesProps> = ({
         doc.setFont('times', 'bold');
         doc.text('INDEPENDENT EVALUATION REPORT', 20, 68);
         
-        // Subtitle
-        doc.setFontSize(8);
-        doc.setFont('times', 'normal');
-        doc.setTextColor(34, 139, 34);
-        const subtitle = `Premium Location Intelligence Assessment`;
-        doc.text(subtitle, 20, 76);
-        
         // Executive Summary
         doc.setFontSize(10);
         doc.setFont('times', 'bold');
         doc.setTextColor(0, 0, 0);
-        doc.text('EXECUTIVE SUMMARY', 20, 88);
+        doc.text('EXECUTIVE SUMMARY', 20, 82);
         
-        doc.setFontSize(7);
+        doc.setFontSize(8);
         doc.setFont('times', 'normal');
-        const overallScore = Object.values(recommendation.indexScores).reduce((a, b) => a + b, 0) / Object.keys(recommendation.indexScores).length;
         const ratingText = recommendation.rating >= 4 ? 'PREMIUM EXCELLENCE' : recommendation.rating >= 3 ? 'SUPERIOR QUALITY' : 'STRATEGIC CONSIDERATION';
-        const summaryText = `This comprehensive location intelligence assessment leveraged advanced AI algorithms and multi-dimensional urban analytics to evaluate coordinates ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng}. Our proprietary evaluation framework yielded an overall rating of ${recommendation.rating}/5 stars, achieving ${ratingText} classification. Based on our rigorous analysis, we provide strategic insights and actionable recommendations for optimal location utilization.`;
+        const summaryText = `Location assessment for coordinates ${recommendation.coordinates.lat}, ${recommendation.coordinates.lng} yielded ${recommendation.rating}/5 stars, achieving ${ratingText} classification. Our AI-powered analysis provides strategic insights for optimal location utilization based on comprehensive urban intelligence metrics.`;
         
         const summaryLines = doc.splitTextToSize(summaryText, 170);
-        let yPos = 96;
+        let yPos = 90;
         summaryLines.forEach(line => {
           doc.text(line, 20, yPos);
           yPos += 8;
         });
         
-        // Key Findings
+        // AI Intelligence Metrics
         yPos += 8;
         doc.setFontSize(10);
         doc.setFont('times', 'bold');
-        doc.text('KEY PERFORMANCE INDICATORS', 20, yPos);
+        doc.text('AI INTELLIGENCE METRICS', 20, yPos);
         
-        yPos += 10;
-        doc.setFontSize(7);
+        yPos += 8;
+        doc.setFontSize(8);
         doc.setFont('times', 'normal');
         
-        // Enhanced findings with better language
+        Object.entries(recommendation.indexScores).forEach(([index, score]) => {
+          const performance = score > 70 ? 'EXCELLENT' : score > 50 ? 'GOOD' : 'NEEDS ATTENTION';
+          doc.text(`• ${index}: ${score.toFixed(1)}/100 - ${performance}`, 25, yPos);
+          yPos += 7;
+        });
+        
+        // Key Assessment Findings
+        yPos += 8;
+        doc.setFontSize(10);
+        doc.setFont('times', 'bold');
+        doc.text('KEY ASSESSMENT FINDINGS', 20, yPos);
+        
+        yPos += 8;
+        doc.setFontSize(8);
+        doc.setFont('times', 'normal');
+        
+        // Simplified findings
         const findings = [];
         Object.entries(recommendation.indexScores).forEach(([index, score]) => {
           if (score > 70) {
-            findings.push(`★ EXCEPTIONAL ${index.toUpperCase()} PERFORMANCE: Location demonstrates outstanding excellence with premium score of ${score.toFixed(1)}/100, positioning it in the top tier for ${index} metrics.`);
+            findings.push(`${index}: Excellent performance with score ${score.toFixed(1)}/100. Highly suitable for implementation.`);
           } else if (score > 50) {
-            findings.push(`★ SOLID ${index.toUpperCase()} FOUNDATION: Robust performance in ${index} category with competitive score of ${score.toFixed(1)}/100, offering reliable conditions for strategic implementation.`);
+            findings.push(`${index}: Good performance with score ${score.toFixed(1)}/100. Suitable with standard precautions.`);
           } else {
-            findings.push(`★ ${index.toUpperCase()} OPTIMIZATION OPPORTUNITY: Current score of ${score.toFixed(1)}/100 presents strategic improvement potential through targeted enhancement initiatives.`);
+            findings.push(`${index}: Score ${score.toFixed(1)}/100 requires attention. Consider mitigation strategies.`);
           }
         });
         
-        findings.slice(0, 2).forEach((finding) => { // Reduced to 2 findings to fit page
-          const findingLines = doc.splitTextToSize(finding, 170);
+        findings.forEach((finding) => {
+          const findingLines = doc.splitTextToSize(`• ${finding}`, 170);
           findingLines.forEach(line => {
             doc.text(line, 20, yPos);
             yPos += 7;
           });
-          yPos += 3;
-        });
-        
-        // AI Analysis Section
-        yPos += 8;
-        doc.setFontSize(10);
-        doc.setFont('times', 'bold');
-        doc.text('ADVANCED AI INTELLIGENCE METRICS', 20, yPos);
-        
-        yPos += 10;
-        doc.setFontSize(7);
-        doc.setFont('times', 'normal');
-        doc.text('Our cutting-edge AI system analyzed comprehensive urban intelligence indices:', 20, yPos);
-        yPos += 8;
-        
-        Object.entries(recommendation.indexScores).forEach(([index, score]) => {
-          const performance = score > 70 ? 'PREMIUM' : score > 50 ? 'COMPETITIVE' : 'DEVELOPMENT';
-          doc.text(`• ${index}: ${score.toFixed(1)}/100 - ${performance} Classification`, 25, yPos);
-          yPos += 7;
         });
         
         // Strategic Recommendations
@@ -581,35 +570,48 @@ export const UseCases: React.FC<UseCasesProps> = ({
         doc.setFont('times', 'bold');
         doc.text('STRATEGIC RECOMMENDATIONS', 20, yPos);
         
-        yPos += 10;
-        doc.setFontSize(7);
+        yPos += 8;
+        doc.setFontSize(8);
         doc.setFont('times', 'normal');
         
-        const recommendations = recommendation.reasons.slice(0, 3); // Reduced to 3 recommendations
-        recommendations.forEach((rec, index) => {
-          const cleanRec = rec.replace(/[✅❌⚠️🔍]/g, '').trim();
-          const enhancedRec = cleanRec.charAt(0).toUpperCase() + cleanRec.slice(1);
-          const recLines = doc.splitTextToSize(`${index + 1}. ${enhancedRec}`, 170);
+        // Simplified recommendations based on rating
+        const strategicRecs = [];
+        if (recommendation.rating >= 4) {
+          strategicRecs.push('1. Proceed with confidence - location demonstrates premium suitability');
+          strategicRecs.push('2. Leverage excellent metrics for strategic advantage');
+          strategicRecs.push('3. Consider this as a priority location for development');
+        } else if (recommendation.rating >= 3) {
+          strategicRecs.push('1. Recommended for implementation with standard monitoring');
+          strategicRecs.push('2. Address moderate-scoring indices through targeted improvements');
+          strategicRecs.push('3. Establish regular performance review protocols');
+        } else {
+          strategicRecs.push('1. Conditional approval - implement comprehensive risk mitigation');
+          strategicRecs.push('2. Prioritize improvement of low-scoring indices before proceeding');
+          strategicRecs.push('3. Consider alternative locations or substantial enhancement measures');
+        }
+        
+        strategicRecs.forEach((rec) => {
+          const recLines = doc.splitTextToSize(rec, 170);
           recLines.forEach(line => {
             doc.text(line, 20, yPos);
             yPos += 7;
           });
         });
         
-        // Professional Conclusion
+        // Conclusion
         yPos += 8;
         doc.setFontSize(10);
         doc.setFont('times', 'bold');
-        doc.text('PROFESSIONAL CONCLUSION', 20, yPos);
+        doc.text('CONCLUSION', 20, yPos);
         
-        yPos += 10;
-        doc.setFontSize(7);
+        yPos += 8;
+        doc.setFontSize(8);
         doc.setFont('times', 'normal');
         const conclusionText = recommendation.rating >= 4 
-          ? `Our comprehensive analysis reveals this location as an EXCEPTIONAL OPPORTUNITY with outstanding potential for successful implementation. The superior performance across key metrics positions this as a PREMIUM CHOICE for strategic development.`
+          ? `Location rated ${recommendation.rating}/5 stars demonstrates EXCEPTIONAL suitability. Highly recommended for immediate implementation.`
           : recommendation.rating >= 3 
-          ? `Based on rigorous evaluation, this location presents STRONG STRATEGIC VALUE with solid fundamentals and competitive advantages. We confidently endorse this location for successful project implementation.`
-          : `Our detailed assessment indicates this location offers STRATEGIC POTENTIAL with identified enhancement opportunities. Recommended implementation with targeted optimization strategies for maximum success.`;
+          ? `Location rated ${recommendation.rating}/5 stars shows STRONG potential. Recommended for implementation with standard protocols.`
+          : `Location rated ${recommendation.rating}/5 stars requires STRATEGIC consideration. Conditional approval with risk mitigation essential.`;
         
         const conclusionLines = doc.splitTextToSize(conclusionText, 170);
         conclusionLines.forEach(line => {
@@ -617,69 +619,32 @@ export const UseCases: React.FC<UseCasesProps> = ({
           yPos += 7;
         });
         
-        // Professional Sign-off
-        yPos += 10;
+        // Professional Certification
+        yPos += 12;
         doc.setFontSize(8);
         doc.setFont('times', 'bold');
         doc.text('PROFESSIONAL CERTIFICATION', 20, yPos);
         
         yPos += 8;
-        doc.setFontSize(6);
+        doc.setFontSize(7);
         doc.setFont('times', 'normal');
         doc.text('Prepared by: LUPUS CORTEX AI Analytics Division', 20, yPos);
-        doc.text('Lead Urban Intelligence Specialist', 20, yPos + 6);
-        doc.text(`Certification Date: ${currentDate}`, 20, yPos + 12);
-        doc.text('Report ID: LC-' + Math.random().toString(36).substr(2, 9).toUpperCase(), 20, yPos + 18);
+        doc.text(`Certification Date: ${currentDate} | Report ID: LC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, 20, yPos + 6);
         
-        // Create Professional Rubber Stamp Style Seal (positioned to not block text)
-        if (recommendation.rating >= 3) {
-          const stampX = pageWidth - 45;
-          const stampY = 70; // Positioned in top right, away from text
-          
-          // Draw jagged circle
-          doc.setFillColor(255, 255, 255);
-          doc.circle(stampX, stampY, 20);
-          doc.setDrawColor(220, 53, 69);
-          doc.setLineWidth(2);
-          doc.circle(stampX, stampY, 20);
-          doc.circle(stampX, stampY, 17);
-          
-          // Add stars around the seal
-          doc.setFontSize(6);
-          doc.setTextColor(220, 53, 69);
-          doc.text('★', stampX - 12, stampY - 12);
-          doc.text('★', stampX + 9, stampY - 12);
-          doc.text('★', stampX - 12, stampY + 16);
-          doc.text('★', stampX + 9, stampY + 16);
-          doc.text('★', stampX - 2, stampY - 16);
-          
-          // Main RECOMMENDED text
-          doc.setFontSize(6);
-          doc.setFont('times', 'bold');
-          doc.setTextColor(220, 53, 69);
-          doc.text('RECOMMENDED', stampX - 15, stampY - 1, { angle: -15 });
-          
-          // Add "LUPUS CORTEX" in smaller text
-          doc.setFontSize(4);
-          doc.text('LUPUS CORTEX', stampX - 10, stampY + 6);
-          doc.text('CERTIFIED', stampX - 7, stampY + 10);
-        }
-        
-        // Footer with enhanced branding
+        // Footer
         doc.setFontSize(6);
         doc.setFont('times', 'normal');
         doc.setTextColor(128, 128, 128);
-        doc.text('© 2024 LUPUS CORTEX - Premium Urban Intelligence Solutions', 20, pageHeight - 25);
-        doc.text('Powered by Advanced AI Analytics | www.lupus-cortex.com', 20, pageHeight - 19);
-        doc.text('This report contains proprietary analysis and is intended for authorized use only.', 20, pageHeight - 13);
+        doc.text('© 2024 LUPUS CORTEX - Premium Urban Intelligence Solutions | www.lupus-cortex.com', 20, pageHeight - 20);
+        doc.text('This report contains proprietary analysis and is intended for authorized use only.', 20, pageHeight - 14);
         
-        // Save PDF with enhanced filename
+        // Save PDF
         const cleanArea = recommendation.area.replace(/[^a-zA-Z0-9]/g, '-');
-        doc.save(`LUPUS-CORTEX-Premium-Evaluation-${cleanArea}-${currentDate}.pdf`);
+        doc.save(`LUPUS-CORTEX-Evaluation-${cleanArea}-${currentDate}.pdf`);
 
         toast({
-          title: "Premium Report Generated",
-          description: "Your professional evaluation report has been successfully generated and downloaded",
+          title: "Evaluation Report Generated",
+          description: "Your concise professional evaluation report has been successfully generated",
         });
       };
 
