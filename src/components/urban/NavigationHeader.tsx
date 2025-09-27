@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, Home, BarChart3, Map, Bot, Info, Box, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import lupusLogo from '@/assets/lupus-cortex-logo.png';
+import lupusLogo from '@/assets/lupus-cortex-logo-hd.png';
 
 interface NavigationHeaderProps {
   currentSection: string;
@@ -40,13 +40,18 @@ export function NavigationHeader({
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center">
-            <img 
-              src={lupusLogo} 
-              alt="Lupus Cortex" 
-              className="h-14 w-auto"
-              style={{ filter: 'brightness(0) invert(1)' }}
-            />
+          <div className="flex items-center mr-8">
+            <button 
+              onClick={() => handleNavClick('dashboard')}
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <img 
+                src={lupusLogo} 
+                alt="Lupus Cortex" 
+                className="h-14 w-auto"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
+            </button>
           </div>
 
           {/* Desktop Navigation */}
