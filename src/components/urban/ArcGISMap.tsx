@@ -82,10 +82,10 @@ export function ArcGISMap({
           position: {
             x: 0, // Center longitude (Prime Meridian)
             y: 0, // Center latitude (Equator)
-            z: 20000000 // Higher altitude for better global view
+            z: 25000000 // Higher altitude to position globe upper in view
           },
           heading: 0,
-          tilt: 15 // Slight tilt for better 3D perspective
+          tilt: 20 // Increased tilt to show globe higher in frame
         },
         environment: {
           background: {
