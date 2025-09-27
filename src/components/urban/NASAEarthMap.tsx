@@ -40,13 +40,14 @@ interface SelectedLocation {
 // NASA API Configuration
 const NASA_API_KEY = 'GXcqYeyqgnHgWfdabi6RYhLPhdY1uIyiPsB922ZV';
 
-// Simplified Earth Component with reliable NASA imagery
+  // Enhanced Earth Component with NASA imagery and OpenStreetMap fallback
 function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; selectedLayer: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const [loading, setLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
   
-  // More reliable NASA imagery endpoints with better fallbacks
+  // More reliable NASA imagery endpoints with OpenStreetMap tile fallbacks
   const layerEndpoints = {
     'Visible Earth': {
       primary: `https://api.nasa.gov/planetary/earth/imagery?lat=0&lon=0&dim=0.15&api_key=${NASA_API_KEY}`,
@@ -54,34 +55,39 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg',
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg'
-      ]
+      ],
+      mapTiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     },
     'Air Temperature': {
       primary: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147890/iss069e000715_lrg.jpg',
       fallbacks: [
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg',
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg'
-      ]
+      ],
+      mapTiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     },
     'Visible Light': {
       primary: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg',
       fallbacks: [
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147190/iss068e059806_lrg.jpg'
-      ]
+      ],
+      mapTiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     },
     'Infrared': {
       primary: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57723/greenland_vir_2017210_lrg.jpg',
       fallbacks: [
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/147000/147890/iss069e000715_lrg.jpg',
         'https://eoimages.gsfc.nasa.gov/images/imagerecords/78000/78314/VIIRS_3Feb2012_lrg.jpg'
-      ]
+      ],
+      mapTiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
     }
   };
   
   useEffect(() => {
     const loadNASAImagery = async () => {
       setLoading(true);
+      setUsingFallback(false);
       console.log(`🛰️ Loading ${selectedLayer} imagery...`);
       
       const loader = new THREE.TextureLoader();
@@ -132,14 +138,94 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
         }
       }
       
-      // If all URLs failed, create a visible procedural texture
+      // If all URLs failed, fallback to OpenStreetMap tiles
       if (!textureLoaded) {
-        console.log(`🎨 Creating visible procedural texture for ${selectedLayer}`);
-        createVisibleTexture();
+        console.log(`🗺️ Loading OpenStreetMap tiles as fallback for ${selectedLayer}`);
+        await loadOpenStreetMapTiles();
       }
     };
     
-    const createVisibleTexture = () => {
+    // Load OpenStreetMap tiles as fallback
+    const loadOpenStreetMapTiles = async () => {
+      try {
+        setUsingFallback(true);
+        
+        // Create a canvas to compose map tiles into a world map texture  
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d')!;
+        
+        // Fill with ocean color
+        ctx.fillStyle = '#1e40af';
+        ctx.fillRect(0, 0, 2048, 1024);
+        
+        // Load multiple zoom level 2 tiles to create a world map
+        const zoomLevel = 2;
+        const tileSize = 256;
+        const tilesX = Math.pow(2, zoomLevel);
+        const tilesY = Math.pow(2, zoomLevel);
+        
+        const tilePromises = [];
+        
+        for (let x = 0; x < tilesX; x++) {
+          for (let y = 0; y < tilesY; y++) {
+            const tileUrl = `https://tile.openstreetmap.org/${zoomLevel}/${x}/${y}.png`;
+            
+            const promise = new Promise((resolve) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              
+              img.onload = () => {
+                // Calculate position on the canvas
+                const canvasX = (x * tileSize) * (2048 / (tilesX * tileSize));
+                const canvasY = (y * tileSize) * (1024 / (tilesY * tileSize));
+                const canvasWidth = 2048 / tilesX;
+                const canvasHeight = 1024 / tilesY;
+                
+                ctx.drawImage(img, canvasX, canvasY, canvasWidth, canvasHeight);
+                resolve(null);
+              };
+              
+              img.onerror = () => {
+                // If individual tile fails, continue without it
+                resolve(null);
+              };
+              
+              img.src = tileUrl;
+            });
+            
+            tilePromises.push(promise);
+          }
+        }
+        
+        // Wait for all tiles to load (or timeout after 5 seconds)
+        await Promise.race([
+          Promise.all(tilePromises),
+          new Promise(resolve => setTimeout(resolve, 5000))
+        ]);
+        
+        // Create texture from the composed canvas
+        const mapTexture = new THREE.CanvasTexture(canvas);
+        mapTexture.wrapS = THREE.RepeatWrapping;
+        mapTexture.wrapT = THREE.ClampToEdgeWrapping;
+        mapTexture.flipY = false;
+        mapTexture.minFilter = THREE.LinearFilter;
+        mapTexture.magFilter = THREE.LinearFilter;
+        
+        setTexture(mapTexture);
+        setLoading(false);
+        console.log(`✅ OpenStreetMap tiles loaded as fallback for ${selectedLayer}`);
+        
+      } catch (error) {
+        console.error('Failed to load OpenStreetMap tiles:', error);
+        // Final fallback - create a basic Earth texture
+        createBasicEarthTexture();
+      }
+    };
+    
+    // Create basic Earth texture as final fallback
+    const createBasicEarthTexture = () => {
       const canvas = document.createElement('canvas');
       canvas.width = 1024;
       canvas.height = 512;
@@ -147,73 +233,40 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
       
       // Create Earth-like background (ocean blue)
       const gradient = ctx.createLinearGradient(0, 0, 0, 512);
-      gradient.addColorStop(0, '#1e3a8a'); // Deep blue
-      gradient.addColorStop(0.5, '#3b82f6'); // Ocean blue
-      gradient.addColorStop(1, '#1e40af'); // Navy blue
+      gradient.addColorStop(0, '#1e3a8a');
+      gradient.addColorStop(0.5, '#3b82f6');
+      gradient.addColorStop(1, '#1e40af');
       
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 1024, 512);
       
       // Add continents with realistic colors
-      ctx.fillStyle = '#22c55e'; // Green landmasses
+      ctx.fillStyle = '#22c55e';
       
-      // North America
-      ctx.beginPath();
-      ctx.ellipse(200, 150, 100, 80, 0, 0, Math.PI * 2);
-      ctx.fill();
+      // Simplified continent shapes
+      const continents = [
+        { x: 200, y: 150, w: 100, h: 80 }, // North America
+        { x: 250, y: 350, w: 50, h: 100 }, // South America
+        { x: 500, y: 200, w: 80, h: 120 }, // Europe/Africa
+        { x: 700, y: 150, w: 120, h: 90 }, // Asia
+        { x: 800, y: 380, w: 60, h: 40 }   // Australia
+      ];
       
-      // South America
-      ctx.beginPath();
-      ctx.ellipse(250, 350, 50, 100, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Europe/Africa
-      ctx.beginPath();
-      ctx.ellipse(500, 200, 80, 120, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Asia
-      ctx.beginPath();
-      ctx.ellipse(700, 150, 120, 90, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Australia
-      ctx.beginPath();
-      ctx.ellipse(800, 380, 60, 40, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Add cloud patterns to make it look more realistic
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      for (let i = 0; i < 40; i++) {
-        const x = Math.random() * 1024;
-        const y = Math.random() * 512;
-        const radius = Math.random() * 30 + 10;
+      continents.forEach(continent => {
         ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.ellipse(continent.x, continent.y, continent.w, continent.h, 0, 0, Math.PI * 2);
         ctx.fill();
-      }
+      });
       
-      // Add some weather patterns for different layers
-      if (selectedLayer === 'Air Temperature') {
-        ctx.fillStyle = 'rgba(255, 165, 0, 0.3)'; // Orange for temperature
-        for (let i = 0; i < 20; i++) {
-          const x = Math.random() * 1024;
-          const y = Math.random() * 512;
-          const radius = Math.random() * 50 + 20;
-          ctx.beginPath();
-          ctx.arc(x, y, radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      const basicTexture = new THREE.CanvasTexture(canvas);
+      basicTexture.wrapS = THREE.RepeatWrapping;
+      basicTexture.wrapT = THREE.ClampToEdgeWrapping;
+      basicTexture.flipY = false;
       
-      const proceduralTexture = new THREE.CanvasTexture(canvas);
-      proceduralTexture.wrapS = THREE.RepeatWrapping;
-      proceduralTexture.wrapT = THREE.ClampToEdgeWrapping;
-      proceduralTexture.flipY = false;
-      
-      setTexture(proceduralTexture);
+      setTexture(basicTexture);
       setLoading(false);
-      console.log(`✅ Visible procedural texture created for ${selectedLayer}`);
+      setUsingFallback(true);
+      console.log(`✅ Basic Earth texture created as final fallback`);
     };
 
     // Start loading immediately
@@ -251,11 +304,15 @@ function Earth({ rotationSpeed, selectedLayer }: { rotationSpeed: number; select
         </Html>
       )}
       
-      {/* Ensure texture is visible */}
+      {/* Show data source indicator */}
       {texture && !loading && (
         <Html center>
-          <div className="text-green-400 text-xs bg-black/50 px-2 py-1 rounded opacity-75">
-            {selectedLayer} Active
+          <div className={`text-xs px-2 py-1 rounded opacity-75 ${
+            usingFallback 
+              ? 'text-yellow-400 bg-yellow-900/50 border border-yellow-600' 
+              : 'text-green-400 bg-black/50'
+          }`}>
+            {usingFallback ? '🗺️ Map View' : `🛰️ ${selectedLayer}`}
           </div>
         </Html>
       )}
