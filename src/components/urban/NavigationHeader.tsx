@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, Home, BarChart3, Map, Bot, Info, Box, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import lupusLogo from '@/assets/lupus-cortex-logo-hd.png';
+import lupusLogo from '@/assets/lupus-cortex-logo.png';
 
 interface NavigationHeaderProps {
   currentSection: string;
