@@ -128,13 +128,13 @@ const Index = () => {
         {renderCurrentSection()}
       </main>
 
-      {/* Footer positioned completely outside content area at bottom */}
-      <footer className="w-full bg-background border-t border-border py-4 mt-auto">
+      {/* Footer positioned exactly like the PDF reference */}
+      <footer className="w-full py-3 mt-auto">
         <div className="text-center">
           <div className="text-xs text-muted-foreground">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
           </div>
-          <div className="text-xs text-muted-foreground mt-1">
+          <div className="text-xs text-muted-foreground">
             Proprietary analysis - authorized use only.
           </div>
         </div>
