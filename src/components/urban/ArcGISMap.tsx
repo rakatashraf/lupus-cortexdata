@@ -208,57 +208,54 @@ export function ArcGISMap({
       // Only load essential layers on mobile for better performance
       const layersToLoad = isMobile ? 2 : 4;
       
-      // Working Live Satellite Imagery Layers
+      // NASA Eyes on Earth - GIBS Live Satellite Imagery Layers
       
-      // NASA EONET - Live Earth imagery 
-      const nasaEarthImageryLayer = new ImageryLayer({
-        url: "https://map1.vis.earthdata.nasa.gov/wmts-geo/1.0.0/VIIRS_SNPP_DayNightBand_ENCC/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
-        title: "NASA Earth Live Imagery",
+      // NASA GIBS VIIRS True Color - Near Real-Time
+      const nasaVIIRSTrueColorLayer = new TileLayer({
+        url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        title: "NASA VIIRS True Color (Live)",
         opacity: 0.9,
         visible: true
       });
 
-      // ESRI Live Satellite Imagery
-      const esriSatelliteLayer = new ImageryLayer({
-        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
-        title: "ESRI World Imagery",
+      // NASA GIBS VIIRS Day/Night Band - Live Night Imagery
+      const nasaVIIRSDayNightLayer = new TileLayer({
+        url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_DayNightBand_ENCC/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        title: "NASA VIIRS Day/Night Band",
         opacity: 0.8,
+        visible: false
+      });
+
+      // NASA GIBS MODIS Aqua True Color - Live Updates
+      const nasaMODISAquaLayer = new TileLayer({
+        url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/MODIS_Aqua_CorrectedReflectance_TrueColor/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        title: "NASA MODIS Aqua True Color",
+        opacity: 0.7,
+        visible: false
+      });
+
+      // NASA GIBS MODIS Terra True Color - Live Updates  
+      const nasaMODISTerraLayer = new TileLayer({
+        url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.jpg",
+        title: "NASA MODIS Terra True Color",
+        opacity: 0.7,
+        visible: false
+      });
+
+      // NASA GIBS VIIRS Active Fires - Real-time Fire Detection
+      const nasaFireLayer = new TileLayer({
+        url: "https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_Fires_375m_Day/default/{time}/{tilematrixset}{max_zoom}/{z}/{y}/{x}.png",
+        title: "NASA Active Fires (Live)",
+        opacity: 0.9,
         visible: true
       });
 
-      // OpenWeatherMap Weather Layers - Working endpoints
-      const weatherLayer = new TileLayer({
-        url: "https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY",
-        title: "Live Weather Data",
-        opacity: 0.6,
-        visible: false // Will be enabled when API key is provided
-      });
-
-      // GDACS Emergency Events (Working URL)
-      const gdacsEventsLayer = new FeatureLayer({
-        url: "https://www.gdacs.org/xml/rss.xml",
-        title: "GDACS Emergency Events",
-        opacity: 0.9,
-        visible: true,
-        refreshInterval: 5
-      });
-
-      // MODIS Fire and Thermal Anomalies - NASA FIRMS
-      const fireLayer = new FeatureLayer({
-        url: "https://firms.modaps.eosdis.nasa.gov/api/area/csv/VIIRS_SNPP_NRT/world/1/2023-01-01",
-        title: "Live Fire Detection",
-        opacity: 0.8,
-        visible: true,
-        refreshInterval: 10
-      });
-
-      // Add working satellite layers
-      webmap.add(esriSatelliteLayer);
-      webmap.add(nasaEarthImageryLayer);
-      webmap.add(gdacsEventsLayer);
-      webmap.add(fireLayer);
-      
-      if (layersToLoad > 2) webmap.add(weatherLayer);
+      // Add NASA Eyes on Earth satellite layers
+      webmap.add(nasaVIIRSTrueColorLayer);
+      webmap.add(nasaVIIRSDayNightLayer);
+      webmap.add(nasaMODISAquaLayer);
+      webmap.add(nasaMODISTerraLayer);
+      webmap.add(nasaFireLayer);
 
       // Create animated weather overlay panel - mobile optimized for perfect fit
       const weatherOverlayPanel = document.createElement("div");
@@ -684,27 +681,27 @@ export function ArcGISMap({
         
         window.addEventListener('resize', handleResize);
 
-        // Setup layer toggle controls - updated for new layers
+        // Setup layer toggle controls - updated for NASA GIBS layers
         layerControlPanel.querySelector("#radar-toggle")?.addEventListener("change", (e: any) => {
-          weatherLayer.visible = e.target.checked;
+          nasaVIIRSTrueColorLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#wind-toggle")?.addEventListener("change", (e: any) => {
-          fireLayer.visible = e.target.checked;
+          nasaFireLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#temp-toggle")?.addEventListener("change", (e: any) => {
-          nasaEarthImageryLayer.visible = e.target.checked;
+          nasaVIIRSDayNightLayer.visible = e.target.checked;
         });
         layerControlPanel.querySelector("#cloud-toggle")?.addEventListener("change", (e: any) => {
-          gdacsEventsLayer.visible = e.target.checked;
+          nasaMODISAquaLayer.visible = e.target.checked;
         });
         
         // Opacity slider for all layers
         layerControlPanel.querySelector("#opacity-slider")?.addEventListener("input", (e: any) => {
           const opacity = e.target.value / 100;
-          weatherLayer.opacity = opacity;
-          fireLayer.opacity = opacity;
-          nasaEarthImageryLayer.opacity = opacity;
-          gdacsEventsLayer.opacity = opacity * 0.9;
+          nasaVIIRSTrueColorLayer.opacity = opacity;
+          nasaFireLayer.opacity = opacity;
+          nasaVIIRSDayNightLayer.opacity = opacity;
+          nasaMODISAquaLayer.opacity = opacity * 0.9;
         });
 
         // Initial weather data update
