@@ -1,0 +1,753 @@
+{
+  "name": "Lupus-Cortex",
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "67f61704-2923-4668-9bfa-5cf061cee3d3",
+      "name": "Send Chatbot Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        768,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process chatbot response\nconst geminiResponse = $input.all()[0].json;\n\nconst response = {\n  success: true,\n  type: \"chatbot_response\",\n  data: {\n    message: geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || \"Sorry, I couldn't process your request.\",\n    timestamp: new Date().toISOString(),\n    ai_model: \"Gemini 1.5 Flash\"\n  }\n};\n\nreturn response;"
+      },
+      "id": "32dfe40e-6573-41a5-ada5-81626da3272c",
+      "name": "Format Chatbot Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={{ $json.geminiApiKey }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "value": "={{ JSON.stringify({\n  contents: [{\n    parts: [{\n      text: $json.message\n    }]\n  }]\n}) }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "741d99c4-4bd7-40b6-8594-c29463855fe3",
+      "name": "Chatbot Gemini Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        352,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle chatbot interactions\nconst userMessage = $input.all()[0].json.query.message || \"\";\nconst lat = $input.all()[0].json.query.latitude || 23.8041;\nconst lng = $input.all()[0].json.query.longitude || 90.4152;\n\n// Prepare context for Gemini AI\nconst context = `You are an urban health and wellbeing AI assistant. Help users understand urban health indices, provide data analysis, and suggest improvements for cities. User is asking from location: ${lat}, ${lng}. User message: ${userMessage}`;\n\nreturn {\n  message: context,\n  latitude: lat,\n  longitude: lng,\n  geminiApiKey: 'AIzaSyBN5E9O0YGh8sqWps0HDFQD45GhJHCzUh8'\n};"
+      },
+      "id": "6a1f4edc-2d68-4450-b7fe-50708b138464",
+      "name": "Process Chatbot Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, PUT, DELETE, OPTIONS"
+              }
+            ]
+          }
+        }
+      },
+      "id": "c27cae18-b4a9-4010-abc8-6c0014ef15da",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        752,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all data for final response\nconst healthData = $input.all()[0].json;\nconst aiAnalysis = $input.all()[1].json;\n\nconst response = {\n  success: true,\n  data: {\n    ...healthData,\n    ai_insights: aiAnalysis.candidates?.[0]?.content?.parts?.[0]?.text || \"AI analysis unavailable\",\n    api_version: \"1.0\",\n    response_time: new Date().toISOString()\n  },\n  metadata: {\n    endpoints_used: [\n      \"NASA POWER API\",\n      \"NASA Earth Imagery API\", \n      \"Air Quality API\",\n      \"Gemini AI API\"\n    ],\n    data_sources: [\n      \"NASA MERRA-2\",\n      \"NASA CERES\", \n      \"Satellite observations\",\n      \"Ground monitoring stations\"\n    ]\n  }\n};\n\nreturn response;"
+      },
+      "id": "309cd835-d1d6-41a8-80eb-b6a210d057b7",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={{ $('Process Parameters').item.json.geminiApiKey }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "value": "={{ JSON.stringify({\n  contents: [{\n    parts: [{\n      text: `Analyze this urban health data and provide insights and recommendations: ${JSON.stringify($json)}. Focus on the indices that need improvement and suggest specific actions urban planners can take.`\n    }]\n  }]\n}) }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "49e9f161-4cb3-4dca-931b-25cf6d100d91",
+      "name": "Gemini AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        304,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Climate Resilience Index (CRI) calculation\nfunction calculateCRI(powerData, airQualityData) {\n  let cri = {\n    index_name: \"Climate Resilience Index (CRI)\",\n    category: \"Physical Health & Environmental Quality Indices\",\n    components: {\n      temperatureAdaptationCapacity: 0,\n      heatWavePreparedness: 0,\n      floodRiskManagement: 0,\n      airQualityResilience: 0,\n      greenInfrastructureCoverage: 0\n    },\n    total_score: 0,\n    target: 75,\n    status: \"\"    \n  };\n\n  // Temperature Adaptation Capacity (0-25 points)\n  const avgTemp = Object.values(powerData.properties.parameter.T2M || {}).reduce((a, b) => a + b, 0) / Object.keys(powerData.properties.parameter.T2M || {}).length;\n  cri.components.temperatureAdaptationCapacity = Math.max(0, Math.min(25, 25 - (Math.abs(avgTemp - 25) / 2)));\n\n  // Heat Wave Preparedness (0-20 points)\n  const maxTemp = Math.max(...Object.values(powerData.properties.parameter.T2M_MAX || {}));\n  cri.components.heatWavePreparedness = Math.max(0, Math.min(20, 20 - Math.max(0, (maxTemp - 35) * 2)));\n\n  // Flood Risk Management (0-20 points) - based on precipitation\n  const avgPrecip = Object.values(powerData.properties.parameter.PRECTOTCORR || {}).reduce((a, b) => a + b, 0) / Object.keys(powerData.properties.parameter.PRECTOTCORR || {}).length;\n  cri.components.floodRiskManagement = Math.max(0, Math.min(20, 15 - (avgPrecip / 5)));\n\n  // Air Quality Resilience (0-20 points) - inverse of pollution\n  const pm25 = airQualityData.hourly?.pm2_5?.reduce((a, b) => a + (b || 0), 0) / (airQualityData.hourly?.pm2_5?.length || 1) || 0;\n  cri.components.airQualityResilience = Math.max(0, Math.min(20, 20 - (pm25 / 2)));\n\n  // Green Infrastructure Coverage (0-15 points) - estimated\n  cri.components.greenInfrastructureCoverage = 10; // Default estimate\n\n  // Calculate total score\n  cri.total_score = Object.values(cri.components).reduce((a, b) => a + b, 0);\n  cri.status = cri.total_score >= cri.target ? \"Highly Resilient\" : cri.total_score >= 50 ? \"Moderately Resilient\" : \"Vulnerable\";\n\n  return cri;\n}\n\n// Urban Heat Vulnerability Index (UHVI) calculation  \nfunction calculateUHVI(powerData, airQualityData) {\n  let uhvi = {\n    index_name: \"Urban Heat Vulnerability Index (UHVI)\",\n    category: \"Physical Health & Environmental Quality Indices\",\n    components: {\n      landSurfaceTemperature: 0,\n      airTemperature: 0,\n      heatIslandIntensity: 0,\n      coolingInfrastructure: 0,\n      populationVulnerability: 0\n    },\n    total_score: 0,\n    target: 30,\n    status: \"\"\n  };\n\n  // Land Surface Temperature (0-30 points)\n  const maxTemp = Math.max(...Object.values(powerData.properties.parameter.T2M_MAX || {}));\n  uhvi.components.landSurfaceTemperature = maxTemp > 45 ? 30 : Math.max(0, (maxTemp - 30) * 2);\n\n  // Air Temperature (0-20 points)\n  const avgTemp = Object.values(powerData.properties.parameter.T2M || {}).reduce((a, b) => a + b, 0) / Object.keys(powerData.properties.parameter.T2M || {}).length;\n  uhvi.components.airTemperature = avgTemp > 40 ? 20 : Math.max(0, (avgTemp - 30));\n\n  // Heat Island Intensity (0-25 points)\n  const heatIslandDiff = Math.max(0, avgTemp - 25); // Assuming 25°C as rural baseline\n  uhvi.components.heatIslandIntensity = heatIslandDiff > 5 ? 25 : (heatIslandDiff * 5);\n\n  // Cooling Infrastructure (0-15 points) - inverse score, lower is better\n  uhvi.components.coolingInfrastructure = 8; // Default estimate\n\n  // Population Vulnerability (0-10 points)\n  uhvi.components.populationVulnerability = 5; // Default estimate\n\n  uhvi.total_score = Object.values(uhvi.components).reduce((a, b) => a + b, 0);\n  uhvi.status = uhvi.total_score <= 30 ? \"Low to Moderate Heat Risk\" : uhvi.total_score <= 60 ? \"High Heat Risk\" : \"Extreme Heat Risk\";\n\n  return uhvi;\n}\n\n// Air Quality Health Impact (AQHI) calculation\nfunction calculateAQHI(airQualityData) {\n  let aqhi = {\n    index_name: \"Air Quality Health Impact (AQHI)\",\n    category: \"Physical Health & Environmental Quality Indices\",\n    components: {\n      no2Concentration: 0,\n      pm25Concentration: 0,\n      pm10Concentration: 0,\n      o3Concentration: 0,\n      so2Concentration: 0\n    },\n    total_score: 0,\n    target: 4,\n    status: \"\"\n  };\n\n  // NO2 Concentration (1-3 points)\n  const no2 = airQualityData.hourly?.nitrogen_dioxide?.reduce((a, b) => a + (b || 0), 0) / (airQualityData.hourly?.nitrogen_dioxide?.length || 1) || 0;\n  aqhi.components.no2Concentration = no2 < 40 ? 1 : no2 > 100 ? 3 : 2;\n\n  // PM2.5 Concentration (1-3 points)\n  const pm25 = airQualityData.hourly?.pm2_5?.reduce((a, b) => a + (b || 0), 0) / (airQualityData.hourly?.pm2_5?.length || 1) || 0;\n  aqhi.components.pm25Concentration = pm25 < 15 ? 1 : pm25 > 35 ? 3 : 2;\n\n  // PM10 Concentration (1-2 points)\n  const pm10 = airQualityData.hourly?.pm10?.reduce((a, b) => a + (b || 0), 0) / (airQualityData.hourly?.pm10?.length || 1) || 0;\n  aqhi.components.pm10Concentration = pm10 < 50 ? 1 : 2;\n\n  // O3 Concentration (1-2 points)\n  const o3 = airQualityData.hourly?.ozone?.reduce((a, b) => a + (b || 0), 0) / (airQualityData.hourly?.ozone?.length || 1) || 0;\n  aqhi.components.o3Concentration = o3 < 100 ? 1 : 2;\n\n  // SO2 Concentration (0-1 points)\n  const so2 = airQualityData.hourly?.sulphur_dioxide?.reduce((a, b) => a + (b || 0), 0) / (airQualityData.hourly?.sulphur_dioxide?.length || 1) || 0;\n  aqhi.components.so2Concentration = so2 < 50 ? 0 : 1;\n\n  aqhi.total_score = Object.values(aqhi.components).reduce((a, b) => a + b, 0);\n  aqhi.status = aqhi.total_score <= 4 ? \"Low to Moderate Health Risk\" : aqhi.total_score <= 7 ? \"High Health Risk\" : \"Very High Health Risk\";\n\n  return aqhi;\n}\n\n// Water Security Indicator (WSI) calculation\nfunction calculateWSI(powerData) {\n  let wsi = {\n    index_name: \"Water Security Indicator (WSI)\",\n    category: \"Physical Health & Environmental Quality Indices\",\n    components: {\n      surfaceWaterAvailability: 0,\n      groundwaterSustainability: 0,\n      waterQualityIndex: 0,\n      accessEquityScore: 0,\n      climateResilience: 0\n    },\n    total_score: 0,\n    target: 70,\n    status: \"\"\n  };\n\n  // Surface Water Availability (0-25 points)\n  const avgPrecip = Object.values(powerData.properties.parameter.PRECTOTCORR || {}).reduce((a, b) => a + b, 0) / Object.keys(powerData.properties.parameter.PRECTOTCORR || {}).length;\n  wsi.components.surfaceWaterAvailability = Math.min(25, avgPrecip * 5);\n\n  // Other components with default estimates\n  wsi.components.groundwaterSustainability = 15;\n  wsi.components.waterQualityIndex = 18;\n  wsi.components.accessEquityScore = 12;\n  wsi.components.climateResilience = 8;\n\n  wsi.total_score = Object.values(wsi.components).reduce((a, b) => a + b, 0);\n  wsi.status = wsi.total_score >= 70 ? \"Water Secure\" : wsi.total_score >= 50 ? \"Moderate Water Security\" : \"Critical Water Stress\";\n\n  return wsi;\n}\n\n// Additional indices with default calculations\nfunction calculateAdditionalIndices() {\n  return {\n    gea: {\n      index_name: \"Green Equity Assessment (GEA)\",\n      category: \"Mental Health & Social Wellbeing Indices\",\n      total_score: 65,\n      target: 75,\n      status: \"Moderate Green Equity\"\n    },\n    scm: {\n      index_name: \"Social Cohesion Metrics (SCM)\",\n      category: \"Mental Health & Social Wellbeing Indices\",\n      total_score: 58,\n      target: 70,\n      status: \"Moderate Social Cohesion\"\n    },\n    ejt: {\n      index_name: \"Environmental Justice Tracker (EJT)\",\n      category: \"Environmental Justice & Equity Indices\",\n      total_score: 72,\n      target: 80,\n      status: \"Good Environmental Justice\"\n    },\n    tas: {\n      index_name: \"Transportation Accessibility Score (TAS)\",\n      category: \"Transportation & Mobility Indices\",\n      total_score: 60,\n      target: 75,\n      status: \"Moderate Transportation Access\"\n    },\n    dpi: {\n      index_name: \"Disaster Preparedness Index (DPI)\",\n      category: \"Disaster Preparedness & Safety Indices\",\n      total_score: 55,\n      target: 70,\n      status: \"Moderate Disaster Preparedness\"\n    }\n  };\n}\n\n// Main calculation function\nfunction calculateAllIndices(inputData) {\n  const powerData = inputData[0]?.json || {};\n  const airQualityData = inputData[1]?.json || {};\n  \n  const cri = calculateCRI(powerData, airQualityData);\n  const uhvi = calculateUHVI(powerData, airQualityData);\n  const aqhi = calculateAQHI(airQualityData);\n  const wsi = calculateWSI(powerData);\n  const additionalIndices = calculateAdditionalIndices();\n  \n  const allIndices = { cri, uhvi, aqhi, wsi, ...additionalIndices };\n  \n  // Calculate overall city score\n  const totalScore = Object.values(allIndices).reduce((sum, index) => sum + index.total_score, 0);\n  const maxPossibleScore = Object.values(allIndices).reduce((sum, index) => sum + (index.target || 100), 0);\n  const overallScore = (totalScore / maxPossibleScore) * 100;\n  \n  let cityHealthStatus;\n  if (overallScore >= 80) {\n    cityHealthStatus = \"Healthy City\";\n  } else if (overallScore >= 65) {\n    cityHealthStatus = \"Moderately Healthy City\";\n  } else if (overallScore >= 50) {\n    cityHealthStatus = \"City Needs Improvement\";\n  } else {\n    cityHealthStatus = \"Unhealthy City\";\n  }\n  \n  return {\n    timestamp: new Date().toISOString(),\n    location: {\n      latitude: inputData[0]?.json?.latitude || 0,\n      longitude: inputData[0]?.json?.longitude || 0\n    },\n    overall_score: Math.round(overallScore),\n    city_health_status: cityHealthStatus,\n    indices: allIndices,\n    data_quality: \"Good\",\n    last_updated: new Date().toISOString()\n  };\n}\n\n// Process the input data\nconst result = calculateAllIndices($input.all());\nreturn result;"
+      },
+      "id": "43dbb374-b99c-4ee5-862e-5c01e1bfe277",
+      "name": "Calculate Health Indices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://air-quality-api.open-meteo.com/v1/air-quality?latitude={{ $json.latitude }}&longitude={{ $json.longitude }}&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&timezone=auto&start_date={{ $json.startDate }}&end_date={{ $json.endDate }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b28036ab-c8e2-4646-ba85-44e6a77779a5",
+      "name": "Fetch Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -128,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.nasa.gov/planetary/earth/assets?lon={{ $json.longitude }}&lat={{ $json.latitude }}&date=2024-01-01&dim=0.5&api_key={{ $json.nasaApiKey }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "99a06db2-1d9d-43c3-8f0c-3ea894501776",
+      "name": "Fetch Earth Imagery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -128,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,T2M_MAX,T2M_MIN,WS10M,RH2M,PRECTOTCORR&community=RE&longitude={{ $json.longitude }}&latitude={{ $json.latitude }}&start={{ $json.startDate }}&end={{ $json.endDate }}&format=JSON",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b97f9ca4-71a2-421c-923a-523f101228b9",
+      "name": "Fetch NASA POWER Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -128,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract location data from request\nconst lat = $input.all()[0].json.query.latitude || $input.all()[0].json.query.lat || 23.8041;\nconst lng = $input.all()[0].json.query.longitude || $input.all()[0].json.query.lng || 90.4152;\nconst startDate = new Date();\nstartDate.setMonth(startDate.getMonth() - 1);\nconst endDate = new Date();\n\n// Format dates for APIs\nconst formatDate = (date) => {\n  return date.getFullYear().toString() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');\n};\n\nconst startDateStr = formatDate(startDate);\nconst endDateStr = formatDate(endDate);\n\n// Return processed parameters\nreturn {\n  latitude: lat,\n  longitude: lng,\n  startDate: startDateStr,\n  endDate: endDateStr,\n  nasaApiKey: 'GeSwTbVGBQWEsQ3TXk0ihGvtgDJtEaHfiTqKuejO',\n  geminiApiKey: 'AIzaSyBN5E9O0YGh8sqWps0HDFQD45GhJHCzUh8'\n};"
+      },
+      "id": "d3a356cc-c5c6-406d-8747-6549b5bc221c",
+      "name": "Process Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+              "leftValue": "={{ $json.query.action }}",
+              "rightValue": "chatbot",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "38bc2c78-27c2-4f6d-bff1-fec1726dc584",
+      "name": "Route Chatbot",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3d4e5f6-g7h8-9012-cdef-34567890123f",
+              "leftValue": "={{ $json.query.action }}",
+              "rightValue": "chart_data",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4647893a-a407-4e3d-9ea6-5dc7f83fa697",
+      "name": "Route Chart Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+              "leftValue": "={{ $json.query.action }}",
+              "rightValue": "map_data",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "894ce68a-2a53-4a3d-947e-1a7b2752965f",
+      "name": "Route Map Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "leftValue": "={{ $json.query.action }}",
+              "rightValue": "dashboard_data",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1200ec6-e81b-41c2-9b9d-321f087f3c22",
+      "name": "Route Actions",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "path": "/urban-health-api",
+        "options": {}
+      },
+      "id": "09140a9a-04c4-4f3b-8279-a8b808e57358",
+      "name": "Main Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1024,
+        -32
+      ],
+      "webhookId": "a8a83ec9-b8d4-47c8-8465-78913c859747"
+    },
+    {
+      "parameters": {
+        "url": "https://drive.google.com/file/d/1VDT-1A9lZXCvgO1lEFNSTNSEaTQDTDFz/view?usp=sharing",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        -432
+      ],
+      "id": "b4721859-64bf-4a97-b126-8f39904ec7e7",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -48,
+        256
+      ],
+      "id": "be970866-2164-4760-a7bb-d0a8a16e6830",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        432
+      ],
+      "id": "92ecdfa1-3471-4915-a0ac-8602476f0324",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "9kTLEuFEDwJGx2s8",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        48,
+        144
+      ],
+      "id": "428682b7-8ddd-43e6-a02e-68addef00907",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract location data from request\nconst lat = $input.all()[0].json.query.latitude || $input.all()[0].json.query.lat || 23.8041;\nconst lng = $input.all()[0].json.query.longitude || $input.all()[0].json.query.lng || 90.4152;\nconst startDate = new Date();\nstartDate.setMonth(startDate.getMonth() - 1);\nconst endDate = new Date();\n\n// Format dates for APIs\nconst formatDate = (date) => {\n  return date.getFullYear().toString() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');\n};\n\nconst startDateStr = formatDate(startDate);\nconst endDateStr = formatDate(endDate);\n\n// Return processed parameters\nreturn {\n  latitude: lat,\n  longitude: lng,\n  startDate: startDateStr,\n  endDate: endDateStr,\n  nasaApiKey: 'GeSwTbVGBQWEsQ3TXk0ihGvtgDJtEaHfiTqKuejO',\n  geminiApiKey: 'AIzaSyBN5E9O0YGh8sqWps0HDFQD45GhJHCzUh8'\n};"
+      },
+      "id": "56087ef0-4baf-4613-81d3-b0f8e43eb2ca",
+      "name": "Process Parameters1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        16
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Format Chatbot Response": {
+      "main": [
+        [
+          {
+            "node": "Send Chatbot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chatbot Gemini Response": {
+      "main": [
+        [
+          {
+            "node": "Format Chatbot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Chatbot Request": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Health Indices": {
+      "main": [
+        [
+          {
+            "node": "Gemini AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Health Indices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch NASA POWER Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Health Indices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Parameters": {
+      "main": [
+        [
+          {
+            "node": "Fetch Air Quality Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Earth Imagery",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch NASA POWER Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Chatbot": {
+      "main": [
+        [
+          {
+            "node": "Process Chatbot Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Chart Data": {
+      "main": [
+        [
+          {
+            "node": "Process Parameters1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Map Data": {
+      "main": [
+        [
+          {
+            "node": "Process Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Actions": {
+      "main": [
+        [
+          {
+            "node": "Process Parameters",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Chatbot",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Chart Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Map Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Calculate Health Indices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Earth Imagery": {
+      "main": [
+        [
+          {
+            "node": "Calculate Health Indices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Chatbot Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Parameters1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3a8e0fc6-cfa2-4c63-8687-dc2d01fa9a4c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7d51f7deb23d17a34545f7f85f903d557e357b28e9e2a17dee183c5d89b9b085"
+  },
+  "id": "E6kBz2bATFlPY7VH",
+  "tags": []
+}

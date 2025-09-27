@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Urban Intelligence Design System - Dark Analytics Dashboard Theme */
+
+@layer base {
+  :root {
+    /* Dark theme colors inspired by modern analytics dashboards - Teal/Cyan theme */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary: Teal/Cyan for modern dashboard */
+    --primary: 173 80% 40%;
+    --primary-foreground: 210 40% 98%;
+    --primary-light: 173 80% 50%;
+    --primary-glow: 173 80% 60%;
+
+    /* Secondary: Dark surface */
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 20%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 20%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 173 80% 40%;
+
+    --radius: 1rem;
+
+    /* Dashboard gradient cards - Teal/Cyan theme */
+    --gradient-purple: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+    --gradient-cyan: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    --gradient-coral: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+    --gradient-pink: linear-gradient(135deg, #5eead4 0%, #14b8a6 100%);
+    --gradient-emerald: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    --gradient-yellow: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+    
+    --gradient-card: linear-gradient(145deg, rgba(20, 184, 166, 0.05) 0%, rgba(20, 184, 166, 0.02) 100%);
+    --gradient-ambient: radial-gradient(ellipse at center, rgba(20, 184, 166, 0.15) 0%, transparent 70%);
+
+    /* Glass morphism */
+    --glass-bg: rgba(20, 184, 166, 0.05);
+    --glass-border: rgba(20, 184, 166, 0.1);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+    
+    /* Environmental status colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    /* Enhanced shadows for depth */
+    --shadow-glow: 0 0 40px rgba(20, 184, 166, 0.3);
+    --shadow-elevated: 0 20px 40px rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --shadow-interactive: 0 12px 40px rgba(20, 184, 166, 0.2);
+
+    /* Animation variables */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+    /* Modern chart colors */
+    --chart-1: 173 80% 40%;
+    --chart-2: 197 71% 52%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 199 89% 48%;
+    --chart-5: 160 84% 39%;
+
+    /* Index-specific chart colors */
+    --chart-cri: 0 84% 60%;        /* Red for climate risk */
+    --chart-uhvi: 25 95% 53%;      /* Orange for heat */
+    --chart-aqhi: 260 84% 68%;     /* Purple for air quality */
+    --chart-wsi: 200 94% 56%;      /* Blue for water */
+    --chart-gea: 142 76% 36%;      /* Green for equity access */
+    --chart-scm: 262 84% 58%;      /* Violet for social cohesion */
+    --chart-ejt: 346 77% 49%;      /* Pink for environmental justice */
+    --chart-tas: 217 91% 60%;      /* Blue for transportation */
+    --chart-dpi: 32 81% 58%;       /* Yellow for disaster preparedness */
+    --chart-hwi: 320 100% 70%;     /* Magenta for human well-being */
+
+    --sidebar-background: 217 33% 12%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 173 80% 40%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 217 33% 20%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 20%;
+    --sidebar-ring: 173 80% 40%;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 173 80% 40%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 20%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 20%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 173 80% 40%;
+    --sidebar-background: 217 33% 12%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 173 80% 40%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 217 33% 20%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 20%;
+    --sidebar-ring: 173 80% 40%;
+  }
+}
+
+/* Custom Utility Classes for Modern Dashboard */
+@layer utilities {
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .gradient-purple {
+    background: var(--gradient-purple);
+  }
+
+  .gradient-cyan {
+    background: var(--gradient-cyan);
+  }
+
+  .gradient-coral {
+    background: var(--gradient-coral);
+  }
+
+  .gradient-pink {
+    background: var(--gradient-pink);
+  }
+
+  .gradient-emerald {
+    background: var(--gradient-emerald);
+  }
+
+  .gradient-yellow {
+    background: var(--gradient-yellow);
+  }
+
+  .chart-glow {
+    filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.4));
+  }
+
+  .card-glow {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 40px rgba(139, 92, 246, 0.3);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    background: 
+      radial-gradient(ellipse at top, rgba(20, 184, 166, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom, rgba(6, 182, 212, 0.15) 0%, transparent 50%),
+      linear-gradient(135deg, hsl(222, 47%, 11%) 0%, hsl(217, 33%, 12%) 100%);
+    min-height: 100vh;
+  }
+}
