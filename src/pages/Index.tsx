@@ -115,7 +115,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-ambient flex flex-col">
+    <div className="min-h-screen bg-gradient-ambient">
       {currentSection !== 'welcome' && (
         <NavigationHeader
           currentSection={currentSection}
@@ -124,21 +124,19 @@ const Index = () => {
         />
       )}
       
-      <main className={`${currentSection === 'welcome' ? 'container mx-auto px-4 py-8' : 'container mx-auto px-4 py-8'} flex-grow`}>
+      <main className={currentSection === 'welcome' ? 'container mx-auto px-4 py-8' : 'container mx-auto px-4 py-8'}>
         {renderCurrentSection()}
-      </main>
-
-      {/* Footer positioned outside main content */}
-      <footer className="w-full bg-teal-50/80 border-t border-teal-200/50 py-3 mt-8">
-        <div className="text-center">
-          <div className="text-xs text-teal-700 font-medium">
+        
+        {/* Footer text under the border */}
+        <div className="text-center mt-8 pt-4 border-t border-border">
+          <div className="text-xs text-muted-foreground">
             © 2024 LUPUS CORTEX - Urban Intelligence Solutions | www.lupus-cortex.com
           </div>
-          <div className="text-xs text-teal-600 mt-0.5">
+          <div className="text-xs text-muted-foreground mt-1">
             Proprietary analysis - authorized use only.
           </div>
         </div>
-      </footer>
+      </main>
 
       {/* Background decorative elements */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
