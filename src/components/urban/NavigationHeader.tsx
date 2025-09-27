@@ -44,7 +44,7 @@ export function NavigationHeader({
             <img 
               src={lupusLogo} 
               alt="Lupus Cortex" 
-              className="h-12 w-auto"
+              className="h-16 w-auto"
               style={{ filter: 'brightness(0) invert(1)' }}
             />
           </div>
