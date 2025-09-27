@@ -49,7 +49,6 @@ export function NavigationHeader({
                 src={lupusLogo} 
                 alt="Lupus Cortex" 
                 className="h-14 w-auto"
-                style={{ filter: 'brightness(0) invert(1)' }}
               />
             </button>
           </div>
@@ -104,7 +103,6 @@ export function NavigationHeader({
                     src={lupusLogo} 
                     alt="Lupus Cortex" 
                     className="h-8 w-auto mx-auto mb-2"
-                    style={{ filter: 'brightness(0) invert(1)' }}
                   />
                   <p className="text-sm text-muted-foreground">Advanced Analytics Platform</p>
                 </div>
