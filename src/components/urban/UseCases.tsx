@@ -561,7 +561,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
           doc.setFont('times', 'bold');
           doc.text('LOCATION EVALUATION REPORT', 20, 50);
           
-          // Rating display with teal theme color coding
+          // Rating display with teal theme color coding (right after title)
           doc.setFontSize(16);
           doc.setFont('times', 'bold');
           if (recommendation.rating >= 4) {
@@ -572,15 +572,15 @@ export const UseCases: React.FC<UseCasesProps> = ({
             doc.setTextColor(239, 68, 68); // Red for conditional
           }
           
-          doc.text(`${recommendation.rating}/5 STARS`, 20, 82);
+          doc.text(`${recommendation.rating}/5 STARS`, 20, 60);
           
-          // Executive Summary with teal header
+          // Executive Summary with teal header (compact spacing)
           doc.setFillColor(240, 253, 250); // Very light teal background
-          doc.rect(18, 88, 174, 3, 'F');
+          doc.rect(18, 66, 174, 3, 'F');
           doc.setTextColor(20, 184, 166); // Primary teal
           doc.setFontSize(11);
           doc.setFont('times', 'bold');
-          doc.text('EXECUTIVE SUMMARY', 20, 95);
+          doc.text('EXECUTIVE SUMMARY', 20, 72);
           
           doc.setFontSize(9);
           doc.setFont('times', 'normal');
@@ -593,14 +593,14 @@ User Requirement: ${userDescription.substring(0, 120)}${userDescription.length >
 AI Analysis: Comprehensive evaluation based on urban intelligence metrics including crime rates, air quality, and urban heat vulnerability indices.`;
           
           const summaryLines = doc.splitTextToSize(summaryText, 170);
-          let yPos = 99;
+          let yPos = 75;
           summaryLines.forEach(line => {
             doc.text(line, 20, yPos);
-            yPos += 4;
+            yPos += 3.5; // Reduced line spacing
           });
           
-          // Metrics section with teal styling
-          yPos += 6;
+          // Metrics section with teal styling (reduced spacing)
+          yPos += 3; // Minimal gap
           doc.setFillColor(240, 253, 250); // Light teal background
           doc.rect(18, yPos - 2, 174, 3, 'F');
           doc.setTextColor(20, 184, 166); // Primary teal
@@ -608,7 +608,7 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           doc.setFont('times', 'bold');
           doc.text('KEY METRICS', 20, yPos + 2);
           
-          yPos += 6;
+          yPos += 4; // Reduced spacing
           doc.setFontSize(9);
           doc.setFont('times', 'normal');
           
@@ -623,11 +623,11 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
             }
             const performance = score > 70 ? 'EXCELLENT' : score > 50 ? 'GOOD' : 'ATTENTION NEEDED';
             doc.text(`• ${index}: ${score.toFixed(0)}/100 - ${performance}`, 22, yPos);
-            yPos += 4;
+            yPos += 3.5; // Reduced line spacing
           });
           
-          // Findings section with teal theme
-          yPos += 4;
+          // Findings section with teal theme (reduced spacing)
+          yPos += 3;
           doc.setFillColor(240, 253, 250);
           doc.rect(18, yPos - 2, 174, 3, 'F');
           doc.setTextColor(20, 184, 166);
@@ -635,7 +635,7 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           doc.setFont('times', 'bold');
           doc.text('ANALYSIS FINDINGS', 20, yPos + 2);
           
-          yPos += 6;
+          yPos += 4;
           doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
@@ -655,12 +655,12 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
             const findingLines = doc.splitTextToSize(`• ${finding}`, 170);
             findingLines.forEach(line => {
               doc.text(line, 22, yPos);
-              yPos += 4;
+              yPos += 3.5; // Reduced line spacing
             });
           });
           
-          // Recommendations section with teal theme
-          yPos += 4;
+          // Recommendations section with teal theme (reduced spacing)
+          yPos += 3;
           doc.setFillColor(240, 253, 250);
           doc.rect(18, yPos - 2, 174, 3, 'F');
           doc.setTextColor(20, 184, 166);
@@ -668,7 +668,7 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           doc.setFont('times', 'bold');
           doc.text('STRATEGIC RECOMMENDATIONS', 20, yPos + 2);
           
-          yPos += 6;
+          yPos += 4;
           doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
@@ -692,12 +692,12 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
             const recLines = doc.splitTextToSize(rec, 170);
             recLines.forEach(line => {
               doc.text(line, 22, yPos);
-              yPos += 4;
+              yPos += 3.5; // Reduced line spacing
             });
           });
           
-          // Conclusion section with teal theme
-          yPos += 4;
+          // Conclusion section with teal theme (reduced spacing)
+          yPos += 3;
           doc.setFillColor(240, 253, 250);
           doc.rect(18, yPos - 2, 174, 3, 'F');
           doc.setTextColor(20, 184, 166);
@@ -705,7 +705,7 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           doc.setFont('times', 'bold');
           doc.text('FINAL ASSESSMENT', 20, yPos + 2);
           
-          yPos += 6;
+          yPos += 4;
           doc.setFontSize(9);
           doc.setFont('times', 'normal');
           doc.setTextColor(0, 0, 0);
@@ -718,7 +718,7 @@ AI Analysis: Comprehensive evaluation based on urban intelligence metrics includ
           const conclusionLines = doc.splitTextToSize(conclusionText, 170);
           conclusionLines.forEach(line => {
             doc.text(line, 22, yPos);
-            yPos += 4;
+            yPos += 3.5; // Reduced line spacing
           });
           
           // Professional certification with teal theme
