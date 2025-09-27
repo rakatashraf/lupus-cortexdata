@@ -1,9 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface NASAEarthMapProps {
   height?: string;
@@ -20,212 +17,205 @@ export function NASAEarthMap({
   isSimulationRunning = true,
   onLocationSelect
 }: NASAEarthMapProps) {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState('');
-  const [isMapInitialized, setIsMapInitialized] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [weatherData, setWeatherData] = useState<any>(null);
   const [locationName, setLocationName] = useState('');
+  const [currentLayer, setCurrentLayer] = useState('VIIRS_True_Color');
+  const [globeRotation, setGlobeRotation] = useState(0);
 
-  const initializeMap = () => {
-    if (!mapContainer.current || !mapboxToken) return;
-    
-    setIsLoading(true);
-    
-    // Set Mapbox access token
-    mapboxgl.accessToken = mapboxToken;
-    
-    try {
-      // Initialize map with NASA Eyes on Earth style
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/satellite-streets-v12',
-        projection: 'globe' as any,
-        zoom: 1.5,
-        center: [0, 0],
-        pitch: 0,
-        bearing: 0,
-      });
-
-      // Add navigation controls
-      map.current.addControl(
-        new mapboxgl.NavigationControl({
-          visualizePitch: true,
-        }),
-        'top-right'
-      );
-
-      // Add geolocate control
-      map.current.addControl(
-        new mapboxgl.GeolocateControl({
-          positionOptions: {
-            enableHighAccuracy: true
-          },
-          trackUserLocation: true,
-          showUserHeading: true
-        }),
-        'top-right'
-      );
-
-      // Add scale control
-      map.current.addControl(new mapboxgl.ScaleControl(), 'bottom-right');
-
-      // Add atmosphere and fog effects
-      map.current.on('style.load', () => {
-        // Add NASA GIBS satellite layers
-        addNASALayers();
-        
-        // Set up atmosphere
-        map.current?.setFog({
-          color: 'rgb(10, 15, 20)',
-          'high-color': 'rgb(50, 100, 150)',
-          'horizon-blend': 0.1,
-          'space-color': 'rgb(5, 10, 15)',
-          'star-intensity': 0.8,
-        });
-        
-        setIsLoading(false);
-        setIsMapInitialized(true);
-      });
-
-      // Globe rotation for NASA Eyes on Earth experience
-      if (enableRotation && isSimulationRunning) {
-        setupGlobeRotation();
-      }
-
-      // Handle map clicks for location selection
-      map.current.on('click', (e) => {
-        const { lng, lat } = e.lngLat;
-        if (onLocationSelect) {
-          onLocationSelect(lat, lng);
-        }
-        fetchWeatherData(lat, lng);
-        fetchLocationName(lat, lng);
-      });
-
-      // Handle rotation change
-      if (onRotationChange) {
-        onRotationChange(enableRotation && isSimulationRunning);
-      }
-
-    } catch (error) {
-      console.error('Failed to initialize map:', error);
-      setIsLoading(false);
+  // NASA GIBS Layer configurations
+  const nasaLayers = {
+    'VIIRS_True_Color': {
+      name: 'VIIRS True Color',
+      url: 'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/{time}/{z}/{y}/{x}.jpg'
+    },
+    'MODIS_Terra': {
+      name: 'MODIS Terra',
+      url: 'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{z}/{y}/{x}.jpg'
+    },
+    'MODIS_Aqua': {
+      name: 'MODIS Aqua', 
+      url: 'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/MODIS_Aqua_CorrectedReflectance_TrueColor/default/{time}/{z}/{y}/{x}.jpg'
+    },
+    'Day_Night_Band': {
+      name: 'Day/Night Band',
+      url: 'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_DayNightBand_ENCC/default/{time}/{z}/{y}/{x}.jpg'
     }
   };
 
-  const addNASALayers = () => {
-    if (!map.current) return;
+  useEffect(() => {
+    initializeGlobe();
+  }, []);
 
-    // NASA GIBS VIIRS True Color - Live Satellite Imagery
-    map.current.addSource('nasa-viirs-true-color', {
-      type: 'raster',
-      tiles: [
-        'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/{time}/{z}/{y}/{x}.jpg'
-      ],
-      tileSize: 256,
-      attribution: '© NASA GIBS'
-    });
+  useEffect(() => {
+    if (isSimulationRunning && enableRotation) {
+      const interval = setInterval(() => {
+        setGlobeRotation(prev => (prev + 0.5) % 360);
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [isSimulationRunning, enableRotation]);
 
-    map.current.addLayer({
-      id: 'nasa-viirs-layer',
-      type: 'raster',
-      source: 'nasa-viirs-true-color',
-      paint: {
-        'raster-opacity': 0.8
+  const initializeGlobe = () => {
+    if (!canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size
+    const updateCanvasSize = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    };
+
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+
+    // Create 3D globe effect
+    const drawGlobe = () => {
+      const rect = canvas.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const radius = Math.min(centerX, centerY) * 0.8;
+
+      // Clear canvas
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      // Draw space background
+      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius * 2);
+      gradient.addColorStop(0, 'rgba(10, 15, 25, 0.8)');
+      gradient.addColorStop(1, 'rgba(5, 8, 15, 1)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      // Draw stars
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      for (let i = 0; i < 100; i++) {
+        const x = Math.random() * rect.width;
+        const y = Math.random() * rect.height;
+        const size = Math.random() * 2;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
       }
-    });
 
-    // NASA GIBS MODIS Terra True Color
-    map.current.addSource('nasa-modis-terra', {
-      type: 'raster',
-      tiles: [
-        'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{z}/{y}/{x}.jpg'
-      ],
-      tileSize: 256,
-      attribution: '© NASA GIBS'
-    });
+      // Draw globe sphere
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((globeRotation * Math.PI) / 180);
 
-    map.current.addLayer({
-      id: 'nasa-modis-terra-layer',
-      type: 'raster',
-      source: 'nasa-modis-terra',
-      paint: {
-        'raster-opacity': 0.6
-      }
-    });
+      // Globe gradient
+      const globeGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+      globeGradient.addColorStop(0, 'rgba(100, 150, 200, 0.9)');
+      globeGradient.addColorStop(0.7, 'rgba(50, 100, 150, 0.7)');
+      globeGradient.addColorStop(1, 'rgba(20, 50, 100, 0.5)');
 
-    // NASA GIBS Active Fires
-    map.current.addSource('nasa-fires', {
-      type: 'raster',
-      tiles: [
-        'https://map1.vis.earthdata.nasa.gov/wmts-webmerc/1.0.0/VIIRS_SNPP_Fires_375m_Day/default/{time}/{z}/{y}/{x}.png'
-      ],
-      tileSize: 256,
-      attribution: '© NASA GIBS'
-    });
+      ctx.fillStyle = globeGradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
 
-    map.current.addLayer({
-      id: 'nasa-fires-layer',
-      type: 'raster',
-      source: 'nasa-fires',
-      paint: {
-        'raster-opacity': 0.9
-      }
-    });
-  };
+      // Draw continents (simplified)
+      ctx.fillStyle = 'rgba(100, 150, 100, 0.8)';
+      drawContinents(ctx, radius);
 
-  const setupGlobeRotation = () => {
-    if (!map.current) return;
+      // Globe atmosphere glow
+      ctx.strokeStyle = 'rgba(100, 150, 255, 0.5)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius + 5, 0, Math.PI * 2);
+      ctx.stroke();
 
-    const secondsPerRevolution = 240;
-    const maxSpinZoom = 5;
-    const slowSpinZoom = 3;
-    let userInteracting = false;
-    let spinEnabled = true;
+      ctx.restore();
 
-    function spinGlobe() {
-      if (!map.current) return;
+      // Draw UI overlay
+      drawUIOverlay(ctx, rect);
+    };
+
+    const drawContinents = (ctx: CanvasRenderingContext2D, radius: number) => {
+      // Simplified continent shapes
+      const continents = [
+        // Africa
+        { x: 0.1, y: 0.0, w: 0.3, h: 0.6 },
+        // Europe
+        { x: 0.0, y: -0.3, w: 0.2, h: 0.2 },
+        // Asia
+        { x: 0.2, y: -0.2, w: 0.4, h: 0.4 },
+        // North America
+        { x: -0.5, y: -0.1, w: 0.3, h: 0.4 },
+        // South America
+        { x: -0.4, y: 0.2, w: 0.2, h: 0.4 },
+      ];
+
+      continents.forEach(continent => {
+        ctx.fillRect(
+          continent.x * radius,
+          continent.y * radius,
+          continent.w * radius,
+          continent.h * radius
+        );
+      });
+    };
+
+    const drawUIOverlay = (ctx: CanvasRenderingContext2D, rect: { width: number; height: number }) => {
+      // Draw NASA Eyes on Earth branding
+      ctx.fillStyle = 'rgba(0, 223, 252, 0.9)';
+      ctx.font = '16px Arial, sans-serif';
+      ctx.fillText('🌍 NASA Eyes on Earth - Live Satellite View', 20, 30);
       
-      const zoom = map.current.getZoom();
-      if (spinEnabled && !userInteracting && zoom < maxSpinZoom) {
-        let distancePerSecond = 360 / secondsPerRevolution;
-        if (zoom > slowSpinZoom) {
-          const zoomDif = (maxSpinZoom - zoom) / (maxSpinZoom - slowSpinZoom);
-          distancePerSecond *= zoomDif;
-        }
-        const center = map.current.getCenter();
-        center.lng -= distancePerSecond;
-        map.current.easeTo({ center, duration: 1000, easing: (n) => n });
+      // Current layer indicator
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.font = '12px Arial, sans-serif';
+      ctx.fillText(`Layer: ${nasaLayers[currentLayer as keyof typeof nasaLayers]?.name}`, 20, rect.height - 20);
+    };
+
+    // Animation loop
+    const animate = () => {
+      drawGlobe();
+      requestAnimationFrame(animate);
+    };
+
+    animate();
+    setIsLoading(false);
+
+    return () => {
+      window.removeEventListener('resize', updateCanvasSize);
+    };
+  };
+
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // Convert click coordinates to lat/lng (simplified)
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const radius = Math.min(centerX, centerY) * 0.8;
+    
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance <= radius) {
+      // Calculate approximate lat/lng from click position
+      const lat = -(dy / radius) * 90; // Rough conversion
+      const lng = ((dx / radius) * 180 + globeRotation) % 360;
+      const normalizedLng = lng > 180 ? lng - 360 : lng;
+      
+      if (onLocationSelect) {
+        onLocationSelect(lat, normalizedLng);
       }
+      fetchWeatherData(lat, normalizedLng);
+      fetchLocationName(lat, normalizedLng);
     }
-
-    // Event listeners for interaction
-    map.current.on('mousedown', () => {
-      userInteracting = true;
-    });
-    
-    map.current.on('dragstart', () => {
-      userInteracting = true;
-    });
-    
-    map.current.on('mouseup', () => {
-      userInteracting = false;
-      spinGlobe();
-    });
-    
-    map.current.on('touchend', () => {
-      userInteracting = false;
-      spinGlobe();
-    });
-
-    map.current.on('moveend', () => {
-      spinGlobe();
-    });
-
-    // Start the globe spinning
-    spinGlobe();
   };
 
   const fetchWeatherData = async (lat: number, lon: number) => {
@@ -257,60 +247,24 @@ export function NASAEarthMap({
     }
   };
 
-  useEffect(() => {
-    return () => {
-      map.current?.remove();
-    };
-  }, []);
-
-  if (!isMapInitialized) {
-    return (
-      <div className="relative w-full" style={{ height }}>
-        <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm z-50">
-          <Card className="w-full max-w-md mx-4">
-            <CardHeader>
-              <CardTitle className="text-center">NASA Eyes on Earth</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Enter your Mapbox public token to view live satellite imagery from NASA
-              </p>
-              <Input
-                type="text"
-                placeholder="Enter Mapbox Public Token"
-                value={mapboxToken}
-                onChange={(e) => setMapboxToken(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Get your token from{' '}
-                <a
-                  href="https://mapbox.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  mapbox.com
-                </a>{' '}
-                in the Tokens section
-              </p>
-              <Button 
-                onClick={initializeMap}
-                disabled={!mapboxToken || isLoading}
-                className="w-full"
-              >
-                {isLoading ? 'Loading NASA Earth...' : 'Launch NASA Earth View'}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-        <div ref={mapContainer} className="absolute inset-0 rounded-lg" />
-      </div>
-    );
-  }
 
   return (
     <div className="relative w-full" style={{ height }}>
-      <div ref={mapContainer} className="absolute inset-0 rounded-lg shadow-lg" />
+      <canvas
+        ref={canvasRef}
+        onClick={handleCanvasClick}
+        className="absolute inset-0 w-full h-full rounded-lg shadow-lg cursor-pointer"
+        style={{ background: 'linear-gradient(135deg, #0a0f19 0%, #1a2332 100%)' }}
+      />
+      
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-sm text-muted-foreground">Loading NASA Eyes on Earth...</p>
+          </div>
+        </div>
+      )}
       
       {/* Weather Data Overlay */}
       {weatherData && (
@@ -361,61 +315,34 @@ export function NASAEarthMap({
         </div>
       )}
       
-      {/* Layer Controls */}
+      {/* NASA Layer Controls */}
       <div className="absolute top-4 right-4 z-10">
         <Card className="bg-background/95 backdrop-blur-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">NASA Satellite Layers</CardTitle>
+            <CardTitle className="text-sm">🛰️ NASA GIBS Layers</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                if (map.current?.getLayer('nasa-viirs-layer')) {
-                  const visibility = map.current.getLayoutProperty('nasa-viirs-layer', 'visibility');
-                  map.current.setLayoutProperty(
-                    'nasa-viirs-layer', 
-                    'visibility', 
-                    visibility === 'visible' ? 'none' : 'visible'
-                  );
-                }
-              }}
-            >
-              Toggle VIIRS
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                if (map.current?.getLayer('nasa-modis-terra-layer')) {
-                  const visibility = map.current.getLayoutProperty('nasa-modis-terra-layer', 'visibility');
-                  map.current.setLayoutProperty(
-                    'nasa-modis-terra-layer', 
-                    'visibility', 
-                    visibility === 'visible' ? 'none' : 'visible'
-                  );
-                }
-              }}
-            >
-              Toggle MODIS
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                if (map.current?.getLayer('nasa-fires-layer')) {
-                  const visibility = map.current.getLayoutProperty('nasa-fires-layer', 'visibility');
-                  map.current.setLayoutProperty(
-                    'nasa-fires-layer', 
-                    'visibility', 
-                    visibility === 'visible' ? 'none' : 'visible'
-                  );
-                }
-              }}
-            >
-              Toggle Fires
-            </Button>
+            {Object.entries(nasaLayers).map(([key, layer]) => (
+              <Button 
+                key={key}
+                variant={currentLayer === key ? "default" : "outline"} 
+                size="sm" 
+                onClick={() => setCurrentLayer(key)}
+                className="w-full justify-start text-xs"
+              >
+                {layer.name}
+              </Button>
+            ))}
+            <div className="pt-2 border-t border-border">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setGlobeRotation(0)}
+                className="w-full text-xs"
+              >
+                Reset View
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
