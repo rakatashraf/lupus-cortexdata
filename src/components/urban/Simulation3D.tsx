@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArcGISMap } from './ArcGISMap';
+import { ThreeDViewer } from './3DViewer';
 import { 
   Map, 
   Satellite, 
@@ -367,30 +368,7 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                 )}
               >
                 {viewMode === '3d' ? (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {/* 3D Canvas Placeholder */}
-                    <div className="text-center space-y-4 p-8">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-purple-500 blur-3xl opacity-30 animate-pulse"></div>
-                        <Building className="h-32 w-32 mx-auto text-primary relative z-10" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-foreground">3D Urban Environment</h3>
-                      <p className="text-muted-foreground max-w-md mx-auto">
-                        Interactive 3D visualization will render here. Click and drag to rotate, scroll to zoom.
-                      </p>
-                      <div className="flex flex-wrap gap-2 justify-center mt-6">
-                        {buildingTypes.map(type => {
-                          const Icon = type.icon;
-                          return (
-                            <Badge key={type.value} variant="outline" className={cn("p-2", type.color, "bg-opacity-20")}>
-                              <Icon className="h-4 w-4 mr-1" />
-                              {type.label}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
+                  <ThreeDViewer />
                 ) : (
                   <ArcGISMap 
                     webmapId="625da886dbf24a559da73840d293156d"
@@ -400,32 +378,6 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                     isSimulationRunning={isSimulationRunning}
                     onLocationSelect={onLocationSelect}
                   />
-                )}
-
-
-                {/* Building Palette */}
-                {viewMode === '3d' && (
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <div className="bg-background/80 backdrop-blur-md rounded-lg p-3">
-                      <p className="text-xs text-muted-foreground mb-2">Quick Build Palette</p>
-                      <div className="flex gap-2">
-                        {buildingTypes.map(type => {
-                          const Icon = type.icon;
-                          return (
-                            <Button
-                              key={type.value}
-                              size="sm"
-                              variant={selectedBuilding.type === type.value ? "default" : "outline"}
-                              onClick={() => setSelectedBuilding({...selectedBuilding, type: type.value as any})}
-                              className="flex-1"
-                            >
-                              <Icon className="h-4 w-4" />
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
                 )}
               </div>
             </CardContent>
