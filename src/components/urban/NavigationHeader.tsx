@@ -38,9 +38,9 @@ export function NavigationHeader({
       className="sticky top-0 z-50 w-full border-b-2 border-primary/20 bg-gradient-to-r from-background via-background/95 to-background backdrop-blur-md shadow-xl"
     >
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
-        <div className="flex items-center justify-start gap-4">
-          {/* Logo - fixed sizing */}
-          <div className="flex items-center mr-4 sm:mr-6 lg:mr-8 flex-shrink-0">
+        <div className="flex items-center justify-between w-full">
+          {/* Logo - positioned at far left */}
+          <div className="flex items-center flex-shrink-0">
             <button 
               onClick={() => handleNavClick('dashboard')}
               className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
@@ -53,7 +53,7 @@ export function NavigationHeader({
             </button>
           </div>
 
-          {/* Desktop Navigation - improved responsive breakpoints */}
+          {/* Desktop Navigation - center aligned */}
           <nav className="hidden lg:flex items-center gap-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
@@ -79,93 +79,95 @@ export function NavigationHeader({
             })}
           </nav>
 
-          {/* Tablet Navigation - shows only icons */}
-          <nav className="hidden md:flex lg:hidden items-center gap-1">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentSection === item.id;
-              
-              return (
-                 <Button
-                    key={item.id}
-                    variant={isActive ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => handleNavClick(item.id)}
-                    className={cn(
-                      "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border min-h-[44px] min-w-[44px]",
-                      isActive 
-                        ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25" 
-                        : "text-foreground hover:text-primary hover:bg-primary/5 border-transparent hover:border-primary/20"
-                    )}
-                    title={item.label}
-                  >
-                    <Icon className="h-4 w-4" />
+          <div className="flex items-center gap-3">
+            {/* Tablet Navigation - positioned at far right */}
+            <nav className="hidden md:flex lg:hidden items-center gap-1">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentSection === item.id;
+                
+                return (
+                   <Button
+                      key={item.id}
+                      variant={isActive ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => handleNavClick(item.id)}
+                      className={cn(
+                        "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border min-h-[44px] min-w-[44px]",
+                        isActive 
+                          ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25" 
+                          : "text-foreground hover:text-primary hover:bg-primary/5 border-transparent hover:border-primary/20"
+                      )}
+                      title={item.label}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </Button>
+                );
+              })}
+            </nav>
+
+            {/* Location Badge - responsive */}
+            <div className="hidden lg:flex items-center">
+              {currentLocation && (
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors text-xs">
+                  <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                  {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
+                </Badge>
+              )}
+            </div>
+
+            {/* Mobile Menu - positioned at far right */}
+            <div className="md:hidden">
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-foreground hover:text-primary min-h-[44px] min-w-[44px]">
+                    <Menu className="h-5 w-5" />
                   </Button>
-              );
-            })}
-          </nav>
-
-          {/* Location Badge - responsive */}
-          <div className="hidden lg:flex items-center gap-3 ml-auto">
-            {currentLocation && (
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors text-xs">
-                <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
-                {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
-              </Badge>
-            )}
-          </div>
-
-          {/* Mobile Menu - improved */}
-          <div className="md:hidden ml-auto">
-            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-foreground hover:text-primary min-h-[44px] min-w-[44px]">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-full max-w-sm bg-background">
-                <div className="mt-6 space-y-3">
-                  <div className="text-center pb-4 border-b border-border">
-                    <img 
-                      src={lupusLogo} 
-                      alt="Lupus Cortex" 
-                      className="h-8 w-auto mx-auto mb-2"
-                    />
-                    <p className="text-sm text-muted-foreground">Advanced Analytics Platform</p>
-                    {currentLocation && (
-                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs mt-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
-                        {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  {NAV_ITEMS.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = currentSection === item.id;
+                </SheetTrigger>
+                <SheetContent side="right" className="w-full max-w-sm bg-background">
+                  <div className="mt-6 space-y-3">
+                    <div className="text-center pb-4 border-b border-border">
+                      <img 
+                        src={lupusLogo} 
+                        alt="Lupus Cortex" 
+                        className="h-8 w-auto mx-auto mb-2"
+                      />
+                      <p className="text-sm text-muted-foreground">Advanced Analytics Platform</p>
+                      {currentLocation && (
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs mt-2">
+                          <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                          {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
+                        </Badge>
+                      )}
+                    </div>
                     
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNavClick(item.id)}
-                        className={cn(
-                          "w-full flex items-center gap-3 p-4 rounded-lg text-left transition-all duration-200 min-h-[60px]",
-                          isActive 
-                            ? "bg-primary text-primary-foreground" 
-                            : "hover:bg-accent hover:text-accent-foreground"
-                        )}
-                      >
-                        <Icon className="h-5 w-5 flex-shrink-0" />
-                        <div>
-                          <div className="font-medium text-base">{item.label}</div>
-                          <div className="text-sm opacity-70">{item.description}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </SheetContent>
-            </Sheet>
+                    {NAV_ITEMS.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = currentSection === item.id;
+                      
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleNavClick(item.id)}
+                          className={cn(
+                            "w-full flex items-center gap-3 p-4 rounded-lg text-left transition-all duration-200 min-h-[60px]",
+                            isActive 
+                              ? "bg-primary text-primary-foreground" 
+                              : "hover:bg-accent hover:text-accent-foreground"
+                          )}
+                        >
+                          <Icon className="h-5 w-5 flex-shrink-0" />
+                          <div>
+                            <div className="font-medium text-base">{item.label}</div>
+                            <div className="text-sm opacity-70">{item.description}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
           </div>
         </div>
       </div>
