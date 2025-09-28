@@ -38,7 +38,6 @@ const INDEX_QUICK_DESCRIPTIONS = {
 };
 
 export function IndexMeasurementsList({ className }: IndexMeasurementsListProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   // Group measurements by index
@@ -51,79 +50,51 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
     return acc;
   }, {} as Record<string, typeof INDEX_MEASUREMENTS>);
 
-  // Get the index keys for targets
-  const getIndexKey = (indexName: string): keyof typeof HEALTHY_CITY_TARGETS | null => {
-    const keyMap: Record<string, keyof typeof HEALTHY_CITY_TARGETS> = {
-      'Climate Resilience Index (CRI)': 'cri',
-      'Urban Heat Vulnerability Index (UHVI)': 'uhvi',
-      'Air Quality Health Impact (AQHI)': 'aqhi',
-      'Water Security Index (WSI)': 'wsi',
-      'Green Equity Access (GEA)': 'gea',
-      'Social Cohesion Measure (SCM)': 'scm',
-      'Environmental Justice Tool (EJT)': 'ejt',
-      'Transportation Accessibility Score (TAS)': 'tas',
-      'Disaster Preparedness Index (DPI)': 'dpi',
-      'Human Well-being Index (HWI)': 'hwi'
-    };
-    return keyMap[indexName] || null;
-  };
+  const indicesCount = Object.keys(groupedMeasurements).length;
 
   return (
     <>
-      <Card className={cn("bg-gradient-card shadow-card", className)}>
-        <CardHeader 
-          className="cursor-pointer hover:bg-muted/50 transition-colors p-4"
-          onClick={() => setShowModal(true)}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <List className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg font-semibold">
-                Index Measurements
-              </CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {Object.keys(groupedMeasurements).length} indices
-              </Badge>
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
-            </div>
+      <Card 
+        className={cn(
+          "min-h-[200px] aspect-square rounded-full bg-gradient-card shadow-card cursor-pointer hover:scale-105 transition-all duration-300 hover:shadow-lg group",
+          className
+        )}
+        onClick={() => setShowModal(true)}
+      >
+        <CardContent className="p-6 h-full flex flex-col items-center justify-center text-center">
+          <div className="flex items-center justify-center mb-3">
+            <List className="h-8 w-8 text-primary" />
           </div>
-          <p className="text-sm text-muted-foreground">
-            Click to explore all urban health measurements and their components
-          </p>
-        </CardHeader>
-        
-        <CardContent className="p-4 pt-0">
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-foreground/80 mb-3">Quick Overview</h4>
-            <div className="grid gap-1.5 max-h-64 overflow-y-auto">
-              {Object.entries(groupedMeasurements).map(([indexName, measurements]) => {
-                const IconComponent = INDEX_ICONS[indexName as keyof typeof INDEX_ICONS] || Info;
-                const quickDesc = INDEX_QUICK_DESCRIPTIONS[indexName as keyof typeof INDEX_QUICK_DESCRIPTIONS];
-                
-                return (
-                  <div 
-                    key={indexName}
-                    className="flex items-center gap-2 p-2 rounded hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => setShowModal(true)}
-                  >
-                    <IconComponent className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {indexName.replace(/\s*\([^)]*\)/, '')}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {quickDesc}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {measurements.length}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
+          
+          <CardTitle className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">
+            Index Measurements
+          </CardTitle>
+          
+          <Badge variant="secondary" className="mb-4 text-sm font-medium">
+            {indicesCount} Indices
+          </Badge>
+          
+          <div className="space-y-2 max-h-20 overflow-hidden">
+            {Object.entries(groupedMeasurements).slice(0, 3).map(([indexName]) => {
+              const IconComponent = INDEX_ICONS[indexName as keyof typeof INDEX_ICONS] || Info;
+              return (
+                <div key={indexName} className="flex items-center gap-2 justify-center">
+                  <IconComponent className="h-3 w-3 text-primary" />
+                  <span className="text-xs text-muted-foreground truncate max-w-24">
+                    {indexName.replace(/\s*\([^)]*\)/, '')}
+                  </span>
+                </div>
+              );
+            })}
+            {indicesCount > 3 && (
+              <div className="text-xs text-muted-foreground">
+                +{indicesCount - 3} more...
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-4">
+            <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
         </CardContent>
       </Card>
