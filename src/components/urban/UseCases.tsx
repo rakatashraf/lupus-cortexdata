@@ -1232,32 +1232,42 @@ Example scenarios:
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium mb-3">Quick Overview</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {Object.entries(rec.indexScores).map(([index, score]) => (
-                          <div key={index} className="text-center p-2 rounded-lg bg-muted/30">
-                            <div className={`text-lg font-bold ${
-                              score >= 70 ? 'text-green-600' : score >= 50 ? 'text-yellow-600' : 'text-red-600'
-                            }`}>
-                              {score.toFixed(0)}
-                            </div>
-                            <div className="text-xs text-muted-foreground">{index}</div>
+                  <div className="space-y-3">
+                    {/* Simple overall indicators */}
+                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="text-center">
+                          <div className={`text-xl font-bold ${
+                            rec.rating >= 4 ? 'text-green-600' : rec.rating >= 3 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {rec.rating >= 4 ? 'Excellent' : rec.rating >= 3 ? 'Good' : 'Fair'}
                           </div>
-                        ))}
+                          <div className="text-xs text-muted-foreground">Overall</div>
+                        </div>
+                        <div className="text-center">
+                          <div className={`text-xl font-bold ${
+                            rec.residentSummary.familyFriendly ? 'text-green-600' : 'text-yellow-600'
+                          }`}>
+                            {rec.residentSummary.familyFriendly ? 'Yes' : 'Maybe'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Family Safe</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="secondary" className="mb-1">
+                          <Eye className="h-3 w-3 mr-1" />
+                          Click for details
+                        </Badge>
                       </div>
                     </div>
                     
+                    {/* Key benefits - reduced to 2 most important */}
                     <div>
-                      <h4 className="font-medium mb-2 flex items-center gap-2">
-                        Key Benefits for You
-                        <Badge variant="outline" className="text-xs">Click to see more</Badge>
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {rec.residentSummary.quickDecisionFactors.slice(0, 4).map((factor, i) => (
-                          <div key={i} className="text-sm text-muted-foreground flex items-start gap-2 p-2 bg-green-50/50 rounded">
-                            <span className="text-green-600 text-xs">✓</span>
+                      <h4 className="font-medium mb-2 text-sm">Why This Location Works for You</h4>
+                      <div className="space-y-1">
+                        {rec.residentSummary.quickDecisionFactors.slice(0, 2).map((factor, i) => (
+                          <div key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                            <span className="text-green-600 text-xs mt-0.5">✓</span>
                             {factor}
                           </div>
                         ))}
