@@ -15,39 +15,36 @@ const INDEX_ICONS = {
   'Climate Resilience Index (CRI)': Shield,
   'Urban Heat Vulnerability Index (UHVI)': TrendingUp,
   'Air Quality Health Impact (AQHI)': Heart,
-  'Water Security Index (WSI)': Droplets,
-  'Green Equity Access (GEA)': Leaf,
-  'Social Cohesion Measure (SCM)': Users,
-  'Environmental Justice Tool (EJT)': MapPin,
+  'Water Security Indicator (WSI)': Droplets,
+  'Green Equity Assessment (GEA)': Leaf,
+  'Social Cohesion Metrics (SCM)': Users,
+  'Environmental Justice Tracker (EJT)': MapPin,
   'Transportation Accessibility Score (TAS)': Zap,
-  'Disaster Preparedness Index (DPI)': Shield,
-  'Human Well-being Index (HWI)': Heart
+  'Disaster Preparedness Index (DPI)': Shield
 };
 
 const INDEX_DESCRIPTIONS = {
   'Climate Resilience Index (CRI)': 'How well your city adapts to climate change impacts and extreme weather events',
   'Urban Heat Vulnerability Index (UHVI)': 'Measures heat-related health risks and urban heat island effects on residents',
   'Air Quality Health Impact (AQHI)': 'Tracks air pollution levels and their direct impact on community health',
-  'Water Security Index (WSI)': 'Evaluates water availability, quality, and infrastructure reliability',
-  'Green Equity Access (GEA)': 'Ensures fair distribution of parks, green spaces, and environmental benefits',
-  'Social Cohesion Measure (SCM)': 'Assesses community connections, trust, and social fabric strength',
-  'Environmental Justice Tool (EJT)': 'Identifies and addresses environmental inequalities across neighborhoods',
+  'Water Security Indicator (WSI)': 'Evaluates water availability, quality, and infrastructure reliability',
+  'Green Equity Assessment (GEA)': 'Ensures fair distribution of parks, green spaces, and environmental benefits',
+  'Social Cohesion Metrics (SCM)': 'Assesses community connections, trust, and social fabric strength',
+  'Environmental Justice Tracker (EJT)': 'Identifies and addresses environmental inequalities across neighborhoods',
   'Transportation Accessibility Score (TAS)': 'Measures how easily residents can access jobs, services, and opportunities',
-  'Disaster Preparedness Index (DPI)': 'Evaluates city readiness for emergencies and disaster response capabilities',
-  'Human Well-being Index (HWI)': 'Overall measure of resident health, happiness, and quality of life'
+  'Disaster Preparedness Index (DPI)': 'Evaluates city readiness for emergencies and disaster response capabilities'
 };
 
 const INDEX_IMPACT = {
   'Climate Resilience Index (CRI)': 'Protects your property value and family safety during storms',
   'Urban Heat Vulnerability Index (UHVI)': 'Affects energy bills and heat-related health risks',
   'Air Quality Health Impact (AQHI)': 'Influences respiratory health and children\'s development',
-  'Water Security Index (WSI)': 'Impacts daily water access and utility costs',
-  'Green Equity Access (GEA)': 'Affects property values and recreation opportunities',
-  'Social Cohesion Measure (SCM)': 'Influences neighborhood safety and community support',
-  'Environmental Justice Tool (EJT)': 'Ensures fair treatment regardless of income or race',
+  'Water Security Indicator (WSI)': 'Impacts daily water access and utility costs',
+  'Green Equity Assessment (GEA)': 'Affects property values and recreation opportunities',
+  'Social Cohesion Metrics (SCM)': 'Influences neighborhood safety and community support',
+  'Environmental Justice Tracker (EJT)': 'Ensures fair treatment regardless of income or race',
   'Transportation Accessibility Score (TAS)': 'Affects your daily commute and job opportunities',
-  'Disaster Preparedness Index (DPI)': 'Determines emergency response speed and effectiveness',
-  'Human Well-being Index (HWI)': 'Overall indicator of life satisfaction and health outcomes'
+  'Disaster Preparedness Index (DPI)': 'Determines emergency response speed and effectiveness'
 };
 
 export function IndexMeasurementsModal({ isOpen, onClose }: IndexMeasurementsModalProps) {
@@ -67,13 +64,12 @@ export function IndexMeasurementsModal({ isOpen, onClose }: IndexMeasurementsMod
       'Climate Resilience Index (CRI)': 'cri',
       'Urban Heat Vulnerability Index (UHVI)': 'uhvi',
       'Air Quality Health Impact (AQHI)': 'aqhi',
-      'Water Security Index (WSI)': 'wsi',
-      'Green Equity Access (GEA)': 'gea',
-      'Social Cohesion Measure (SCM)': 'scm',
-      'Environmental Justice Tool (EJT)': 'ejt',
+      'Water Security Indicator (WSI)': 'wsi',
+      'Green Equity Assessment (GEA)': 'gea',
+      'Social Cohesion Metrics (SCM)': 'scm',
+      'Environmental Justice Tracker (EJT)': 'ejt',
       'Transportation Accessibility Score (TAS)': 'tas',
-      'Disaster Preparedness Index (DPI)': 'dpi',
-      'Human Well-being Index (HWI)': 'hwi'
+      'Disaster Preparedness Index (DPI)': 'dpi'
     };
     return keyMap[indexName] || null;
   };
@@ -84,7 +80,7 @@ export function IndexMeasurementsModal({ isOpen, onClose }: IndexMeasurementsMod
         <DialogHeader className="space-y-3">
           <DialogTitle className="text-2xl font-bold">Urban Health Indices</DialogTitle>
           <DialogDescription className="text-base">
-            Comprehensive measurements that evaluate your city's health, sustainability, and livability across 10 key areas.
+            Comprehensive measurements that evaluate your city's health, sustainability, and livability across 9 key areas.
           </DialogDescription>
         </DialogHeader>
         

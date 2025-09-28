@@ -15,26 +15,24 @@ const INDEX_ICONS = {
   'Climate Resilience Index (CRI)': Shield,
   'Urban Heat Vulnerability Index (UHVI)': TrendingUp,
   'Air Quality Health Impact (AQHI)': Heart,
-  'Water Security Index (WSI)': Droplets,
-  'Green Equity Access (GEA)': Leaf,
-  'Social Cohesion Measure (SCM)': Users,
-  'Environmental Justice Tool (EJT)': MapPin,
+  'Water Security Indicator (WSI)': Droplets,
+  'Green Equity Assessment (GEA)': Leaf,
+  'Social Cohesion Metrics (SCM)': Users,
+  'Environmental Justice Tracker (EJT)': MapPin,
   'Transportation Accessibility Score (TAS)': Zap,
-  'Disaster Preparedness Index (DPI)': Shield,
-  'Human Well-being Index (HWI)': Heart
+  'Disaster Preparedness Index (DPI)': Shield
 };
 
 const INDEX_QUICK_DESCRIPTIONS = {
   'Climate Resilience Index (CRI)': 'Climate adaptation & extreme weather response',
   'Urban Heat Vulnerability Index (UHVI)': 'Heat island effects & temperature risks',
   'Air Quality Health Impact (AQHI)': 'Air pollution & respiratory health impact',
-  'Water Security Index (WSI)': 'Water availability & infrastructure quality',
-  'Green Equity Access (GEA)': 'Fair access to parks & green spaces',
-  'Social Cohesion Measure (SCM)': 'Community connections & social trust',
-  'Environmental Justice Tool (EJT)': 'Environmental equality across neighborhoods',
+  'Water Security Indicator (WSI)': 'Water availability & infrastructure quality',
+  'Green Equity Assessment (GEA)': 'Fair access to parks & green spaces',
+  'Social Cohesion Metrics (SCM)': 'Community connections & social trust',
+  'Environmental Justice Tracker (EJT)': 'Environmental equality across neighborhoods',
   'Transportation Accessibility Score (TAS)': 'Access to jobs, services & opportunities',
-  'Disaster Preparedness Index (DPI)': 'Emergency readiness & response capacity',
-  'Human Well-being Index (HWI)': 'Overall quality of life & health outcomes'
+  'Disaster Preparedness Index (DPI)': 'Emergency readiness & response capacity'
 };
 
 export function IndexMeasurementsList({ className }: IndexMeasurementsListProps) {
