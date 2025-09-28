@@ -154,8 +154,8 @@ export function NavigationHeader({
     >
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
         <div className="flex items-center w-full">
-          {/* Logo - positioned at far left for all screens */}
-          <div className="flex items-center flex-shrink-0 mr-6 lg:mr-8">
+          {/* Logo Section - Left */}
+          <div className="flex items-center flex-1">
             <button 
               onClick={() => handleNavClick('dashboard')}
               className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
@@ -168,8 +168,8 @@ export function NavigationHeader({
             </button>
           </div>
 
-          {/* Desktop Navigation - left aligned after logo */}
-          <nav className="hidden lg:flex items-center gap-1 flex-1">
+          {/* Desktop Navigation - Centered */}
+          <nav className="hidden lg:flex items-center justify-center gap-1 flex-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = currentSection === item.id;
@@ -192,9 +192,11 @@ export function NavigationHeader({
                   </Button>
               );
             })}
-            
-            {/* Location Badge - in desktop nav */}
-            <div className="ml-auto flex items-center relative">
+          </nav>
+
+          {/* Location Badge Section - Right */}
+          <div className="hidden lg:flex items-center justify-end flex-1">
+            <div className="flex items-center relative">
               {currentLocation && (
                 <div className="relative">
                   {!isEditingLocation ? (
@@ -270,7 +272,7 @@ export function NavigationHeader({
                 </div>
               )}
             </div>
-          </nav>
+          </div>
 
           {/* Right side for tablet and mobile */}
           <div className="lg:hidden flex items-center gap-3 ml-auto">
