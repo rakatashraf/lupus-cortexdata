@@ -7,7 +7,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb } from 'lucide-react';
 import { AIMessage } from '@/types/urban-indices';
-import { n8nService } from '@/services/n8n-service';
 import { geminiService } from '@/services/gemini-service';
 import { API_CONFIG, FALLBACK_MESSAGES } from '@/config/api';
 import { cn } from '@/lib/utils';
@@ -22,8 +21,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [serviceStatus, setServiceStatus] = useState({
-    gemini: true,
-    n8n: true
+    gemini: true
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +85,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     setIsLoading(true);
 
     try {
-      // Try Gemini 2.5 Flash first
+      // Use Gemini 2.5 Flash directly
       const response = await geminiService.generateUrbanInsights(
         userMessage.content,
         { latitude, longitude }
@@ -103,63 +101,20 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
 
       setMessages(prev => [...prev, assistantMessage]);
 
-    } catch (geminiError) {
-      console.error('Error with Gemini service:', geminiError);
+    } catch (error) {
+      console.error('Error with Gemini service:', error);
       
-      try {
-        // Fallback to n8n service
-        const response = await n8nService.getChatbotResponse(
-          userMessage.content,
-          latitude,
-          longitude
-        );
+      // Fallback to local processing
+      const fallbackResponse = await processMessageLocally(userMessage.content);
+      const assistantMessage: AIMessage = {
+        id: `assistant-${Date.now()}`,
+        content: fallbackResponse,
+        type: 'assistant',
+        timestamp: new Date(),
+        metadata: { model: 'Local Assistant' }
+      };
 
-        let assistantContent = '';
-        let metadata = {};
-
-        if (response && response.success !== false) {
-          if (response.data && response.data.message) {
-            assistantContent = response.data.message;
-            metadata = {
-              model: response.data.ai_model || 'Urban Intelligence API',
-              timestamp: response.data.timestamp
-            };
-          } else if (response.message) {
-            assistantContent = response.message;
-            metadata = { model: 'Urban Intelligence API' };
-          } else {
-            assistantContent = JSON.stringify(response, null, 2);
-            metadata = { model: 'Urban Intelligence API' };
-          }
-        } else {
-          throw new Error('N8N service failed');
-        }
-
-        const assistantMessage: AIMessage = {
-          id: `assistant-${Date.now()}`,
-          content: assistantContent,
-          type: 'assistant',
-          timestamp: new Date(),
-          metadata
-        };
-
-        setMessages(prev => [...prev, assistantMessage]);
-
-      } catch (n8nError) {
-        console.error('Error with n8n service:', n8nError);
-        
-        // Final fallback to local processing
-        const fallbackResponse = await processMessageLocally(userMessage.content);
-        const assistantMessage: AIMessage = {
-          id: `assistant-${Date.now()}`,
-          content: fallbackResponse,
-          type: 'assistant',
-          timestamp: new Date(),
-          metadata: { model: 'Local Assistant' }
-        };
-
-        setMessages(prev => [...prev, assistantMessage]);
-      }
+      setMessages(prev => [...prev, assistantMessage]);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -295,10 +250,7 @@ What specific aspect of urban policy or collaborative planning would you like to
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge variant={serviceStatus.gemini ? "default" : "secondary"}>
-                {serviceStatus.gemini ? "🤖 AI Active" : "🤖 Limited"}
-              </Badge>
-              <Badge variant={serviceStatus.n8n ? "default" : "secondary"}>
-                {serviceStatus.n8n ? "📊 Data Active" : "📊 Offline"}
+                {serviceStatus.gemini ? "🤖 Gemini Active" : "🤖 Limited"}
               </Badge>
             </div>
           </div>
@@ -445,25 +397,20 @@ What specific aspect of urban policy or collaborative planning would you like to
               onClick={() => setInputMessage("Generate a collaborative planning framework for this city")}
               disabled={isLoading}
             >
-              <BarChart3 className="h-3 w-3 mr-1" />
+              <Camera className="h-3 w-3 mr-1" />
               Planning Framework
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setInputMessage("Generate an image of residents collaborating with urban planners")}
-              disabled={isLoading}
-            >
-              <Camera className="h-3 w-3 mr-1" />
-              Generate Image
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+          </div>
+
+          {/* Clear Chat */}
+          <div className="pt-2 border-t border-border">
+            <Button 
+              variant="ghost" 
+              size="sm" 
               onClick={clearChat}
-              disabled={isLoading}
+              className="text-muted-foreground hover:text-foreground"
             >
-              Clear Chat
+              Clear Chat History
             </Button>
           </div>
         </CardContent>
