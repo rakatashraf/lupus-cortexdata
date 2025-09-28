@@ -1,6 +1,6 @@
 import { HealthDashboard } from '@/components/urban/HealthDashboard';
 import { InteractiveMap } from '@/components/urban/InteractiveMap';
-import { DataVisualization } from '@/components/urban/DataVisualization';
+import { SimpleDataVisualization } from '@/components/urban/SimpleDataVisualization';
 import { AIChatbot } from '@/components/urban/AIChatbot';
 import { NavigationHeader } from '@/components/urban/NavigationHeader';
 import { WelcomeSection } from '@/components/urban/WelcomeSection';
@@ -87,12 +87,7 @@ const Index = () => {
           />
         );
       case 'charts':
-        return (
-          <DataVisualization
-            latitude={currentLocation.latitude}
-            longitude={currentLocation.longitude}
-          />
-        );
+        return <SimpleDataVisualization />;
       case 'chatbot':
         return (
           <AIChatbot
