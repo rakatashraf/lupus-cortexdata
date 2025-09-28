@@ -18,8 +18,8 @@ export const API_CONFIG: APIConfig = {
 // API Endpoints
 export const API_ENDPOINTS = {
   gemini: {
-    text: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview:generateContent',
-    vision: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview:generateContent'
+    text: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+    vision: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
   },
   nasa: {
     power: 'https://power.larc.nasa.gov/api/temporal/daily/point',
