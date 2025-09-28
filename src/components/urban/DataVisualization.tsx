@@ -241,34 +241,18 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     if (data.data && data.data.labels && data.data.datasets) {
       const labels = data.data.labels;
       const processed: ChartDataPoint[] = [];
-      const enabledLayerNames = layers.filter(layer => layer.enabled).map(layer => layer.name);
 
-      // Process real data
       labels.forEach((date: string, index: number) => {
         data.data.datasets.forEach((dataset: any) => {
-          const value = dataset.data[index];
-          if (value != null && value !== 0) {
-            processed.push({
-              date,
-              value: value,
-              index: dataset.label
-            });
-          }
+          processed.push({
+            date,
+            value: dataset.data[index] || 0,
+            index: dataset.label
+          });
         });
       });
 
-      // Generate mock data for any missing enabled layers
-      const existingDatasets = new Set(data.data.datasets.map((d: any) => d.label));
-      const missingLayers = enabledLayerNames.filter(name => !existingDatasets.has(name));
-      
-      if (missingLayers.length > 0) {
-        const fallbackData = generateFallbackData();
-        const missingData = fallbackData.filter(point => missingLayers.includes(point.index));
-        processed.push(...missingData);
-      }
-
-      // If no real data at all, use complete fallback
-      return processed.length > 0 ? processed : generateFallbackData();
+      return processed;
     }
 
     return generateFallbackData();
@@ -278,47 +262,11 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     const data: ChartDataPoint[] = [];
     const dates = getLast30Days();
     
-    // Layer-specific realistic data ranges and patterns
-    const getLayerMockData = (layerId: string, dateIndex: number, totalDates: number) => {
-      const progress = dateIndex / totalDates; // 0 to 1 progression
-      const seasonalVariation = Math.sin(progress * Math.PI * 2) * 0.3; // Seasonal pattern
-      const randomVariation = (Math.random() - 0.5) * 0.4; // Random noise
-      
-      const layerConfigs: Record<string, { min: number; max: number; trend: number }> = {
-        'CRI_Landsat': { min: 45, max: 85, trend: 0.1 },
-        'CRI_MODIS': { min: 40, max: 80, trend: 0.05 },
-        'UHVI_Landsat': { min: 60, max: 95, trend: -0.15 }, // Urban heat tends to increase
-        'UHVI_MODIS': { min: 55, max: 90, trend: -0.1 },
-        'GEA_Landsat': { min: 30, max: 70, trend: 0.2 }, // Green spaces improving
-        'GEA_MODIS': { min: 25, max: 65, trend: 0.15 },
-        'WSI_Landsat': { min: 50, max: 85, trend: 0.1 },
-        'WSI_MODIS': { min: 45, max: 80, trend: 0.08 },
-        'SCM_Landsat': { min: 35, max: 75, trend: -0.05 }, // Urban sprawl
-        'SCM_MODIS': { min: 30, max: 70, trend: -0.03 },
-        'TAS_Landsat': { min: 40, max: 80, trend: -0.08 },
-        'TAS_MODIS': { min: 35, max: 75, trend: -0.06 },
-        'AQHI_Landsat': { min: 45, max: 85, trend: 0.12 }, // Air quality improving
-        'AQHI_MODIS': { min: 40, max: 80, trend: 0.1 },
-        'EJT_Landsat': { min: 50, max: 90, trend: 0.05 },
-        'EJT_MODIS': { min: 45, max: 85, trend: 0.03 },
-        'DPI_Landsat': { min: 40, max: 85, trend: 0.08 },
-        'DPI_MODIS': { min: 35, max: 80, trend: 0.06 }
-      };
-      
-      const config = layerConfigs[layerId] || { min: 30, max: 80, trend: 0 };
-      const baseValue = config.min + (config.max - config.min) * 0.6; // Start around 60% of range
-      const trendEffect = config.trend * progress * (config.max - config.min);
-      
-      return Math.max(config.min, Math.min(config.max, 
-        baseValue + trendEffect + seasonalVariation * 15 + randomVariation * 10
-      ));
-    };
-    
     layers.filter(layer => layer.enabled).forEach(layer => {
-      dates.forEach((date, dateIndex) => {
+      dates.forEach(date => {
         data.push({
           date,
-          value: Math.round(getLayerMockData(layer.id, dateIndex, dates.length) * 10) / 10,
+          value: Math.floor(Math.random() * 40) + 30 + (layer.index === 'UHVI' ? 20 : 0),
           index: layer.name
         });
       });

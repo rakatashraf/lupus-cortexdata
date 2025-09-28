@@ -366,51 +366,28 @@ export class N8NService {
   }
 
   /**
-   * Fallback chart data with comprehensive layer coverage
+   * Fallback chart data
    */
   private getFallbackChartData() {
-    const labels = this.getLast30Days();
-    const datasets = [
-      // Climate & Temperature
-      { label: "CRI_Landsat", data: this.generateRealisticData(30, 45, 85, 0.1), color: "hsl(var(--chart-1))" },
-      { label: "CRI_MODIS", data: this.generateRealisticData(30, 40, 80, 0.05), color: "hsl(var(--chart-2))" },
-      { label: "UHVI_Landsat", data: this.generateRealisticData(30, 60, 95, -0.15), color: "hsl(var(--chart-3))" },
-      { label: "UHVI_MODIS", data: this.generateRealisticData(30, 55, 90, -0.1), color: "hsl(var(--chart-4))" },
-      
-      // Environment & Green Spaces
-      { label: "GEA_Landsat", data: this.generateRealisticData(30, 30, 70, 0.2), color: "hsl(var(--chart-5))" },
-      { label: "GEA_MODIS", data: this.generateRealisticData(30, 25, 65, 0.15), color: "hsl(var(--chart-1))" },
-      
-      // Water Quality
-      { label: "WSI_Landsat", data: this.generateRealisticData(30, 50, 85, 0.1), color: "hsl(var(--chart-2))" },
-      { label: "WSI_MODIS", data: this.generateRealisticData(30, 45, 80, 0.08), color: "hsl(var(--chart-3))" },
-      
-      // Urban Development
-      { label: "SCM_Landsat", data: this.generateRealisticData(30, 35, 75, -0.05), color: "hsl(var(--chart-4))" },
-      { label: "SCM_MODIS", data: this.generateRealisticData(30, 30, 70, -0.03), color: "hsl(var(--chart-5))" },
-      
-      // Transportation
-      { label: "TAS_Landsat", data: this.generateRealisticData(30, 40, 80, -0.08), color: "hsl(var(--chart-1))" },
-      { label: "TAS_MODIS", data: this.generateRealisticData(30, 35, 75, -0.06), color: "hsl(var(--chart-2))" },
-      
-      // Air Quality
-      { label: "AQHI_Landsat", data: this.generateRealisticData(30, 45, 85, 0.12), color: "hsl(var(--chart-3))" },
-      { label: "AQHI_MODIS", data: this.generateRealisticData(30, 40, 80, 0.1), color: "hsl(var(--chart-4))" },
-      
-      // Community Well-being
-      { label: "EJT_Landsat", data: this.generateRealisticData(30, 50, 90, 0.05), color: "hsl(var(--chart-5))" },
-      { label: "EJT_MODIS", data: this.generateRealisticData(30, 45, 85, 0.03), color: "hsl(var(--chart-1))" },
-      { label: "DPI_Landsat", data: this.generateRealisticData(30, 40, 85, 0.08), color: "hsl(var(--chart-2))" },
-      { label: "DPI_MODIS", data: this.generateRealisticData(30, 35, 80, 0.06), color: "hsl(var(--chart-3))" }
-    ].map(dataset => ({
-      ...dataset,
-      borderColor: dataset.color,
-      backgroundColor: `${dataset.color.replace(')', ' / 0.1)')}`
-    }));
-
     return {
       success: true,
-      data: { labels, datasets }
+      data: {
+        labels: this.getLast30Days(),
+        datasets: [
+          {
+            label: "CRI Score",
+            data: this.generateRandomData(30, 60, 80),
+            borderColor: "hsl(var(--chart-cri))",
+            backgroundColor: "hsl(var(--chart-cri) / 0.1)"
+          },
+          {
+            label: "Air Quality",
+            data: this.generateRandomData(30, 40, 70),
+            borderColor: "hsl(var(--chart-aqhi))",
+            backgroundColor: "hsl(var(--chart-aqhi) / 0.1)"
+          }
+        ]
+      }
     };
   }
 
@@ -447,22 +424,6 @@ export class N8NService {
     return Array.from({ length: count }, () => 
       Math.floor(Math.random() * (max - min + 1)) + min
     );
-  }
-
-  /**
-   * Generate realistic data with trends and patterns
-   */
-  private generateRealisticData(count: number, min: number, max: number, trend: number = 0): number[] {
-    return Array.from({ length: count }, (_, index) => {
-      const progress = index / count;
-      const seasonalVariation = Math.sin(progress * Math.PI * 2) * 0.3;
-      const randomVariation = (Math.random() - 0.5) * 0.4;
-      const baseValue = min + (max - min) * 0.6;
-      const trendEffect = trend * progress * (max - min);
-      
-      const value = baseValue + trendEffect + seasonalVariation * 15 + randomVariation * 10;
-      return Math.round(Math.max(min, Math.min(max, value)) * 10) / 10;
-    });
   }
 }
 
