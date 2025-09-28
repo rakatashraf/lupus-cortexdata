@@ -32,30 +32,30 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     const welcomeMessages: AIMessage[] = [
       {
         id: 'welcome-1',
-        content: "🌟 Hello! I'm your advanced AI assistant for urban intelligence and data analysis!",
+        content: "🏛️ Hello! I'm your AI assistant powered by Gemini 2.5 Flash for urban planning and policy-making!",
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Gemini 1.5 Flash' }
+        metadata: { model: 'Gemini 2.5 Flash' }
       },
       {
         id: 'welcome-2',
-        content: `I can help you with:
-• 📊 Data analysis and city indices
-• 📈 Generate interactive charts and visualizations  
-• 🖼️ Create AI-generated images and photos
-• 🌍 Satellite imagery analysis
-• 💡 Urban planning insights and suggestions
-• 💬 General conversations and Q&A`,
+        content: `I specialize in policy-making for urban planners and residents working together:
+• 🏛️ Policy recommendations and urban governance
+• 🤝 Community engagement strategies for residents
+• 📊 Data analysis with policy insights
+• 📈 Generate policy-focused charts and visualizations
+• 🌍 Collaborative planning between planners & residents
+• 💡 Urban sustainability and resident-centered policies`,
         type: 'assistant',
         timestamp: new Date()
       },
       {
         id: 'welcome-3',
-        content: `✨ Try asking:
-• 'Generate a photo of a sustainable city'
-• 'Show climate data chart for current location'
-• 'What are the best practices for urban sustainability?'
-• 'Analyze air quality trends in my area'`,
+        content: `✨ Try asking about:
+• 'Policy recommendations for community engagement'
+• 'How can residents participate in urban planning?'
+• 'Best practices for collaborative policy-making'
+• 'Generate a policy framework for sustainable cities'`,
         type: 'assistant',
         timestamp: new Date()
       }
@@ -97,12 +97,12 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
       let metadata = {};
 
       if (response && response.success !== false) {
-        if (response.data && response.data.message) {
-          assistantContent = response.data.message;
-          metadata = {
-            model: response.data.ai_model || 'Gemini 1.5 Flash',
-            timestamp: response.data.timestamp
-          };
+          if (response.data && response.data.message) {
+            assistantContent = response.data.message;
+            metadata = {
+              model: response.data.ai_model || 'Gemini 2.5 Flash',
+              timestamp: response.data.timestamp
+            };
         } else if (response.message) {
           assistantContent = response.message;
         } else {
@@ -188,19 +188,26 @@ For your location (${latitude.toFixed(4)}, ${longitude.toFixed(4)}):
 The Climate Resilience Index (CRI) measures temperature adaptation, heat wave preparedness, flood management, air quality resilience, and green infrastructure.`;
     }
 
-    if (lowerMessage.includes('sustainability') || lowerMessage.includes('urban planning')) {
-      return `🏙️ Urban Sustainability Best Practices:
+    if (lowerMessage.includes('sustainability') || lowerMessage.includes('urban planning') || lowerMessage.includes('policy')) {
+      return `🏛️ Urban Policy & Sustainability Best Practices for Planners & Residents:
 
-1. **Green Infrastructure**: Increase parks, green roofs, urban forests
-2. **Transportation**: Develop public transit, cycling networks
-3. **Energy**: Transition to renewable energy sources  
-4. **Water Management**: Implement rainwater harvesting, efficient systems
-5. **Waste Reduction**: Circular economy principles, recycling
-6. **Social Equity**: Ensure all communities have access to resources
-7. **Smart Technology**: Use IoT for efficient resource management
-8. **Climate Adaptation**: Prepare for climate change impacts
+**Policy Development Framework:**
+1. **Community Engagement Policies**: Resident participation in planning decisions
+2. **Green Infrastructure Policies**: Parks, green roofs, urban forest regulations
+3. **Transportation Policies**: Public transit, cycling networks, walkability standards
+4. **Energy Transition Policies**: Renewable energy mandates, efficiency standards
+5. **Water Management Policies**: Conservation, rainwater harvesting, quality protection
+6. **Waste Reduction Policies**: Circular economy, recycling mandates, producer responsibility
+7. **Social Equity Policies**: Affordable housing, equal access to green spaces
+8. **Smart City Governance**: Data privacy, digital inclusion, transparent technology use
 
-Each of these connects to our 9 urban health indices for comprehensive city wellness.`;
+**Collaborative Implementation:**
+• Resident advisory councils for policy development
+• Community-led sustainability initiatives
+• Transparent policy implementation tracking
+• Regular feedback mechanisms between planners and residents
+
+*Note: Analysis based on mock data for demonstration purposes.*`;
     }
 
     if (lowerMessage.includes('data') || lowerMessage.includes('analysis') || lowerMessage.includes('indices')) {
@@ -221,17 +228,21 @@ Each index uses satellite data and ground measurements for comprehensive urban h
     }
 
     // Default helpful response
-    return `🤖 I'm here to help with urban intelligence and sustainability questions! 
+    return `🏛️ I'm here to help with urban planning policy-making for planners and residents! 
 
 I can assist with:
-• Urban health indices analysis
-• Environmental data interpretation  
-• Sustainability recommendations
-• Climate adaptation strategies
-• Data visualization requests
-• City planning insights
+• Policy recommendations for urban planners
+• Community engagement strategies for residents
+• Collaborative policy development frameworks
+• Urban health indices analysis and policy implications
+• Environmental data interpretation for policy-making
+• Sustainability policy recommendations
+• Climate adaptation policy strategies
+• Resident-centered urban development insights
 
-What specific aspect of urban intelligence would you like to explore?`;
+*All analysis is based on mock data for demonstration purposes.*
+
+What specific aspect of urban policy or collaborative planning would you like to explore?`;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -256,7 +267,7 @@ What specific aspect of urban intelligence would you like to explore?`;
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
-              AI Urban Intelligence Assistant
+              AI Urban Policy Assistant - Gemini 2.5 Flash
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge variant={serviceStatus.gemini ? "default" : "secondary"}>
@@ -269,12 +280,20 @@ What specific aspect of urban intelligence would you like to explore?`;
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Mock Data Disclaimer */}
+          <Alert className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+            <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200">
+              <strong>Notice:</strong> All chats are generated/analyzed using mock data for demonstration purposes.
+            </AlertDescription>
+          </Alert>
+
           {/* Service Status */}
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
               Location: {latitude.toFixed(4)}°, {longitude.toFixed(4)}° • 
-              Connected to Gemini AI for intelligent responses and urban data analysis
+              Connected to Gemini 2.5 Flash AI for urban planning and policy-making assistance
             </AlertDescription>
           </Alert>
 
@@ -350,7 +369,7 @@ What specific aspect of urban intelligence would you like to explore?`;
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me about urban intelligence, sustainability, or data analysis..."
+              placeholder="Ask me about urban policy, community engagement, or collaborative planning..."
               className="flex-1"
               disabled={isLoading}
             />
@@ -372,34 +391,43 @@ What specific aspect of urban intelligence would you like to explore?`;
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setInputMessage("Show me the current urban health indices for this location")}
-              disabled={isLoading}
-            >
-              <BarChart3 className="h-3 w-3 mr-1" />
-              Health Data
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setInputMessage("Generate a chart showing air quality trends")}
-              disabled={isLoading}
-            >
-              <BarChart3 className="h-3 w-3 mr-1" />
-              Air Quality Chart
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setInputMessage("What are the best sustainability practices for this city?")}
+              onClick={() => setInputMessage("What are the best policy recommendations for collaborative urban planning?")}
               disabled={isLoading}
             >
               <Lightbulb className="h-3 w-3 mr-1" />
-              Sustainability Tips
+              Policy Recommendations
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setInputMessage("Generate an image of a sustainable smart city")}
+              onClick={() => setInputMessage("How can residents participate in urban planning decisions?")}
+              disabled={isLoading}
+            >
+              <Info className="h-3 w-3 mr-1" />
+              Resident Engagement
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("Show me urban health policy data for this location")}
+              disabled={isLoading}
+            >
+              <BarChart3 className="h-3 w-3 mr-1" />
+              Policy Data
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("Generate a collaborative planning framework for this city")}
+              disabled={isLoading}
+            >
+              <BarChart3 className="h-3 w-3 mr-1" />
+              Planning Framework
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("Generate an image of residents collaborating with urban planners")}
               disabled={isLoading}
             >
               <Camera className="h-3 w-3 mr-1" />

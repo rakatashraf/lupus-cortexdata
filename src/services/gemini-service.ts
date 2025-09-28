@@ -58,15 +58,19 @@ export class GeminiService {
   }
 
   async analyzeUrbanData(data: any, location: { latitude: number; longitude: number }): Promise<string> {
-    const context = `You are an expert urban planning AI assistant specializing in city health and sustainability analysis. 
-    Analyze the following urban health data for location ${location.latitude}, ${location.longitude} and provide insights, recommendations, and actionable advice for urban planners and city officials.
+    const context = `You are an expert AI urban planning assistant powered by Gemini 2.5 Flash, specializing in policy-making for urban planners and residents. 
+    Analyze the following urban health data for location ${location.latitude}, ${location.longitude} and provide insights, recommendations, and actionable policy advice for urban planners, city officials, and residents working together.
+    
+    IMPORTANT: All analysis is based on mock data for demonstration purposes.
     
     Focus on:
-    1. Key areas needing improvement
-    2. Specific actionable recommendations
-    3. Potential risks and opportunities
-    4. Best practices for urban sustainability
-    5. Comparisons with healthy city standards`;
+    1. Policy recommendations for urban planners and city governance
+    2. Community engagement strategies for residents
+    3. Collaborative policy-making approaches between planners and residents
+    4. Specific actionable recommendations for implementation
+    5. Potential risks and opportunities in policy development
+    6. Best practices for urban sustainability and resident-centered planning
+    7. Comparisons with healthy city standards and policy frameworks`;
 
     const prompt = `Urban Health Data Analysis:
     ${JSON.stringify(data, null, 2)}
@@ -77,10 +81,18 @@ export class GeminiService {
   }
 
   async generateUrbanInsights(query: string, location: { latitude: number; longitude: number }): Promise<string> {
-    const context = `You are an expert urban intelligence AI assistant. Help users understand urban health, sustainability, and smart city concepts. 
+    const context = `You are an expert AI urban intelligence assistant powered by Gemini 2.5 Flash, specialized in policy-making for urban planners and residents. Help users understand urban health, sustainability, smart city concepts, and collaborative policy development. 
     Current location: ${location.latitude}, ${location.longitude}
     
-    Provide practical, actionable advice about urban planning, environmental health, sustainability, and smart city technologies.`;
+    IMPORTANT: All insights are based on mock data for demonstration purposes.
+    
+    Provide practical, actionable advice about:
+    - Urban planning and policy development
+    - Community engagement and resident participation
+    - Collaborative policy-making between planners and residents
+    - Environmental health and sustainability policies
+    - Smart city technologies and governance
+    - Resident-centered urban development strategies`;
 
     return this.generateText(query, context);
   }
