@@ -10,7 +10,7 @@ export const API_CONFIG: APIConfig = {
     apiKey: 'GeSwTbVGBQWEsQ3TXk0ihGvtgDJtEaHfiTqKuejO'
   },
   n8n: {
-    endpoint: "https://n8n-production-5597.up.railway.app/webhook/urban-health-api",
+    endpoint: "https://lupus-cortex.up.railway.app/webhook-test/urban-health-api",
     enabled: true
   }
 };
