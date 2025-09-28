@@ -117,10 +117,11 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-ambient">
       {currentSection !== 'welcome' && (
-        <NavigationHeader
+        <NavigationHeader 
           currentSection={currentSection}
           onSectionChange={setCurrentSection}
           currentLocation={currentLocation}
+          onLocationChange={setCurrentLocation}
         />
       )}
       

@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Home, BarChart3, Map, Bot, Info, Box, Lightbulb } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Menu, Home, BarChart3, Map, Bot, Info, Box, Lightbulb, Edit3, MapPin, Navigation, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getCurrentLocation, searchLocationByName, parseCoordinates, LocationResult } from '@/services/geolocation-service';
 import lupusLogo from '@/assets/lupus-cortex-logo.png';
 
 interface NavigationHeaderProps {
   currentSection: string;
   onSectionChange: (section: string) => void;
   currentLocation?: { latitude: number; longitude: number };
+  onLocationChange?: (location: { latitude: number; longitude: number }) => void;
 }
 
 const NAV_ITEMS = [
@@ -24,14 +28,125 @@ const NAV_ITEMS = [
 export function NavigationHeader({ 
   currentSection, 
   onSectionChange, 
-  currentLocation 
+  currentLocation,
+  onLocationChange
 }: NavigationHeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<LocationResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleNavClick = (sectionId: string) => {
     onSectionChange(sectionId);
     setMobileMenuOpen(false);
   };
+
+  const handleLocationEdit = () => {
+    setIsEditingLocation(true);
+    setSearchQuery(currentLocation ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}` : '');
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleLocationCancel = () => {
+    setIsEditingLocation(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const handleLocationSave = async () => {
+    if (!searchQuery.trim()) return;
+    
+    const coordinates = parseCoordinates(searchQuery);
+    if (coordinates && onLocationChange) {
+      onLocationChange(coordinates);
+      setIsEditingLocation(false);
+      setSearchQuery('');
+      setSearchResults([]);
+    }
+  };
+
+  const handleLocationSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const coordinates = parseCoordinates(query);
+      if (coordinates) {
+        setSearchResults([{
+          latitude: coordinates.latitude,
+          longitude: coordinates.longitude,
+          displayName: `${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)}`,
+          city: 'Custom Coordinates',
+          country: 'Manual Entry'
+        } as LocationResult]);
+      } else {
+        const results = await searchLocationByName(query);
+        setSearchResults(results.slice(0, 5));
+      }
+    } catch (error) {
+      console.error('Location search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleLocationSelect = (location: LocationResult) => {
+    if (onLocationChange) {
+      onLocationChange({
+        latitude: location.latitude,
+        longitude: location.longitude
+      });
+    }
+    setIsEditingLocation(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const handleGetCurrentLocation = async () => {
+    setIsGettingLocation(true);
+    try {
+      const location = await getCurrentLocation();
+      if (onLocationChange) {
+        onLocationChange({
+          latitude: location.latitude,
+          longitude: location.longitude
+        });
+      }
+      setIsEditingLocation(false);
+      setSearchQuery('');
+      setSearchResults([]);
+    } catch (error) {
+      console.error('Error getting current location:', error);
+    } finally {
+      setIsGettingLocation(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleLocationSave();
+    } else if (e.key === 'Escape') {
+      handleLocationCancel();
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery && searchQuery !== `${currentLocation?.latitude.toFixed(4)}, ${currentLocation?.longitude.toFixed(4)}`) {
+        handleLocationSearch(searchQuery);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   return (
     <header 
@@ -79,12 +194,80 @@ export function NavigationHeader({
             })}
             
             {/* Location Badge - in desktop nav */}
-            <div className="ml-auto flex items-center">
+            <div className="ml-auto flex items-center relative">
               {currentLocation && (
-                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 transition-colors text-xs">
-                  <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
-                  {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
-                </Badge>
+                <div className="relative">
+                  {!isEditingLocation ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLocationEdit}
+                      className="h-auto p-0 hover:bg-transparent group"
+                    >
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 group-hover:bg-primary/20 transition-colors text-xs cursor-pointer">
+                        <MapPin className="w-2 h-2 mr-1" />
+                        {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
+                        <Edit3 className="w-3 h-3 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </Badge>
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <div className="relative">
+                        <Input
+                          ref={inputRef}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={handleKeyPress}
+                          placeholder="City name or lat, lng"
+                          className="w-48 h-8 text-xs"
+                        />
+                        {searchResults.length > 0 && (
+                          <Card className="absolute top-full left-0 w-full mt-1 z-50 max-h-48 overflow-auto">
+                            {searchResults.map((result, index) => (
+                              <button
+                                key={index}
+                                onClick={() => handleLocationSelect(result)}
+                                className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-xs border-b last:border-b-0 transition-colors"
+                              >
+                                <div className="font-medium">{result.city || 'Unknown'}</div>
+                                <div className="text-muted-foreground truncate">{result.displayName}</div>
+                                <div className="text-muted-foreground">{result.latitude.toFixed(4)}, {result.longitude.toFixed(4)}</div>
+                              </button>
+                            ))}
+                          </Card>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleGetCurrentLocation}
+                        disabled={isGettingLocation}
+                        className="h-8 w-8 p-0"
+                        title="Use current location"
+                      >
+                        <Navigation className={cn("w-3 h-3", isGettingLocation && "animate-spin")} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleLocationSave}
+                        className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                        title="Save location"
+                      >
+                        <Check className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleLocationCancel}
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                        title="Cancel"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </nav>
@@ -135,10 +318,18 @@ export function NavigationHeader({
                       />
                       <p className="text-sm text-muted-foreground">Advanced Analytics Platform</p>
                       {currentLocation && (
-                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs mt-2">
-                          <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
-                          {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
-                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"  
+                          onClick={handleLocationEdit}
+                          className="h-auto p-0 hover:bg-transparent group mt-2"
+                        >
+                          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 group-hover:bg-primary/20 transition-colors text-xs cursor-pointer">
+                            <MapPin className="w-2 h-2 mr-1" />
+                            {currentLocation.latitude.toFixed(2)}°, {currentLocation.longitude.toFixed(2)}°
+                            <Edit3 className="w-3 h-3 ml-2 opacity-60 group-hover:opacity-100 transition-opacity" />
+                          </Badge>
+                        </Button>
                       )}
                     </div>
                     
