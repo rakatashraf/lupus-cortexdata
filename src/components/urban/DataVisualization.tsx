@@ -319,7 +319,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     });
   };
 
-  const applyPreset = (presetId: string) => {
+  const applyPreset = async (presetId: string) => {
     setSelectedPreset(presetId);
     const preset = ANALYSIS_PRESETS.find(p => p.id === presetId);
     if (preset) {
@@ -335,6 +335,11 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           enabled: layersToEnable.includes(layer.id)
         }))
       );
+      
+      // Automatically load chart data after applying preset
+      setTimeout(() => {
+        loadChartData();
+      }, 100); // Small delay to ensure state updates are applied
     }
   };
 
