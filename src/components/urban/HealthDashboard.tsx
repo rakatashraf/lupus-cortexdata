@@ -12,6 +12,7 @@ import { IndexDetailModal } from './IndexDetailModal';
 import { IndexMeasurementsList } from './IndexMeasurementsList';
 import { HumanWellbeingCard } from './HumanWellbeingCard';
 import { RecommendationsBanner } from './RecommendationsBanner';
+import { calculateIndexStatus, calculateProgressPercentage, getProgressClass } from '@/utils/index-status-calculator';
 
 interface HealthDashboardProps {
   latitude?: number;
@@ -74,28 +75,17 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
     }
   };
 
-  const getStatusVariant = (score: number, target: number): "excellent" | "good" | "moderate" | "critical" => {
-    const percentage = (score / target) * 100;
-    if (percentage >= 95) return "excellent";  // Green: Highly good/Lowest risk
-    if (percentage >= 70) return "good";       // Blue: Moderate good/Low risk  
-    if (percentage >= 50) return "moderate";   // Yellow: Needs attention/Emerging risks
-    return "critical";                         // Red: Critical/High risk
+  const getStatusVariant = (indexName: string, score: number, target: number, indexKey: string) => {
+    return calculateIndexStatus(indexName, score, target, indexKey);
   };
 
-  const getStatusClass = (score: number, target: number) => {
-    const percentage = (score / target) * 100;
-    if (percentage >= 95) return 'status-excellent';
-    if (percentage >= 70) return 'status-good';
-    if (percentage >= 50) return 'status-moderate';
-    return 'status-critical';
+  const getStatusClass = (indexName: string, score: number, target: number, indexKey: string) => {
+    const status = calculateIndexStatus(indexName, score, target, indexKey);
+    return `status-${status}`;
   };
 
-  const getProgressClass = (score: number, target: number) => {
-    const percentage = (score / target) * 100;
-    if (percentage >= 95) return "bg-green-600";   // Green: Highly good
-    if (percentage >= 70) return "bg-blue-600";    // Blue: Moderate good
-    if (percentage >= 50) return "bg-yellow-500";  // Yellow: Needs attention
-    return "bg-red-600";                           // Red: Critical
+  const getIndexProgressClass = (indexName: string, score: number, target: number, indexKey: string) => {
+    return getProgressClass(indexName, score, target, indexKey);
   };
 
   const getHealthStatusColor = (status: string) => {
@@ -213,7 +203,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
               key={key} 
               className={cn(
                 "bg-gradient-card shadow-card hover:shadow-interactive transition-all duration-300 hover:scale-105 cursor-pointer group min-h-[200px] touch-manipulation",
-                getStatusClass(index.total_score, index.target)
+                getStatusClass(index.index_name, index.total_score, index.target, key)
               )}
               onClick={() => setSelectedIndex({ index, key })}
             >
@@ -221,7 +211,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                 <div className="flex items-center justify-between">
                   <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6 group-hover:scale-110 transition-transform", `text-${colorClass}`)} />
                   <Badge 
-                    variant={getStatusVariant(index.total_score, index.target)}
+                    variant={getStatusVariant(index.index_name, index.total_score, index.target, key)}
                     className="text-xs font-bold shadow-sm"
                   >
                     {index.total_score}/{index.target}
@@ -239,20 +229,20 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                   <div className="flex justify-between items-center">
                     <span className="text-xs sm:text-sm font-medium">Progress to Target</span>
                     <span className="text-xs sm:text-sm text-muted-foreground">
-                      {Math.round((index.total_score / index.target) * 100)}%
+                      {Math.round(calculateProgressPercentage(index.index_name, index.total_score, index.target, key))}%
                     </span>
                   </div>
                   <Progress 
-                    value={(index.total_score / index.target) * 100} 
+                    value={calculateProgressPercentage(index.index_name, index.total_score, index.target, key)} 
                     className="h-2"
-                    indicatorClassName={getProgressClass(index.total_score, index.target)}
+                    indicatorClassName={getIndexProgressClass(index.index_name, index.total_score, index.target, key)}
                   />
                 </div>
                 
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Status:</p>
                   <Badge 
-                    variant={getStatusVariant(index.total_score, index.target)}
+                    variant={getStatusVariant(index.index_name, index.total_score, index.target, key)}
                     className="text-sm font-semibold px-3 py-1 w-full justify-center"
                   >
                     {index.status}

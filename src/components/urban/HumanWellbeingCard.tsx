@@ -5,6 +5,7 @@ import { Progress } from '@/components/ui/progress';
 import { Heart } from 'lucide-react';
 import { UrbanIndex } from '@/types/urban-indices';
 import { cn } from '@/lib/utils';
+import { calculateIndexStatus, calculateProgressPercentage, getProgressClass } from '@/utils/index-status-calculator';
 
 interface HumanWellbeingCardProps {
   index: UrbanIndex;
@@ -14,9 +15,7 @@ interface HumanWellbeingCardProps {
 
 export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeingCardProps) {
   const getStatusVariant = (score: number, target: number) => {
-    if (score >= target) return 'default';
-    if (score >= target * 0.8) return 'secondary';
-    return 'destructive';
+    return calculateIndexStatus('Human Well-being Index (HWI)', score, target, 'hwi');
   };
 
   const getHealthStatusColor = (status: string) => {
@@ -25,7 +24,7 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
     return 'text-danger';
   };
 
-  const progressPercent = (index.total_score / index.target) * 100;
+  const progressPercent = calculateProgressPercentage('Human Well-being Index (HWI)', index.total_score, index.target, 'hwi');
 
   return (
     <Card 
@@ -72,6 +71,7 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
           <Progress 
             value={progressPercent} 
             className="h-2 bg-primary/20"
+            indicatorClassName={getProgressClass('Human Well-being Index (HWI)', index.total_score, index.target, 'hwi')}
           />
         </div>
         
