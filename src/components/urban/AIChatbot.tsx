@@ -4,12 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb, CheckCircle, AlertCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb } from 'lucide-react';
 import { AIMessage } from '@/types/urban-indices';
-import { geminiService } from '@/services/gemini-service';
-import { API_CONFIG, FALLBACK_MESSAGES, checkServiceStatus } from '@/config/api';
+import { n8nService } from '@/services/n8n-service';
+import { API_CONFIG, FALLBACK_MESSAGES } from '@/config/api';
 import { cn } from '@/lib/utils';
 
 interface AIChatbotProps {
@@ -21,11 +20,10 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [webhookHealth, setWebhookHealth] = useState<{status: 'online' | 'offline' | 'unknown'; message: string}>({
-    status: 'unknown', 
-    message: 'Checking connection...'
+  const [serviceStatus, setServiceStatus] = useState({
+    gemini: true,
+    n8n: true
   });
-  const [retryCount, setRetryCount] = useState(0);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -34,37 +32,36 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     const welcomeMessages: AIMessage[] = [
       {
         id: 'welcome-1',
-        content: "🏛️ Hello! I'm Lupus Cortex AI, powered by Gemini 1.5 Flash for urban planning and policy-making!",
+        content: "🏛️ Hello! I'm your AI assistant powered by Gemini 2.5 Flash for urban planning and policy-making!",
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Lupus Cortex AI (Gemini 1.5 Flash)' }
+        metadata: { model: 'Gemini 2.5 Flash' }
       },
       {
         id: 'welcome-2',
-        content: `I specialize in evidence-based policy development for urban planners and residents:
-• 🏛️ Policy recommendations and urban governance frameworks
-• 🤝 Community engagement and participatory planning strategies
-• 📊 Data-driven analysis with actionable policy insights
-• 📈 Implementation roadmaps for sustainable city policies
-• 🌍 Collaborative approaches between planners & residents
-• 💡 Climate resilience and inclusive urban development`,
+        content: `I specialize in policy-making for urban planners and residents working together:
+• 🏛️ Policy recommendations and urban governance
+• 🤝 Community engagement strategies for residents
+• 📊 Data analysis with policy insights
+• 📈 Generate policy-focused charts and visualizations
+• 🌍 Collaborative planning between planners & residents
+• 💡 Urban sustainability and resident-centered policies`,
         type: 'assistant',
         timestamp: new Date()
       },
       {
         id: 'welcome-3',
         content: `✨ Try asking about:
-• 'Policy frameworks for community engagement'
-• 'How can we implement resident-centered planning?'
-• 'Best practices for sustainable urban governance'
-• 'Climate adaptation strategies for cities'`,
+• 'Policy recommendations for community engagement'
+• 'How can residents participate in urban planning?'
+• 'Best practices for collaborative policy-making'
+• 'Generate a policy framework for sustainable cities'`,
         type: 'assistant',
         timestamp: new Date()
       }
     ];
 
     setMessages(welcomeMessages);
-    checkWebhookHealth();
   }, []);
 
   useEffect(() => {
@@ -73,33 +70,6 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
-
-  const checkWebhookHealth = async () => {
-    try {
-      console.log('🔍 Checking AI service health...');
-      const health = await geminiService.checkWebhookHealth();
-      console.log('🏥 Health check result:', health);
-      setWebhookHealth(health);
-      
-      // If offline, try a quick connectivity test
-      if (health.status === 'offline') {
-        console.log('🔄 Attempting quick connectivity test...');
-        const isConnected = await geminiService.quickConnectivityTest();
-        if (isConnected) {
-          setWebhookHealth({
-            status: 'online',
-            message: 'AI service is responding'
-          });
-        }
-      }
-    } catch (error) {
-      console.error('❌ Health check error:', error);
-      setWebhookHealth({
-        status: 'offline',
-        message: 'Unable to verify AI service status'
-      });
-    }
-  };
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
@@ -114,98 +84,166 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
-    setRetryCount(0);
 
     try {
-      console.log('📤 Sending message to AI:', userMessage.content);
-      
-      const response = await geminiService.generateUrbanInsights(
+      // Send to n8n chatbot endpoint
+      const response = await n8nService.getChatbotResponse(
         userMessage.content,
-        { latitude, longitude }
+        latitude,
+        longitude
       );
 
-      console.log('📥 Received AI response:', response.substring(0, 100) + '...');
+      let assistantContent = '';
+      let metadata = {};
+
+      if (response && response.success !== false) {
+          if (response.data && response.data.message) {
+            assistantContent = response.data.message;
+            metadata = {
+              model: response.data.ai_model || 'Gemini 2.5 Flash',
+              timestamp: response.data.timestamp
+            };
+        } else if (response.message) {
+          assistantContent = response.message;
+        } else {
+          assistantContent = JSON.stringify(response, null, 2);
+        }
+      } else {
+        // Fallback to local AI processing
+        assistantContent = await processMessageLocally(userMessage.content);
+        metadata = { model: 'Local Processing' };
+      }
 
       const assistantMessage: AIMessage = {
         id: `assistant-${Date.now()}`,
-        content: response,
+        content: assistantContent,
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Lupus Cortex AI (Gemini 1.5 Flash)' }
+        metadata
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
+    } catch (error) {
+      console.error('Error sending message:', error);
       
-      // Update health status on success
-      setWebhookHealth({
-        status: 'online',
-        message: 'Lupus Cortex AI is ready'
-      });
-
-    } catch (error: any) {
-      console.error('❌ AI chat error:', error);
-      
-      // Determine error type and provide specific guidance
-      let errorContent = '';
-      let shouldUpdateHealth = true;
-
-      if (error.message.includes('CORS') || error.message.includes('blocked')) {
-        errorContent = `🔒 **Connection Security Issue**: The AI service connection is blocked by browser security settings. This is a temporary network issue that usually resolves itself.\n\n💡 **What you can do**: Try again in a few moments. The service will automatically reconnect.`;
-        setWebhookHealth({
-          status: 'offline',
-          message: 'CORS/Security block detected'
-        });
-      } else if (error.message.includes('timeout')) {
-        errorContent = `⏱️ **Response Timeout**: The AI is taking longer than expected to process your request. This can happen during heavy usage.\n\n💡 **Try**: Asking a shorter question or try again in a moment.`;
-        shouldUpdateHealth = false; // Don't mark as offline for timeouts
-      } else if (error.message.includes('network') || error.message.includes('reach')) {
-        errorContent = `🌐 **Network Error**: Unable to reach the AI service.\n\n💡 **Check**: Your internet connection and try again.`;
-        setWebhookHealth({
-          status: 'offline',
-          message: 'Network connectivity issue'
-        });
-      } else if (error.message.includes('unavailable') || error.message.includes('server')) {
-        errorContent = `🔧 **Service Maintenance**: The AI service is temporarily unavailable.\n\n💡 **Wait**: A moment and try again. Service should resume shortly.`;
-        setWebhookHealth({
-          status: 'offline',
-          message: 'AI service unavailable'
-        });
-      } else {
-        errorContent = `⚠️ **Unexpected Error**: ${error.message}\n\n💡 **Try**: Rephrasing your question or try again.`;
-        if (shouldUpdateHealth) {
-          setWebhookHealth({
-            status: 'offline',
-            message: 'Unknown service error'
-          });
-        }
-      }
-
       const errorMessage: AIMessage = {
-        id: `assistant-${Date.now()}`,
-        content: errorContent,
+        id: `error-${Date.now()}`,
+        content: "I'm having some technical difficulties. Let me try to help you with a general response about urban intelligence and sustainability.",
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Lupus Cortex AI - Error' }
+        metadata: { model: 'Fallback' }
       };
 
       setMessages(prev => [...prev, errorMessage]);
-      setRetryCount(prev => prev + 1);
-
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
     }
   };
 
-  const retryLastMessage = () => {
-    const lastUserMessage = messages.filter(m => m.type === 'user').pop();
-    if (lastUserMessage && retryCount < 3) {
-      setInputMessage(lastUserMessage.content);
-      setRetryCount(prev => prev + 1);
-      checkWebhookHealth();
-    }
-  };
+  const processMessageLocally = async (message: string): Promise<string> => {
+    const lowerMessage = message.toLowerCase();
 
+    // Detect different types of requests
+    if (lowerMessage.includes('generate') && (lowerMessage.includes('image') || lowerMessage.includes('photo') || lowerMessage.includes('picture'))) {
+      return "🖼️ I can help generate images, but this requires connecting to the image generation service. Please make sure your AI services are properly configured.";
+    }
+
+    if (lowerMessage.includes('chart') || lowerMessage.includes('graph') || lowerMessage.includes('visualization')) {
+      return `📊 I can help you create data visualizations! Based on your current location (${latitude.toFixed(4)}, ${longitude.toFixed(4)}), I can generate charts showing:
+
+• Climate Resilience Index trends
+• Air Quality Health Impact over time
+• Urban Heat Vulnerability patterns
+• Water Security indicators
+• Green Equity Assessment data
+
+Would you like me to create a specific type of chart for your area?`;
+    }
+
+    if (lowerMessage.includes('air quality') || lowerMessage.includes('pollution')) {
+      return `🌬️ Air Quality Analysis for your area:
+
+Based on typical urban patterns, here are key recommendations:
+• Monitor PM2.5 and NO2 levels regularly
+• Increase green infrastructure to filter air pollutants
+• Promote electric vehicle adoption
+• Implement clean energy sources
+• Create car-free zones in city centers
+
+The Air Quality Health Impact (AQHI) index considers NO2, PM2.5, PM10, O3, and SO2 concentrations. Lower scores indicate better air quality.`;
+    }
+
+    if (lowerMessage.includes('climate') || lowerMessage.includes('temperature') || lowerMessage.includes('heat')) {
+      return `🌡️ Climate Resilience Insights:
+
+For your location (${latitude.toFixed(4)}, ${longitude.toFixed(4)}):
+• Focus on heat adaptation strategies
+• Implement urban cooling solutions
+• Enhance green infrastructure coverage
+• Prepare for extreme weather events
+• Improve flood risk management
+
+The Climate Resilience Index (CRI) measures temperature adaptation, heat wave preparedness, flood management, air quality resilience, and green infrastructure.`;
+    }
+
+    if (lowerMessage.includes('sustainability') || lowerMessage.includes('urban planning') || lowerMessage.includes('policy')) {
+      return `🏛️ Urban Policy & Sustainability Best Practices for Planners & Residents:
+
+**Policy Development Framework:**
+1. **Community Engagement Policies**: Resident participation in planning decisions
+2. **Green Infrastructure Policies**: Parks, green roofs, urban forest regulations
+3. **Transportation Policies**: Public transit, cycling networks, walkability standards
+4. **Energy Transition Policies**: Renewable energy mandates, efficiency standards
+5. **Water Management Policies**: Conservation, rainwater harvesting, quality protection
+6. **Waste Reduction Policies**: Circular economy, recycling mandates, producer responsibility
+7. **Social Equity Policies**: Affordable housing, equal access to green spaces
+8. **Smart City Governance**: Data privacy, digital inclusion, transparent technology use
+
+**Collaborative Implementation:**
+• Resident advisory councils for policy development
+• Community-led sustainability initiatives
+• Transparent policy implementation tracking
+• Regular feedback mechanisms between planners and residents
+
+*Note: Analysis based on mock data for demonstration purposes.*`;
+    }
+
+    if (lowerMessage.includes('data') || lowerMessage.includes('analysis') || lowerMessage.includes('indices')) {
+      return `📈 Urban Health Data Analysis:
+
+I can analyze data from 9 key indices:
+1. **Climate Resilience Index (CRI)** - Climate adaptation capacity
+2. **Urban Heat Vulnerability Index (UHVI)** - Heat risk assessment  
+3. **Air Quality Health Impact (AQHI)** - Pollution health effects
+4. **Water Security Indicator (WSI)** - Water resource availability
+5. **Green Equity Assessment (GEA)** - Green space access
+6. **Social Cohesion Metrics (SCM)** - Community connectivity
+7. **Environmental Justice Tracker (EJT)** - Equity in environmental burden
+8. **Transportation Accessibility Score (TAS)** - Mobility options
+9. **Disaster Preparedness Index (DPI)** - Emergency readiness
+
+Each index uses satellite data and ground measurements for comprehensive urban health assessment.`;
+    }
+
+    // Default helpful response
+    return `🏛️ I'm here to help with urban planning policy-making for planners and residents! 
+
+I can assist with:
+• Policy recommendations for urban planners
+• Community engagement strategies for residents
+• Collaborative policy development frameworks
+• Urban health indices analysis and policy implications
+• Environmental data interpretation for policy-making
+• Sustainability policy recommendations
+• Climate adaptation policy strategies
+• Resident-centered urban development insights
+
+*All analysis is based on mock data for demonstration purposes.*
+
+What specific aspect of urban policy or collaborative planning would you like to explore?`;
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -229,73 +267,35 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
-              Lupus Cortex AI
+              AI Urban Policy Assistant - Gemini 2.5 Flash
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Badge 
-                variant={webhookHealth?.status === 'online' ? 'default' : 
-                         webhookHealth?.status === 'offline' ? 'destructive' : 'secondary'}
-                className="flex items-center gap-1"
-              >
-                {webhookHealth?.status === 'online' ? (
-                  <><Wifi className="w-3 h-3" /> Connected</>
-                ) : webhookHealth?.status === 'offline' ? (
-                  <><WifiOff className="w-3 h-3" /> Disconnected</>
-                ) : (
-                  <><AlertCircle className="w-3 h-3" /> Checking...</>
-                )}
+              <Badge variant={serviceStatus.gemini ? "default" : "secondary"}>
+                {serviceStatus.gemini ? "🤖 AI Active" : "🤖 Limited"}
               </Badge>
-              {webhookHealth?.status !== 'online' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={checkWebhookHealth}
-                  className="h-6 w-6 p-0"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                </Button>
-              )}
+              <Badge variant={serviceStatus.n8n ? "default" : "secondary"}>
+                {serviceStatus.n8n ? "📊 Data Active" : "📊 Offline"}
+              </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Demo Notice */}
-          <Alert className="mb-4">
-            <Info className="h-4 w-4" />
-            <AlertTitle>Demo Mode</AlertTitle>
-            <AlertDescription>
-              AI responses powered by Lupus Cortex webhook with Gemini 1.5 Flash. Using demonstration data for urban planning insights.
+          {/* Mock Data Disclaimer */}
+          <Alert className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+            <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200">
+              <strong>Notice:</strong> All chats are generated/analyzed using mock data for demonstration purposes.
             </AlertDescription>
           </Alert>
 
-          {/* Status Alerts */}
-          {webhookHealth?.status === 'offline' && (
-            <Alert className="mb-4" variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Connection Issue</AlertTitle>
-              <AlertDescription>
-                {webhookHealth.message}. The AI will automatically reconnect when available.
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={checkWebhookHealth}
-                  className="ml-2 h-6"
-                >
-                  Test Connection
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-          
-          {webhookHealth?.status === 'online' && (
-            <Alert className="mb-4">
-              <Wifi className="h-4 w-4" />
-              <AlertTitle>AI Ready</AlertTitle>
-              <AlertDescription>
-                Lupus Cortex AI is connected and ready to assist with urban planning insights.
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* Service Status */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Location: {latitude.toFixed(4)}°, {longitude.toFixed(4)}° • 
+              Connected to Gemini 2.5 Flash AI for urban planning and policy-making assistance
+            </AlertDescription>
+          </Alert>
 
           {/* Chat Messages */}
           <div className="h-96 border border-border rounded-lg bg-muted/20">
@@ -375,67 +375,71 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
             />
             <Button 
               onClick={sendMessage} 
-              disabled={!inputMessage.trim() || isLoading || webhookHealth?.status === 'offline'}
-              size="sm"
-              title={webhookHealth?.status === 'offline' ? 'AI service offline' : 'Send message'}
+              disabled={!inputMessage.trim() || isLoading}
+              className="bg-gradient-primary hover:shadow-glow"
             >
-              {isLoading ? <LoadingSpinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </div>
 
           {/* Quick Actions */}
-          <div className="space-y-3 mb-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setInputMessage("What are the key urban health indicators for this location?")}
-                className="text-xs"
-                disabled={webhookHealth?.status === 'offline' || isLoading}
-              >
-                Urban Health Indicators
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setInputMessage("How can we improve air quality in dense urban areas?")}
-                className="text-xs"
-                disabled={webhookHealth?.status === 'offline' || isLoading}
-              >
-                Air Quality Solutions
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setInputMessage("What sustainable transportation policies should cities implement?")}
-                className="text-xs"
-                disabled={webhookHealth?.status === 'offline' || isLoading}
-              >
-                Transportation Policy
-              </Button>
-            </div>
-            
-            {webhookHealth?.status === 'offline' && retryCount < 3 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={retryLastMessage}
-                className="w-full"
-              >
-                Retry Last Message ({retryCount}/3)
-              </Button>
-            )}
-          </div>
-
-          {/* Clear Chat */}
-          <div className="pt-2 border-t border-border">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={clearChat}
-              className="text-muted-foreground hover:text-foreground"
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("What are the best policy recommendations for collaborative urban planning?")}
+              disabled={isLoading}
             >
-              Clear Chat History
+              <Lightbulb className="h-3 w-3 mr-1" />
+              Policy Recommendations
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("How can residents participate in urban planning decisions?")}
+              disabled={isLoading}
+            >
+              <Info className="h-3 w-3 mr-1" />
+              Resident Engagement
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("Show me urban health policy data for this location")}
+              disabled={isLoading}
+            >
+              <BarChart3 className="h-3 w-3 mr-1" />
+              Policy Data
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("Generate a collaborative planning framework for this city")}
+              disabled={isLoading}
+            >
+              <BarChart3 className="h-3 w-3 mr-1" />
+              Planning Framework
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInputMessage("Generate an image of residents collaborating with urban planners")}
+              disabled={isLoading}
+            >
+              <Camera className="h-3 w-3 mr-1" />
+              Generate Image
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearChat}
+              disabled={isLoading}
+            >
+              Clear Chat
             </Button>
           </div>
         </CardContent>
