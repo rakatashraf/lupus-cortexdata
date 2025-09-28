@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb, CheckCircle, AlertCircle } from 'lucide-react';
+import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb, CheckCircle, AlertCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { AIMessage } from '@/types/urban-indices';
 import { geminiService } from '@/services/gemini-service';
 import { API_CONFIG, FALLBACK_MESSAGES, checkServiceStatus } from '@/config/api';
@@ -21,11 +21,13 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [webhookStatus, setWebhookStatus] = useState<'online' | 'offline' | 'checking' | 'unknown'>('unknown');
+  const [webhookHealth, setWebhookHealth] = useState<{status: 'online' | 'offline' | 'unknown'; message: string}>({
+    status: 'unknown', 
+    message: 'Checking connection...'
+  });
   const [retryCount, setRetryCount] = useState(0);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const serviceStatus = checkServiceStatus();
 
   useEffect(() => {
     // Initialize with welcome messages
@@ -73,12 +75,29 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
   }, [messages]);
 
   const checkWebhookHealth = async () => {
-    setWebhookStatus('checking');
     try {
+      console.log('🔍 Checking AI service health...');
       const health = await geminiService.checkWebhookHealth();
-      setWebhookStatus(health.status);
+      console.log('🏥 Health check result:', health);
+      setWebhookHealth(health);
+      
+      // If offline, try a quick connectivity test
+      if (health.status === 'offline') {
+        console.log('🔄 Attempting quick connectivity test...');
+        const isConnected = await geminiService.quickConnectivityTest();
+        if (isConnected) {
+          setWebhookHealth({
+            status: 'online',
+            message: 'AI service is responding'
+          });
+        }
+      }
     } catch (error) {
-      setWebhookStatus('offline');
+      console.error('❌ Health check error:', error);
+      setWebhookHealth({
+        status: 'offline',
+        message: 'Unable to verify AI service status'
+      });
     }
   };
 
@@ -98,10 +117,14 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     setRetryCount(0);
 
     try {
+      console.log('📤 Sending message to AI:', userMessage.content);
+      
       const response = await geminiService.generateUrbanInsights(
         userMessage.content,
         { latitude, longitude }
       );
+
+      console.log('📥 Received AI response:', response.substring(0, 100) + '...');
 
       const assistantMessage: AIMessage = {
         id: `assistant-${Date.now()}`,
@@ -112,22 +135,49 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      setWebhookStatus('online');
+      
+      // Update health status on success
+      setWebhookHealth({
+        status: 'online',
+        message: 'Lupus Cortex AI is ready'
+      });
 
     } catch (error: any) {
-      console.error('Error with Lupus Cortex AI service:', error);
-      setWebhookStatus('offline');
+      console.error('❌ AI chat error:', error);
       
-      let errorContent = "I'm experiencing technical difficulties. ";
-      
-      if (error.message.includes('timeout')) {
-        errorContent += "The AI request timed out. Please try a shorter message or try again.";
-      } else if (error.message.includes('not found')) {
-        errorContent += "AI service endpoint not found. Please check configuration.";
-      } else if (error.message.includes('temporarily unavailable')) {
-        errorContent += "AI service is temporarily unavailable. Please try again in a moment.";
+      // Determine error type and provide specific guidance
+      let errorContent = '';
+      let shouldUpdateHealth = true;
+
+      if (error.message.includes('CORS') || error.message.includes('blocked')) {
+        errorContent = `🔒 **Connection Security Issue**: The AI service connection is blocked by browser security settings. This is a temporary network issue that usually resolves itself.\n\n💡 **What you can do**: Try again in a few moments. The service will automatically reconnect.`;
+        setWebhookHealth({
+          status: 'offline',
+          message: 'CORS/Security block detected'
+        });
+      } else if (error.message.includes('timeout')) {
+        errorContent = `⏱️ **Response Timeout**: The AI is taking longer than expected to process your request. This can happen during heavy usage.\n\n💡 **Try**: Asking a shorter question or try again in a moment.`;
+        shouldUpdateHealth = false; // Don't mark as offline for timeouts
+      } else if (error.message.includes('network') || error.message.includes('reach')) {
+        errorContent = `🌐 **Network Error**: Unable to reach the AI service.\n\n💡 **Check**: Your internet connection and try again.`;
+        setWebhookHealth({
+          status: 'offline',
+          message: 'Network connectivity issue'
+        });
+      } else if (error.message.includes('unavailable') || error.message.includes('server')) {
+        errorContent = `🔧 **Service Maintenance**: The AI service is temporarily unavailable.\n\n💡 **Wait**: A moment and try again. Service should resume shortly.`;
+        setWebhookHealth({
+          status: 'offline',
+          message: 'AI service unavailable'
+        });
       } else {
-        errorContent += `AI service error: ${error.message}`;
+        errorContent = `⚠️ **Unexpected Error**: ${error.message}\n\n💡 **Try**: Rephrasing your question or try again.`;
+        if (shouldUpdateHealth) {
+          setWebhookHealth({
+            status: 'offline',
+            message: 'Unknown service error'
+          });
+        }
       }
 
       const errorMessage: AIMessage = {
@@ -139,6 +189,8 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
       };
 
       setMessages(prev => [...prev, errorMessage]);
+      setRetryCount(prev => prev + 1);
+
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -181,22 +233,26 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge 
-                variant={webhookStatus === 'online' ? 'default' : webhookStatus === 'offline' ? 'destructive' : 'secondary'}
-                className="text-xs"
+                variant={webhookHealth?.status === 'online' ? 'default' : 
+                         webhookHealth?.status === 'offline' ? 'destructive' : 'secondary'}
+                className="flex items-center gap-1"
               >
-                {webhookStatus === 'online' && '🟢 Online'}
-                {webhookStatus === 'offline' && '🔴 Offline'}
-                {webhookStatus === 'checking' && '🟡 Checking...'}
-                {webhookStatus === 'unknown' && '⚪ Unknown'}
+                {webhookHealth?.status === 'online' ? (
+                  <><Wifi className="w-3 h-3" /> Connected</>
+                ) : webhookHealth?.status === 'offline' ? (
+                  <><WifiOff className="w-3 h-3" /> Disconnected</>
+                ) : (
+                  <><AlertCircle className="w-3 h-3" /> Checking...</>
+                )}
               </Badge>
-              {webhookStatus === 'offline' && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+              {webhookHealth?.status !== 'online' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={checkWebhookHealth}
-                  className="text-xs"
+                  className="h-6 w-6 p-0"
                 >
-                  Retry
+                  <RefreshCw className="w-3 h-3" />
                 </Button>
               )}
             </div>
@@ -213,22 +269,30 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
           </Alert>
 
           {/* Status Alerts */}
-          {serviceStatus.n8n && webhookStatus === 'online' && (
-            <Alert className="mb-4">
-              <CheckCircle className="h-4 w-4" />
-              <AlertTitle>AI Service Ready</AlertTitle>
-              <AlertDescription>
-                Lupus Cortex AI is connected and ready for urban intelligence queries.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {webhookStatus === 'offline' && (
-            <Alert variant="destructive" className="mb-4">
+          {webhookHealth?.status === 'offline' && (
+            <Alert className="mb-4" variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Connection Issue</AlertTitle>
               <AlertDescription>
-                AI service is currently unavailable. Please check connection and try again.
+                {webhookHealth.message}. The AI will automatically reconnect when available.
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={checkWebhookHealth}
+                  className="ml-2 h-6"
+                >
+                  Test Connection
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {webhookHealth?.status === 'online' && (
+            <Alert className="mb-4">
+              <Wifi className="h-4 w-4" />
+              <AlertTitle>AI Ready</AlertTitle>
+              <AlertDescription>
+                Lupus Cortex AI is connected and ready to assist with urban planning insights.
               </AlertDescription>
             </Alert>
           )}
@@ -311,9 +375,9 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
             />
             <Button 
               onClick={sendMessage} 
-              disabled={!inputMessage.trim() || isLoading || webhookStatus === 'offline'}
+              disabled={!inputMessage.trim() || isLoading || webhookHealth?.status === 'offline'}
               size="sm"
-              title={webhookStatus === 'offline' ? 'AI service offline' : 'Send message'}
+              title={webhookHealth?.status === 'offline' ? 'AI service offline' : 'Send message'}
             >
               {isLoading ? <LoadingSpinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
             </Button>
@@ -327,7 +391,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
                 size="sm"
                 onClick={() => setInputMessage("What are the key urban health indicators for this location?")}
                 className="text-xs"
-                disabled={webhookStatus === 'offline' || isLoading}
+                disabled={webhookHealth?.status === 'offline' || isLoading}
               >
                 Urban Health Indicators
               </Button>
@@ -336,7 +400,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
                 size="sm"
                 onClick={() => setInputMessage("How can we improve air quality in dense urban areas?")}
                 className="text-xs"
-                disabled={webhookStatus === 'offline' || isLoading}
+                disabled={webhookHealth?.status === 'offline' || isLoading}
               >
                 Air Quality Solutions
               </Button>
@@ -345,13 +409,13 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
                 size="sm"
                 onClick={() => setInputMessage("What sustainable transportation policies should cities implement?")}
                 className="text-xs"
-                disabled={webhookStatus === 'offline' || isLoading}
+                disabled={webhookHealth?.status === 'offline' || isLoading}
               >
                 Transportation Policy
               </Button>
             </div>
             
-            {webhookStatus === 'offline' && retryCount < 3 && (
+            {webhookHealth?.status === 'offline' && retryCount < 3 && (
               <Button
                 variant="secondary"
                 size="sm"
