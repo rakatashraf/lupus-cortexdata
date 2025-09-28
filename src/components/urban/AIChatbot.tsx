@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb } from 'lucide-react';
 import { AIMessage } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
+import { geminiService } from '@/services/gemini-service';
 import { API_CONFIG, FALLBACK_MESSAGES } from '@/config/api';
 import { cn } from '@/lib/utils';
 
@@ -86,56 +87,79 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     setIsLoading(true);
 
     try {
-      // Send to n8n chatbot endpoint
-      const response = await n8nService.getChatbotResponse(
+      // Try Gemini 2.5 Flash first
+      const response = await geminiService.generateUrbanInsights(
         userMessage.content,
-        latitude,
-        longitude
+        { latitude, longitude }
       );
-
-      let assistantContent = '';
-      let metadata = {};
-
-      if (response && response.success !== false) {
-          if (response.data && response.data.message) {
-            assistantContent = response.data.message;
-            metadata = {
-              model: response.data.ai_model || 'Gemini 2.5 Flash',
-              timestamp: response.data.timestamp
-            };
-        } else if (response.message) {
-          assistantContent = response.message;
-        } else {
-          assistantContent = JSON.stringify(response, null, 2);
-        }
-      } else {
-        // Fallback to local AI processing
-        assistantContent = await processMessageLocally(userMessage.content);
-        metadata = { model: 'Local Processing' };
-      }
 
       const assistantMessage: AIMessage = {
         id: `assistant-${Date.now()}`,
-        content: assistantContent,
+        content: response,
         type: 'assistant',
         timestamp: new Date(),
-        metadata
+        metadata: { model: 'Gemini 2.5 Flash' }
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
-    } catch (error) {
-      console.error('Error sending message:', error);
+    } catch (geminiError) {
+      console.error('Error with Gemini service:', geminiError);
       
-      const errorMessage: AIMessage = {
-        id: `error-${Date.now()}`,
-        content: "I'm having some technical difficulties. Let me try to help you with a general response about urban intelligence and sustainability.",
-        type: 'assistant',
-        timestamp: new Date(),
-        metadata: { model: 'Fallback' }
-      };
+      try {
+        // Fallback to n8n service
+        const response = await n8nService.getChatbotResponse(
+          userMessage.content,
+          latitude,
+          longitude
+        );
 
-      setMessages(prev => [...prev, errorMessage]);
+        let assistantContent = '';
+        let metadata = {};
+
+        if (response && response.success !== false) {
+          if (response.data && response.data.message) {
+            assistantContent = response.data.message;
+            metadata = {
+              model: response.data.ai_model || 'Urban Intelligence API',
+              timestamp: response.data.timestamp
+            };
+          } else if (response.message) {
+            assistantContent = response.message;
+            metadata = { model: 'Urban Intelligence API' };
+          } else {
+            assistantContent = JSON.stringify(response, null, 2);
+            metadata = { model: 'Urban Intelligence API' };
+          }
+        } else {
+          throw new Error('N8N service failed');
+        }
+
+        const assistantMessage: AIMessage = {
+          id: `assistant-${Date.now()}`,
+          content: assistantContent,
+          type: 'assistant',
+          timestamp: new Date(),
+          metadata
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+
+      } catch (n8nError) {
+        console.error('Error with n8n service:', n8nError);
+        
+        // Final fallback to local processing
+        const fallbackResponse = await processMessageLocally(userMessage.content);
+        const assistantMessage: AIMessage = {
+          id: `assistant-${Date.now()}`,
+          content: fallbackResponse,
+          type: 'assistant',
+          timestamp: new Date(),
+          metadata: { model: 'Local Assistant' }
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+      }
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
