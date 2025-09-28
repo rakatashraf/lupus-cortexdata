@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { NASAEarthMap } from './NASAEarthMap';
 import { ThreeDViewer, ViewerToolbar } from './3DViewer';
+import WellbeingDetailModal from './WellbeingDetailModal';
 import { 
   Map, 
   Satellite, 
@@ -71,6 +72,8 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
     wellbeingScore: 78
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [selectedWellbeingMetric, setSelectedWellbeingMetric] = useState<string | null>(null);
+  const [isWellbeingModalOpen, setIsWellbeingModalOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   
   // 3D Viewer state
@@ -96,6 +99,42 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
   
   const handle3DDeleteObject = (id: string) => {
     console.log('Deleting object:', id);
+  };
+
+  // Wellbeing modal handlers
+  const handleWellbeingClick = (metric: string) => {
+    setSelectedWellbeingMetric(metric);
+    setIsWellbeingModalOpen(true);
+  };
+
+  const closeWellbeingModal = () => {
+    setIsWellbeingModalOpen(false);
+    setSelectedWellbeingMetric(null);
+  };
+
+  // Helper functions for metric calculations
+  const getCommunityHealthScore = () => Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2);
+  const getCommunityHealthStatus = () => {
+    const score = getCommunityHealthScore();
+    return score >= 80 ? "Excellent" : score >= 60 ? "Good" : "Needs Work";
+  };
+
+  const getWalkabilityScore = () => Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2);
+  const getWalkabilityStatus = () => {
+    const score = getWalkabilityScore();
+    return score >= 75 ? "Very Walkable" : score >= 55 ? "Somewhat Walkable" : "Car Dependent";
+  };
+
+  const getLivingComfortScore = () => Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3);
+  const getLivingComfortStatus = () => {
+    const score = getLivingComfortScore();
+    return score >= 80 ? "Very Comfortable" : score >= 65 ? "Comfortable" : "Basic";
+  };
+
+  const getRecreationScore = () => simulationStats.greenSpace;
+  const getRecreationStatus = () => {
+    const score = getRecreationScore();
+    return score >= 40 ? "Lots to Do" : score >= 25 ? "Some Options" : "Limited Fun";
   };
   
   const handle3DDuplicateObject = (id: string) => {
@@ -439,13 +478,16 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {/* Community Health Score */}
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-all duration-200 cursor-pointer group hover:shadow-lg"
+              onClick={() => handleWellbeingClick('community-health')}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Community Health</span>
-                  <div className="group relative">
+                  <span className="text-sm font-medium group-hover:text-primary transition-colors">Community Health</span>
+                  <div className="group/tooltip relative">
                     <span className="text-xs text-muted-foreground cursor-help">ℹ️</span>
-                    <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
+                    <div className="invisible group-hover/tooltip:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
                       Based on air quality, green spaces, and population density
                     </div>
                   </div>
@@ -454,50 +496,52 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                   variant="outline" 
                   className={cn(
                     "font-semibold",
-                    Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 80 
+                    getCommunityHealthScore() >= 80 
                       ? "bg-green-500/10 text-green-400 border-green-500/30" 
-                      : Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 60
+                      : getCommunityHealthScore() >= 60
                         ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                         : "bg-red-500/10 text-red-400 border-red-500/30"
                   )}
                 >
-                  {Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 80 
-                    ? "Excellent" 
-                    : Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 60
-                      ? "Good"
-                      : "Needs Work"}
+                  {getCommunityHealthStatus()}
                 </Badge>
               </div>
               <div className="h-3 bg-muted rounded-full overflow-hidden">
                 <div 
                   className={cn(
                     "h-full transition-all duration-500",
-                    Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 80
+                    getCommunityHealthScore() >= 80
                       ? "bg-gradient-to-r from-green-500 to-emerald-500"
-                      : Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 60
+                      : getCommunityHealthScore() >= 60
                         ? "bg-gradient-to-r from-yellow-500 to-amber-500" 
                         : "bg-gradient-to-r from-red-500 to-orange-500"
                   )}
-                  style={{ width: `${Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2)}%` }}
+                  style={{ width: `${getCommunityHealthScore()}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 80 
+                {getCommunityHealthScore() >= 80 
                   ? "Great for families!" 
-                  : Math.round((simulationStats.greenSpace + (100 - simulationStats.carbonFootprint * 10)) / 2) >= 60
+                  : getCommunityHealthScore() >= 60
                     ? "Pretty comfortable"
                     : "Could be much better"}
+              </p>
+              <p className="text-xs text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for detailed solutions →
               </p>
             </div>
 
             {/* Walkability Index */}
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-all duration-200 cursor-pointer group hover:shadow-lg"
+              onClick={() => handleWellbeingClick('walkability')}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Walkability</span>
-                  <div className="group relative">
+                  <span className="text-sm font-medium group-hover:text-primary transition-colors">Walkability</span>
+                  <div className="group/tooltip relative">
                     <span className="text-xs text-muted-foreground cursor-help">ℹ️</span>
-                    <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
+                    <div className="invisible group-hover/tooltip:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
                       How easy and pleasant it is to walk around the neighborhood
                     </div>
                   </div>
@@ -506,50 +550,52 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                   variant="outline" 
                   className={cn(
                     "font-semibold",
-                    Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 75 
+                    getWalkabilityScore() >= 75 
                       ? "bg-green-500/10 text-green-400 border-green-500/30" 
-                      : Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 55
+                      : getWalkabilityScore() >= 55
                         ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                         : "bg-red-500/10 text-red-400 border-red-500/30"
                   )}
                 >
-                  {Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 75 
-                    ? "Very Walkable" 
-                    : Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 55
-                      ? "Somewhat Walkable"
-                      : "Car Dependent"}
+                  {getWalkabilityStatus()}
                 </Badge>
               </div>
               <div className="h-3 bg-muted rounded-full overflow-hidden">
                 <div 
                   className={cn(
                     "h-full transition-all duration-500",
-                    Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 75
+                    getWalkabilityScore() >= 75
                       ? "bg-gradient-to-r from-blue-500 to-cyan-500"
-                      : Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 55
+                      : getWalkabilityScore() >= 55
                         ? "bg-gradient-to-r from-yellow-500 to-amber-500" 
                         : "bg-gradient-to-r from-red-500 to-orange-500"
                   )}
-                  style={{ width: `${Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2)}%` }}
+                  style={{ width: `${getWalkabilityScore()}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 75 
+                {getWalkabilityScore() >= 75 
                   ? "Perfect for strolling" 
-                  : Math.round((simulationStats.greenSpace + (100 - selectedBuilding.density)) / 2) >= 55
+                  : getWalkabilityScore() >= 55
                     ? "Decent for walking"
                     : "Need a car to get around"}
+              </p>
+              <p className="text-xs text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for detailed solutions →
               </p>
             </div>
 
             {/* Living Comfort */}
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-all duration-200 cursor-pointer group hover:shadow-lg"
+              onClick={() => handleWellbeingClick('living-comfort')}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Living Comfort</span>
-                  <div className="group relative">
+                  <span className="text-sm font-medium group-hover:text-primary transition-colors">Living Comfort</span>
+                  <div className="group/tooltip relative">
                     <span className="text-xs text-muted-foreground cursor-help">ℹ️</span>
-                    <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
+                    <div className="invisible group-hover/tooltip:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
                       Quality of daily life including energy, water, and building standards
                     </div>
                   </div>
@@ -558,50 +604,52 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                   variant="outline" 
                   className={cn(
                     "font-semibold",
-                    Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 80 
+                    getLivingComfortScore() >= 80 
                       ? "bg-green-500/10 text-green-400 border-green-500/30" 
-                      : Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 65
+                      : getLivingComfortScore() >= 65
                         ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                         : "bg-red-500/10 text-red-400 border-red-500/30"
                   )}
                 >
-                  {Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 80 
-                    ? "Very Comfortable" 
-                    : Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 65
-                      ? "Comfortable"
-                      : "Basic"}
+                  {getLivingComfortStatus()}
                 </Badge>
               </div>
               <div className="h-3 bg-muted rounded-full overflow-hidden">
                 <div 
                   className={cn(
                     "h-full transition-all duration-500",
-                    Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 80
+                    getLivingComfortScore() >= 80
                       ? "bg-gradient-to-r from-purple-500 to-pink-500"
-                      : Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 65
+                      : getLivingComfortScore() >= 65
                         ? "bg-gradient-to-r from-yellow-500 to-amber-500" 
                         : "bg-gradient-to-r from-red-500 to-orange-500"
                   )}
-                  style={{ width: `${Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3)}%` }}
+                  style={{ width: `${getLivingComfortScore()}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 80 
+                {getLivingComfortScore() >= 80 
                   ? "Modern amenities" 
-                  : Math.round((100 - simulationStats.waterUsage + simulationStats.energyEfficiency + selectedBuilding.sustainability) / 3) >= 65
+                  : getLivingComfortScore() >= 65
                     ? "Standard quality"
                     : "Could use upgrades"}
+              </p>
+              <p className="text-xs text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for detailed solutions →
               </p>
             </div>
 
             {/* Recreation Access */}
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-all duration-200 cursor-pointer group hover:shadow-lg"
+              onClick={() => handleWellbeingClick('recreation')}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Fun & Recreation</span>
-                  <div className="group relative">
+                  <span className="text-sm font-medium group-hover:text-primary transition-colors">Fun & Recreation</span>
+                  <div className="group/tooltip relative">
                     <span className="text-xs text-muted-foreground cursor-help">ℹ️</span>
-                    <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
+                    <div className="invisible group-hover/tooltip:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-popover border rounded-md shadow-lg text-xs z-10">
                       Access to parks, activities, and recreational spaces
                     </div>
                   </div>
@@ -610,39 +658,38 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
                   variant="outline" 
                   className={cn(
                     "font-semibold",
-                    simulationStats.greenSpace >= 40 
+                    getRecreationScore() >= 40 
                       ? "bg-green-500/10 text-green-400 border-green-500/30" 
-                      : simulationStats.greenSpace >= 25
+                      : getRecreationScore() >= 25
                         ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                         : "bg-red-500/10 text-red-400 border-red-500/30"
                   )}
                 >
-                  {simulationStats.greenSpace >= 40 
-                    ? "Lots to Do" 
-                    : simulationStats.greenSpace >= 25
-                      ? "Some Options"
-                      : "Limited Fun"}
+                  {getRecreationStatus()}
                 </Badge>
               </div>
               <div className="h-3 bg-muted rounded-full overflow-hidden">
                 <div 
                   className={cn(
                     "h-full transition-all duration-500",
-                    simulationStats.greenSpace >= 40
+                    getRecreationScore() >= 40
                       ? "bg-gradient-to-r from-emerald-500 to-teal-500"
-                      : simulationStats.greenSpace >= 25
+                      : getRecreationScore() >= 25
                         ? "bg-gradient-to-r from-yellow-500 to-amber-500" 
                         : "bg-gradient-to-r from-red-500 to-orange-500"
                   )}
-                  style={{ width: `${simulationStats.greenSpace}%` }}
+                  style={{ width: `${getRecreationScore()}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {simulationStats.greenSpace >= 40 
+                {getRecreationScore() >= 40 
                   ? "Parks and activities nearby" 
-                  : simulationStats.greenSpace >= 25
+                  : getRecreationScore() >= 25
                     ? "A few parks around"
                     : "Need more recreational spaces"}
+              </p>
+              <p className="text-xs text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for detailed solutions →
               </p>
             </div>
           </div>
@@ -659,6 +706,27 @@ export function Simulation3D({ onLocationSelect }: Simulation3DProps = {}) {
               }
             </AlertDescription>
           </Alert>
+
+          {/* Wellbeing Detail Modal */}
+          {selectedWellbeingMetric && (
+            <WellbeingDetailModal
+              isOpen={isWellbeingModalOpen}
+              onClose={closeWellbeingModal}
+              metric={selectedWellbeingMetric}
+              score={
+                selectedWellbeingMetric === 'community-health' ? getCommunityHealthScore() :
+                selectedWellbeingMetric === 'walkability' ? getWalkabilityScore() :
+                selectedWellbeingMetric === 'living-comfort' ? getLivingComfortScore() :
+                selectedWellbeingMetric === 'recreation' ? getRecreationScore() : 0
+              }
+              status={
+                selectedWellbeingMetric === 'community-health' ? getCommunityHealthStatus() :
+                selectedWellbeingMetric === 'walkability' ? getWalkabilityStatus() :
+                selectedWellbeingMetric === 'living-comfort' ? getLivingComfortStatus() :
+                selectedWellbeingMetric === 'recreation' ? getRecreationStatus() : ''
+              }
+            />
+          )}
         </CardContent>
       </Card>
     </div>
