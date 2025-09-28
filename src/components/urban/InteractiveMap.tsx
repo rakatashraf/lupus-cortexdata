@@ -6,10 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Search, Download, Layers } from 'lucide-react';
+import { MapPin, Search, Download, Layers, Flag } from 'lucide-react';
 import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
+import { CommunityNeedsCalculator, CommunityNeed } from '@/utils/community-needs-calculator';
+import { CommunityNeedsFlags } from './CommunityNeedsFlags';
+import { CommunityNeedsModal } from './CommunityNeedsModal';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -96,6 +99,10 @@ export function InteractiveMap({
   const [message, setMessage] = useState('');
   const [mapCenter, setMapCenter] = useState<[number, number]>([initialLat, initialLng]);
   const [mapZoom, setMapZoom] = useState(12);
+  const [showCommunityNeeds, setShowCommunityNeeds] = useState(false);
+  const [communityNeeds, setCommunityNeeds] = useState<CommunityNeed[]>([]);
+  const [selectedNeed, setSelectedNeed] = useState<CommunityNeed | null>(null);
+  const [isNeedsModalOpen, setIsNeedsModalOpen] = useState(false);
 
   const searchByCoordinates = () => {
     const lat = parseFloat(searchCoords.lat);
@@ -117,6 +124,11 @@ export function InteractiveMap({
     setMapZoom(14);
     onLocationSelect(lat, lng);
     setMessage(`Location updated: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    
+    // Fetch community needs if enabled
+    if (showCommunityNeeds) {
+      fetchCommunityNeeds(lat, lng);
+    }
   };
 
   const searchByArea = async () => {
@@ -143,6 +155,11 @@ export function InteractiveMap({
         setMapZoom(14);
         onLocationSelect(lat, lng);
         setMessage(`Found: ${data[0].display_name}`);
+        
+        // Fetch community needs if enabled
+        if (showCommunityNeeds) {
+          fetchCommunityNeeds(lat, lng);
+        }
       } else {
         setMessage('Area not found. Try different search terms.');
       }
@@ -193,6 +210,33 @@ export function InteractiveMap({
       setMessage('Error downloading data. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCommunityNeeds = async (lat: number, lng: number) => {
+    try {
+      const healthData = await n8nService.getDashboardData(lat, lng);
+      const needs = CommunityNeedsCalculator.analyzeLocation(lat, lng, healthData);
+      setCommunityNeeds(needs);
+    } catch (error) {
+      console.error('Error fetching community needs:', error);
+      setCommunityNeeds([]);
+    }
+  };
+
+  const handleViewNeedDetails = (need: CommunityNeed) => {
+    setSelectedNeed(need);
+    setIsNeedsModalOpen(true);
+  };
+
+  const toggleCommunityNeeds = async () => {
+    const newShowState = !showCommunityNeeds;
+    setShowCommunityNeeds(newShowState);
+    
+    if (newShowState && selectedPosition) {
+      await fetchCommunityNeeds(selectedPosition.lat, selectedPosition.lng);
+    } else if (!newShowState) {
+      setCommunityNeeds([]);
     }
   };
 
@@ -266,6 +310,16 @@ export function InteractiveMap({
               <Download className="h-4 w-4 mr-2" />
               Download Data
             </Button>
+
+            <Button
+              onClick={toggleCommunityNeeds}
+              disabled={!selectedPosition}
+              size="sm"
+              variant={showCommunityNeeds ? "default" : "outline"}
+            >
+              <Flag className="h-4 w-4 mr-2" />
+              Community Needs
+            </Button>
           </div>
 
           {/* Status Message */}
@@ -289,6 +343,14 @@ export function InteractiveMap({
               <Badge variant="secondary">
                 Area: {selectionBounds.north.toFixed(4)}°N, {selectionBounds.south.toFixed(4)}°S, 
                 {selectionBounds.east.toFixed(4)}°E, {selectionBounds.west.toFixed(4)}°W
+              </Badge>
+            </div>
+          )}
+
+          {showCommunityNeeds && communityNeeds.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">
+                {communityNeeds.length} community need{communityNeeds.length !== 1 ? 's' : ''} identified
               </Badge>
             </div>
           )}
@@ -341,6 +403,13 @@ export function InteractiveMap({
                   fillOpacity={0.2}
                 />
               )}
+
+              {showCommunityNeeds && (
+                <CommunityNeedsFlags
+                  needs={communityNeeds}
+                  onViewDetails={handleViewNeedDetails}
+                />
+              )}
             </MapContainer>
           </div>
         </CardContent>
@@ -354,6 +423,12 @@ export function InteractiveMap({
           </AlertDescription>
         </Alert>
       )}
+
+      <CommunityNeedsModal
+        need={selectedNeed}
+        isOpen={isNeedsModalOpen}
+        onClose={() => setIsNeedsModalOpen(false)}
+      />
     </div>
   );
 }
