@@ -1,6 +1,6 @@
 import { HealthDashboard } from '@/components/urban/HealthDashboard';
 import { InteractiveMap } from '@/components/urban/InteractiveMap';
-import { SimpleDataVisualization } from '@/components/urban/SimpleDataVisualization';
+import { DataVisualization } from '@/components/urban/DataVisualization';
 import { AIChatbot } from '@/components/urban/AIChatbot';
 import { NavigationHeader } from '@/components/urban/NavigationHeader';
 import { WelcomeSection } from '@/components/urban/WelcomeSection';
