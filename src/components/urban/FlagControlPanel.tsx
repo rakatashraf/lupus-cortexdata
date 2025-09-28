@@ -71,19 +71,19 @@ export function FlagControlPanel({
           <div className="flex items-center justify-between">
             <span>Critical:</span>
             <Badge variant="destructive" className="h-5 px-1 text-xs">
-              {needsAnalysis.priorityCount.critical}
+              {needsAnalysis.needsCounts.critical}
             </Badge>
           </div>
           <div className="flex items-center justify-between">
             <span>High:</span>
             <Badge style={{ backgroundColor: 'hsl(var(--warning))' }} className="h-5 px-1 text-xs text-white">
-              {needsAnalysis.priorityCount.high}
+              {needsAnalysis.needsCounts.high}
             </Badge>
           </div>
           <div className="flex items-center justify-between">
             <span>Moderate:</span>
             <Badge style={{ backgroundColor: 'hsl(var(--info))' }} className="h-5 px-1 text-xs text-white">
-              {needsAnalysis.priorityCount.moderate}
+              {needsAnalysis.needsCounts.moderate}
             </Badge>
           </div>
           <div className="flex items-center justify-between">

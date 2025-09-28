@@ -11,9 +11,10 @@ import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds, CityHealthData } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
 import { CommunityNeedsCalculator, CommunityNeed, NeedsAnalysis } from '@/utils/community-needs-calculator';
-import { CommunityNeedsFlags } from './CommunityNeedsFlags';
+import { EnhancedCommunityNeedsFlags } from './EnhancedCommunityNeedsFlags';
 import { FlagControlPanel } from './FlagControlPanel';
 import { NeedsIndicatorPanel } from './NeedsIndicatorPanel';
+import { AreaSummaryPanel } from './AreaSummaryPanel';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -106,7 +107,7 @@ export function InteractiveMap({
   // Community needs states
   const [needsAnalysis, setNeedsAnalysis] = useState<NeedsAnalysis | null>(null);
   const [visibleCategories, setVisibleCategories] = useState<string[]>(['food', 'housing', 'transportation', 'pollution']);
-  const [selectedNeed, setSelectedNeed] = useState<CommunityNeed | null>(null);
+  const [selectedFlag, setSelectedFlag] = useState<CommunityNeed | null>(null);
   const [showNeedsFlags, setShowNeedsFlags] = useState(showCommunityNeeds);
 
   const searchByCoordinates = () => {
@@ -222,14 +223,21 @@ export function InteractiveMap({
   const loadCommunityNeeds = async (lat: number, lng: number) => {
     try {
       const data = await n8nService.getDashboardData(lat, lng);
-      const analysis = CommunityNeedsCalculator.calculateCommunityNeeds(data, lat, lng);
+      
+      // Use area analysis if bounds are selected, otherwise use point analysis
+      const analysis = selectionBounds 
+        ? CommunityNeedsCalculator.calculateAreaCommunityNeeds(data, selectionBounds)
+        : CommunityNeedsCalculator.calculateCommunityNeeds(data, lat, lng);
+        
       setNeedsAnalysis(analysis);
     } catch (error) {
       console.error('Error loading community needs:', error);
       // Use fallback data for demo - fetch through public API
       try {
         const fallbackData = await n8nService.getDashboardData(lat, lng);
-        const analysis = CommunityNeedsCalculator.calculateCommunityNeeds(fallbackData, lat, lng);
+        const analysis = selectionBounds 
+          ? CommunityNeedsCalculator.calculateAreaCommunityNeeds(fallbackData, selectionBounds)
+          : CommunityNeedsCalculator.calculateCommunityNeeds(fallbackData, lat, lng);
         setNeedsAnalysis(analysis);
       } catch (fallbackError) {
         console.error('Fallback data also failed:', fallbackError);
@@ -255,7 +263,7 @@ export function InteractiveMap({
   };
 
   const handleFlagClick = (need: CommunityNeed) => {
-    setSelectedNeed(need);
+    setSelectedFlag(need);
   };
 
   return (
@@ -273,10 +281,18 @@ export function InteractiveMap({
         )}
 
         {/* Selected Need Panel */}
-        {selectedNeed && (
+        {selectedFlag && (
           <NeedsIndicatorPanel
-            selectedNeed={selectedNeed}
-            onClose={() => setSelectedNeed(null)}
+            selectedNeed={selectedFlag}
+            onClose={() => setSelectedFlag(null)}
+          />
+        )}
+        
+        {/* Area Summary Panel */}
+        {needsAnalysis && selectionBounds && (needsAnalysis as any).areaStats && (
+          <AreaSummaryPanel
+            analysis={needsAnalysis as any}
+            bounds={selectionBounds}
           />
         )}
       </div>
@@ -441,10 +457,11 @@ export function InteractiveMap({
 
                 {/* Community Needs Flags */}
                 {showNeedsFlags && needsAnalysis && (
-                  <CommunityNeedsFlags
+                  <EnhancedCommunityNeedsFlags
                     needs={needsAnalysis.flags}
                     onFlagClick={handleFlagClick}
                     visibleCategories={visibleCategories}
+                    animationEnabled={true}
                   />
                 )}
               </MapContainer>
