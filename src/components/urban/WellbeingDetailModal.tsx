@@ -638,7 +638,7 @@ const WellbeingDetailModal: React.FC<WellbeingDetailModalProps> = ({
 
             <div className="space-y-4">
               <Collapsible>
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-blue-700">
                   <h4 className="font-medium text-sm flex items-center gap-2">
                     <Home className="h-4 w-4" />
                     Considering Living Here?
@@ -686,7 +686,7 @@ const WellbeingDetailModal: React.FC<WellbeingDetailModalProps> = ({
               </Collapsible>
 
               <Collapsible>
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left text-green-700">
                   <h4 className="font-medium text-sm flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
                     Planning to Build Here?
