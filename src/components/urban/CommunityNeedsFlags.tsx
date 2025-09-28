@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Eye } from 'lucide-react';
 import L from 'leaflet';
-import { CommunityNeed } from '@/utils/community-needs-calculator';
+import { CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 
 interface CommunityNeedsFlagsProps {
   needs: CommunityNeed[];
+  filteredType?: CommunityNeedType | null;
   onViewDetails: (need: CommunityNeed) => void;
 }
 
@@ -44,7 +45,10 @@ const createFlagIcon = (need: CommunityNeed) => {
   });
 };
 
-export function CommunityNeedsFlags({ needs, onViewDetails }: CommunityNeedsFlagsProps) {
+export function CommunityNeedsFlags({ needs, filteredType, onViewDetails }: CommunityNeedsFlagsProps) {
+  const displayedNeeds = filteredType 
+    ? needs.filter(need => need.type === filteredType)
+    : needs;
   return (
     <>
       <style>{`
@@ -58,7 +62,7 @@ export function CommunityNeedsFlags({ needs, onViewDetails }: CommunityNeedsFlag
         }
       `}</style>
       
-      {needs.map((need) => (
+      {displayedNeeds.map((need) => (
         <Marker
           key={need.id}
           position={need.position}

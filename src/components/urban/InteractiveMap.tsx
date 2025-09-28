@@ -12,9 +12,10 @@ import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle } fro
 import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
-import { CommunityNeedsCalculator, CommunityNeed } from '@/utils/community-needs-calculator';
+import { CommunityNeedsCalculator, CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 import { CommunityNeedsFlags } from './CommunityNeedsFlags';
 import { CommunityNeedsModal } from './CommunityNeedsModal';
+import { NeedTypeDetailModal } from './NeedTypeDetailModal';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -104,7 +105,10 @@ export function InteractiveMap({
   const [showCommunityNeeds, setShowCommunityNeeds] = useState(false);
   const [communityNeeds, setCommunityNeeds] = useState<CommunityNeed[]>([]);
   const [selectedNeed, setSelectedNeed] = useState<CommunityNeed | null>(null);
-  const [isNeedsModalOpen, setIsNeedsModalOpen] = useState(false);
+  const [isNeedModalOpen, setIsNeedModalOpen] = useState(false);
+  const [selectedNeedType, setSelectedNeedType] = useState<CommunityNeedType | null>(null);
+  const [isNeedTypeModalOpen, setIsNeedTypeModalOpen] = useState(false);
+  const [filteredNeedType, setFilteredNeedType] = useState<CommunityNeedType | null>(null);
   const [loadingCommunityNeeds, setLoadingCommunityNeeds] = useState(false);
   const [communityNeedsError, setCommunityNeedsError] = useState<string | null>(null);
 
@@ -245,7 +249,7 @@ export function InteractiveMap({
 
   const handleViewNeedDetails = (need: CommunityNeed) => {
     setSelectedNeed(need);
-    setIsNeedsModalOpen(true);
+    setIsNeedModalOpen(true);
   };
 
   const toggleCommunityNeeds = async () => {
@@ -423,30 +427,75 @@ export function InteractiveMap({
               </div>
               
               {/* Community Needs Legend */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                <div className="flex items-center gap-1">
-                  <span>🍎</span><span>Food Access</span>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium">Community Needs Types</h4>
+                  {filteredNeedType && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFilteredNeedType(null)}
+                      className="text-xs h-6"
+                    >
+                      Show All
+                    </Button>
+                  )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <span>🏠</span><span>Housing</span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[
+                    { type: 'food-access' as CommunityNeedType, icon: '🍎', label: 'Food Access' },
+                    { type: 'housing' as CommunityNeedType, icon: '🏠', label: 'Housing' },
+                    { type: 'transportation' as CommunityNeedType, icon: '🚌', label: 'Transportation' },
+                    { type: 'pollution' as CommunityNeedType, icon: '🏭', label: 'Pollution' },
+                    { type: 'healthcare' as CommunityNeedType, icon: '🏥', label: 'Healthcare' },
+                    { type: 'parks' as CommunityNeedType, icon: '🌳', label: 'Parks Access' },
+                    { type: 'growth' as CommunityNeedType, icon: '🏗️', label: 'Development' },
+                    { type: 'energy' as CommunityNeedType, icon: '⚡', label: 'Energy Access' }
+                  ].map(({ type, icon, label }) => {
+                    const needCount = communityNeeds.filter(need => need.type === type).length;
+                    const hasNeeds = needCount > 0;
+                    const isFiltered = filteredNeedType === type;
+                    
+                    if (!hasNeeds) return null;
+                    
+                    return (
+                      <Button
+                        key={type}
+                        variant={isFiltered ? "default" : "ghost"}
+                        size="sm"
+                        className={`flex items-center justify-between gap-2 p-2 h-auto text-xs transition-all ${
+                          hasNeeds ? 'cursor-pointer hover:bg-accent' : 'opacity-50 cursor-not-allowed'
+                        } ${isFiltered ? 'ring-2 ring-primary' : ''}`}
+                        onClick={() => {
+                          if (hasNeeds) {
+                            setSelectedNeedType(type);
+                            setIsNeedTypeModalOpen(true);
+                          }
+                        }}
+                        disabled={!hasNeeds}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>{icon}</span>
+                          <span>{label}</span>
+                        </div>
+                        {hasNeeds && (
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-auto">
+                            {needCount}
+                          </Badge>
+                        )}
+                      </Button>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center gap-1">
-                  <span>🚌</span><span>Transportation</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span>🏭</span><span>Pollution</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span>🏥</span><span>Healthcare</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span>🌳</span><span>Parks Access</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span>🏗️</span><span>Development</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span>⚡</span><span>Energy Access</span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFilteredNeedType(filteredNeedType ? null : 'food-access')}
+                    className="text-xs"
+                  >
+                    {filteredNeedType ? 'Show All Types' : 'Filter by Type'}
+                  </Button>
                 </div>
               </div>
             </div>
@@ -504,6 +553,7 @@ export function InteractiveMap({
               {showCommunityNeeds && (
                 <CommunityNeedsFlags
                   needs={communityNeeds}
+                  filteredType={filteredNeedType}
                   onViewDetails={handleViewNeedDetails}
                 />
               )}
@@ -521,10 +571,30 @@ export function InteractiveMap({
         </Alert>
       )}
 
+      {/* Community Needs Modals */}
       <CommunityNeedsModal
         need={selectedNeed}
-        isOpen={isNeedsModalOpen}
-        onClose={() => setIsNeedsModalOpen(false)}
+        isOpen={isNeedModalOpen}
+        onClose={() => {
+          setIsNeedModalOpen(false);
+          setSelectedNeed(null);
+        }}
+      />
+
+      <NeedTypeDetailModal
+        needType={selectedNeedType}
+        needs={communityNeeds}
+        isOpen={isNeedTypeModalOpen}
+        onClose={() => {
+          setIsNeedTypeModalOpen(false);
+          setSelectedNeedType(null);
+        }}
+        onLocationSelect={(need) => {
+          setIsNeedTypeModalOpen(false);
+          setSelectedNeedType(null);
+          setSelectedNeed(need);
+          setIsNeedModalOpen(true);
+        }}
       />
     </div>
   );
