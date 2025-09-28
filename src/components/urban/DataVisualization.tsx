@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin } from 'lucide-react';
+import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin, ChevronDown, ChevronUp, Thermometer, Leaf, Droplets, Building2, Car, Cloud, Home, HelpCircle } from 'lucide-react';
 import { n8nService } from '@/services/n8n-service';
 import { ChartDataPoint } from '@/types/urban-indices';
 import { cn } from '@/lib/utils';
@@ -36,32 +36,129 @@ interface DataLayer {
   enabled: boolean;
 }
 
+// Category definitions for better organization
+interface DataCategory {
+  id: string;
+  name: string;
+  icon: React.ComponentType<any>;
+  description: string;
+  color: string;
+  layers: string[];
+}
+
+const DATA_CATEGORIES: DataCategory[] = [
+  {
+    id: 'climate',
+    name: 'Climate & Temperature',
+    icon: Thermometer,
+    description: 'Temperature patterns and heat islands',
+    color: '#ff7675',
+    layers: ['CRI_Landsat', 'UHVI_MODIS', 'CRI_MODIS', 'UHVI_VIIRS']
+  },
+  {
+    id: 'environment',
+    name: 'Green Spaces & Nature',
+    icon: Leaf,
+    description: 'Vegetation health and green coverage',
+    color: '#00b894',
+    layers: ['GEA_Landsat', 'GEA_Sentinel2', 'GEA_VIIRS']
+  },
+  {
+    id: 'water',
+    name: 'Water Quality',
+    icon: Droplets,
+    description: 'Water bodies and quality indicators',
+    color: '#0984e3',
+    layers: ['WSI_Landsat', 'WSI_MODIS', 'WSI_Sentinel2', 'WSI_GRACE', 'WSI_SMAP']
+  },
+  {
+    id: 'urban',
+    name: 'Urban Development',
+    icon: Building2,
+    description: 'Built environment and infrastructure',
+    color: '#6c5ce7',
+    layers: ['SCM_Landsat', 'SCM_Sentinel1', 'SCM_VIIRS']
+  },
+  {
+    id: 'transport',
+    name: 'Transportation',
+    icon: Car,
+    description: 'Traffic patterns and infrastructure',
+    color: '#fdcb6e',
+    layers: ['TAS_Landsat', 'TAS_VIIRS']
+  },
+  {
+    id: 'air',
+    name: 'Air Quality',
+    icon: Cloud,
+    description: 'Air pollution and atmospheric conditions',
+    color: '#fd79a8',
+    layers: ['AQHI_MODIS', 'AQHI_Sentinel5P']
+  },
+  {
+    id: 'community',
+    name: 'Community Well-being',
+    icon: Home,
+    description: 'Social and environmental factors',
+    color: '#a29bfe',
+    layers: ['EJT_Landsat', 'EJT_MODIS', 'EJT_Sentinel5P', 'EJT_VIIRS', 'DPI_Sentinel1', 'DPI_GPM']
+  }
+];
+
+// Quick analysis presets
+const ANALYSIS_PRESETS = [
+  {
+    id: 'health',
+    name: '🏥 Health Overview',
+    description: 'Air quality, temperature, and green spaces',
+    categories: ['air', 'climate', 'environment']
+  },
+  {
+    id: 'environmental',
+    name: '🌍 Environmental Check',
+    description: 'Nature, water, and air quality assessment',
+    categories: ['environment', 'water', 'air']
+  },
+  {
+    id: 'urban-planning',
+    name: '🏙️ Urban Planning',
+    description: 'Development, transport, and community factors',
+    categories: ['urban', 'transport', 'community']
+  },
+  {
+    id: 'climate-resilience',
+    name: '🌡️ Climate Resilience',
+    description: 'Temperature, water, and weather patterns',
+    categories: ['climate', 'water', 'community']
+  }
+];
+
 const DEFAULT_LAYERS: DataLayer[] = [
-  { id: 'CRI_Landsat', name: 'CRI_Landsat (Landsat: Land Surface Temperature)', index: 'CRI', satellite: 'Landsat', dataType: 'Land Surface Temperature', color: '#8b5cf6', enabled: true },
-  { id: 'GEA_Landsat', name: 'GEA_Landsat (Landsat: NDVI for vegetation health and coverage)', index: 'GEA', satellite: 'Landsat', dataType: 'NDVI for vegetation health and coverage', color: '#06b6d4', enabled: true },
-  { id: 'WSI_Landsat', name: 'WSI_Landsat (Landsat: Water body extent and turbidity)', index: 'WSI', satellite: 'Landsat', dataType: 'Water body extent and turbidity', color: '#f97316', enabled: true },
-  { id: 'SCM_Landsat', name: 'SCM_Landsat (Landsat: Urban development and infrastructure mapping)', index: 'SCM', satellite: 'Landsat', dataType: 'Urban development and infrastructure mapping', color: '#ec4899', enabled: false },
-  { id: 'TAS_Landsat', name: 'TAS_Landsat (Landsat: Transportation infrastructure mapping)', index: 'TAS', satellite: 'Landsat', dataType: 'Transportation infrastructure mapping', color: '#10b981', enabled: false },
-  { id: 'EJT_Landsat', name: 'EJT_Landsat (Landsat: Environmental burden assessment)', index: 'EJT', satellite: 'Landsat', dataType: 'Environmental burden assessment', color: '#f59e0b', enabled: false },
-  { id: 'UHVI_MODIS', name: 'UHVI_MODIS (MODIS: 8-day Land Surface Temperature (1km resolution))', index: 'UHVI', satellite: 'MODIS', dataType: '8-day Land Surface Temperature (1km resolution)', color: '#ff7675', enabled: true },
-  { id: 'CRI_MODIS', name: 'CRI_MODIS (MODIS: Land Surface Temperature & Vegetation Indices)', index: 'CRI', satellite: 'MODIS', dataType: 'Land Surface Temperature & Vegetation Indices', color: '#fd79a8', enabled: false },
-  { id: 'AQHI_MODIS', name: 'AQHI_MODIS (MODIS: Aerosol Optical Depth (AOD))', index: 'AQHI', satellite: 'MODIS', dataType: 'Aerosol Optical Depth (AOD)', color: '#fdcb6e', enabled: false },
-  { id: 'WSI_MODIS', name: 'WSI_MODIS (MODIS: Water surface temperature and quality indicators)', index: 'WSI', satellite: 'MODIS', dataType: 'Water surface temperature and quality indicators', color: '#6c5ce7', enabled: false },
-  { id: 'EJT_MODIS', name: 'EJT_MODIS (MODIS: Long-term environmental change tracking)', index: 'EJT', satellite: 'MODIS', dataType: 'Long-term environmental change tracking', color: '#a29bfe', enabled: false },
-  { id: 'AQHI_Sentinel5P', name: 'AQHI_Sentinel5P (Sentinel-5P: NO2, SO2, CO, O3, Aerosol Index)', index: 'AQHI', satellite: 'Sentinel-5P', dataType: 'NO2, SO2, CO, O3, Aerosol Index', color: '#fd79a8', enabled: true },
-  { id: 'EJT_Sentinel5P', name: 'EJT_Sentinel5P (Sentinel-5P: Pollution distribution mapping)', index: 'EJT', satellite: 'Sentinel-5P', dataType: 'Pollution distribution mapping', color: '#e17055', enabled: false },
-  { id: 'GEA_Sentinel2', name: 'GEA_Sentinel2 (Sentinel-2: High-resolution vegetation monitoring (10m))', index: 'GEA', satellite: 'Sentinel-2', dataType: 'High-resolution vegetation monitoring (10m)', color: '#00b894', enabled: false },
-  { id: 'WSI_Sentinel2', name: 'WSI_Sentinel2 (Sentinel-2: High-resolution water quality monitoring)', index: 'WSI', satellite: 'Sentinel-2', dataType: 'High-resolution water quality monitoring', color: '#0984e3', enabled: false },
-  { id: 'SCM_Sentinel1', name: 'SCM_Sentinel1 (Sentinel-1: Built environment structure analysis)', index: 'SCM', satellite: 'Sentinel-1', dataType: 'Built environment structure analysis', color: '#6c5ce7', enabled: false },
-  { id: 'DPI_Sentinel1', name: 'DPI_Sentinel1 (Sentinel-1: Ground movement and infrastructure monitoring)', index: 'DPI', satellite: 'Sentinel-1', dataType: 'Ground movement and infrastructure monitoring', color: '#a29bfe', enabled: false },
-  { id: 'SCM_VIIRS', name: 'SCM_VIIRS (VIIRS: Community activity and economic patterns)', index: 'SCM', satellite: 'VIIRS', dataType: 'Community activity and economic patterns', color: '#fab1a0', enabled: false },
-  { id: 'GEA_VIIRS', name: 'GEA_VIIRS (VIIRS: Community activity and usage patterns)', index: 'GEA', satellite: 'VIIRS', dataType: 'Community activity and usage patterns', color: '#00cec9', enabled: false },
-  { id: 'EJT_VIIRS', name: 'EJT_VIIRS (VIIRS: Socioeconomic activity patterns)', index: 'EJT', satellite: 'VIIRS', dataType: 'Socioeconomic activity patterns', color: '#e17055', enabled: false },
-  { id: 'UHVI_VIIRS', name: 'UHVI_VIIRS (VIIRS: Urban development patterns)', index: 'UHVI', satellite: 'VIIRS', dataType: 'Urban development patterns', color: '#fd79a8', enabled: false },
-  { id: 'TAS_VIIRS', name: 'TAS_VIIRS (VIIRS: Transportation usage patterns)', index: 'TAS', satellite: 'VIIRS', dataType: 'Transportation usage patterns', color: '#fdcb6e', enabled: false },
-  { id: 'WSI_GRACE', name: 'WSI_GRACE (GRACE/GRACE-FO: Groundwater storage changes)', index: 'WSI', satellite: 'GRACE/GRACE-FO', dataType: 'Groundwater storage changes', color: '#74b9ff', enabled: false },
-  { id: 'WSI_SMAP', name: 'WSI_SMAP (SMAP: Soil moisture (top 5cm))', index: 'WSI', satellite: 'SMAP', dataType: 'Soil moisture (top 5cm)', color: '#81ecec', enabled: false },
-  { id: 'DPI_GPM', name: 'DPI_GPM (GPM: Precipitation and flood risk patterns)', index: 'DPI', satellite: 'GPM', dataType: 'Precipitation and flood risk patterns', color: '#0984e3', enabled: false }
+  { id: 'CRI_Landsat', name: 'Land Surface Temperature', index: 'CRI', satellite: 'Landsat', dataType: 'Land Surface Temperature', color: '#8b5cf6', enabled: true },
+  { id: 'GEA_Landsat', name: 'Vegetation Health', index: 'GEA', satellite: 'Landsat', dataType: 'NDVI for vegetation health and coverage', color: '#06b6d4', enabled: true },
+  { id: 'WSI_Landsat', name: 'Water Quality', index: 'WSI', satellite: 'Landsat', dataType: 'Water body extent and turbidity', color: '#f97316', enabled: true },
+  { id: 'SCM_Landsat', name: 'Urban Development', index: 'SCM', satellite: 'Landsat', dataType: 'Urban development and infrastructure mapping', color: '#ec4899', enabled: false },
+  { id: 'TAS_Landsat', name: 'Transportation Network', index: 'TAS', satellite: 'Landsat', dataType: 'Transportation infrastructure mapping', color: '#10b981', enabled: false },
+  { id: 'EJT_Landsat', name: 'Environmental Impact', index: 'EJT', satellite: 'Landsat', dataType: 'Environmental burden assessment', color: '#f59e0b', enabled: false },
+  { id: 'UHVI_MODIS', name: 'Heat Island Effect', index: 'UHVI', satellite: 'MODIS', dataType: '8-day Land Surface Temperature (1km resolution)', color: '#ff7675', enabled: true },
+  { id: 'CRI_MODIS', name: 'Climate Risk Index', index: 'CRI', satellite: 'MODIS', dataType: 'Land Surface Temperature & Vegetation Indices', color: '#fd79a8', enabled: false },
+  { id: 'AQHI_MODIS', name: 'Air Quality (Aerosols)', index: 'AQHI', satellite: 'MODIS', dataType: 'Aerosol Optical Depth (AOD)', color: '#fdcb6e', enabled: false },
+  { id: 'WSI_MODIS', name: 'Water Temperature', index: 'WSI', satellite: 'MODIS', dataType: 'Water surface temperature and quality indicators', color: '#6c5ce7', enabled: false },
+  { id: 'EJT_MODIS', name: 'Environmental Trends', index: 'EJT', satellite: 'MODIS', dataType: 'Long-term environmental change tracking', color: '#a29bfe', enabled: false },
+  { id: 'AQHI_Sentinel5P', name: 'Air Pollution Monitoring', index: 'AQHI', satellite: 'Sentinel-5P', dataType: 'NO2, SO2, CO, O3, Aerosol Index', color: '#fd79a8', enabled: true },
+  { id: 'EJT_Sentinel5P', name: 'Pollution Distribution', index: 'EJT', satellite: 'Sentinel-5P', dataType: 'Pollution distribution mapping', color: '#e17055', enabled: false },
+  { id: 'GEA_Sentinel2', name: 'High-res Vegetation', index: 'GEA', satellite: 'Sentinel-2', dataType: 'High-resolution vegetation monitoring (10m)', color: '#00b894', enabled: false },
+  { id: 'WSI_Sentinel2', name: 'Water Quality (High-res)', index: 'WSI', satellite: 'Sentinel-2', dataType: 'High-resolution water quality monitoring', color: '#0984e3', enabled: false },
+  { id: 'SCM_Sentinel1', name: 'Building Structure', index: 'SCM', satellite: 'Sentinel-1', dataType: 'Built environment structure analysis', color: '#6c5ce7', enabled: false },
+  { id: 'DPI_Sentinel1', name: 'Infrastructure Monitoring', index: 'DPI', satellite: 'Sentinel-1', dataType: 'Ground movement and infrastructure monitoring', color: '#a29bfe', enabled: false },
+  { id: 'SCM_VIIRS', name: 'Community Activity', index: 'SCM', satellite: 'VIIRS', dataType: 'Community activity and economic patterns', color: '#fab1a0', enabled: false },
+  { id: 'GEA_VIIRS', name: 'Green Space Usage', index: 'GEA', satellite: 'VIIRS', dataType: 'Community activity and usage patterns', color: '#00cec9', enabled: false },
+  { id: 'EJT_VIIRS', name: 'Socioeconomic Patterns', index: 'EJT', satellite: 'VIIRS', dataType: 'Socioeconomic activity patterns', color: '#e17055', enabled: false },
+  { id: 'UHVI_VIIRS', name: 'Urban Heat Patterns', index: 'UHVI', satellite: 'VIIRS', dataType: 'Urban development patterns', color: '#fd79a8', enabled: false },
+  { id: 'TAS_VIIRS', name: 'Traffic Patterns', index: 'TAS', satellite: 'VIIRS', dataType: 'Transportation usage patterns', color: '#fdcb6e', enabled: false },
+  { id: 'WSI_GRACE', name: 'Groundwater Changes', index: 'WSI', satellite: 'GRACE/GRACE-FO', dataType: 'Groundwater storage changes', color: '#74b9ff', enabled: false },
+  { id: 'WSI_SMAP', name: 'Soil Moisture', index: 'WSI', satellite: 'SMAP', dataType: 'Soil moisture (top 5cm)', color: '#81ecec', enabled: false },
+  { id: 'DPI_GPM', name: 'Precipitation & Floods', index: 'DPI', satellite: 'GPM', dataType: 'Precipitation and flood risk patterns', color: '#0984e3', enabled: false }
 ];
 
 export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: DataVisualizationProps) {
@@ -83,6 +180,11 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     areaName: ''
   });
   const [areaBounds, setAreaBounds] = useState<AreaBounds | null>(null);
+  
+  // New state for beginner-friendly features
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(['climate', 'environment', 'air']);
+  const [selectedPreset, setSelectedPreset] = useState<string>('health');
 
   useEffect(() => {
     loadChartData();
@@ -193,6 +295,74 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
 
   const updateChart = () => {
     loadChartData();
+  };
+
+  // New helper functions for categories and presets
+  const toggleCategory = (categoryId: string) => {
+    setSelectedCategories(prev => {
+      const newCategories = prev.includes(categoryId) 
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId];
+      
+      // Update layers based on selected categories
+      const categoriesToShow = DATA_CATEGORIES.filter(cat => newCategories.includes(cat.id));
+      const layersToEnable = categoriesToShow.flatMap(cat => cat.layers);
+      
+      setLayers(prevLayers => 
+        prevLayers.map(layer => ({
+          ...layer,
+          enabled: layersToEnable.includes(layer.id)
+        }))
+      );
+      
+      return newCategories;
+    });
+  };
+
+  const applyPreset = (presetId: string) => {
+    setSelectedPreset(presetId);
+    const preset = ANALYSIS_PRESETS.find(p => p.id === presetId);
+    if (preset) {
+      setSelectedCategories(preset.categories);
+      
+      // Enable layers for this preset
+      const categoriesToShow = DATA_CATEGORIES.filter(cat => preset.categories.includes(cat.id));
+      const layersToEnable = categoriesToShow.flatMap(cat => cat.layers);
+      
+      setLayers(prevLayers => 
+        prevLayers.map(layer => ({
+          ...layer,
+          enabled: layersToEnable.includes(layer.id)
+        }))
+      );
+    }
+  };
+
+  // Generate insights based on data
+  const generateInsights = () => {
+    if (chartData.length === 0) return [];
+    
+    const insights = [];
+    const enabledLayers = layers.filter(l => l.enabled);
+    
+    // Calculate trends and averages
+    enabledLayers.forEach(layer => {
+      const layerData = chartData.filter(d => d.index === layer.name);
+      if (layerData.length > 0) {
+        const avg = layerData.reduce((sum, d) => sum + d.value, 0) / layerData.length;
+        const recent = layerData.slice(-7).reduce((sum, d) => sum + d.value, 0) / Math.min(7, layerData.length);
+        const trend = recent > avg ? 'improving' : recent < avg ? 'declining' : 'stable';
+        
+        insights.push({
+          layer: layer.name,
+          average: Math.round(avg),
+          trend,
+          status: avg > 70 ? 'good' : avg > 40 ? 'moderate' : 'needs attention'
+        });
+      }
+    });
+    
+    return insights;
   };
 
   const searchAreaByName = async () => {
@@ -665,42 +835,142 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
             </div>
           </div>
 
-          {/* Data Layers */}
+          {/* Quick Analysis Presets */}
           <div className="space-y-4">
             <Label className="flex items-center gap-2 text-lg font-semibold text-foreground">
-              <Layers className="h-5 w-5" />
-              Satellite Data Layers
+              <Zap className="h-5 w-5" />
+              Quick Analysis Presets
             </Label>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {layers.map(layer => (
-                <div key={layer.id} className="glass-card p-4 rounded-xl hover-lift">
-                  <div className="flex items-center space-x-3">
-                    <Checkbox
-                      checked={layer.enabled}
-                      onCheckedChange={() => toggleLayer(layer.id)}
-                      id={layer.id}
-                      className="border-border/50"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label
-                        htmlFor={layer.id}
-                        className="text-sm font-medium cursor-pointer text-foreground block"
-                      >
-                        {layer.index}_{layer.satellite}
-                      </label>
-                      <p className="text-xs text-muted-foreground mt-1 truncate">{layer.dataType}</p>
-                      <Badge variant="outline" className="text-xs mt-2 border-border/30">
-                        {layer.satellite}
-                      </Badge>
-                    </div>
-                    <div 
-                      className="w-4 h-4 rounded-full border-2 border-white/20 flex-shrink-0"
-                      style={{ backgroundColor: layer.color }}
-                    />
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {ANALYSIS_PRESETS.map(preset => (
+                <Button
+                  key={preset.id}
+                  variant={selectedPreset === preset.id ? "default" : "outline"}
+                  onClick={() => applyPreset(preset.id)}
+                  className="h-auto p-4 flex flex-col items-start gap-2 text-left"
+                >
+                  <div className="text-sm font-medium">{preset.name}</div>
+                  <div className="text-xs text-muted-foreground">{preset.description}</div>
+                </Button>
               ))}
             </div>
+          </div>
+
+          {/* Category Selection */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <Layers className="h-5 w-5" />
+                Data Categories
+              </Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-sm text-muted-foreground"
+              >
+                {showAdvanced ? (
+                  <>
+                    <ChevronUp className="h-4 w-4 mr-1" />
+                    Hide Advanced
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4 mr-1" />
+                    Show Advanced Options
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            {/* Simple Category View */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {DATA_CATEGORIES.map(category => {
+                const IconComponent = category.icon;
+                const isSelected = selectedCategories.includes(category.id);
+                return (
+                  <div 
+                    key={category.id} 
+                    className={cn(
+                      "glass-card p-4 rounded-xl cursor-pointer transition-all hover-lift",
+                      isSelected ? "ring-2 ring-primary bg-primary/5" : ""
+                    )}
+                    onClick={() => toggleCategory(category.id)}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div 
+                        className="p-2 rounded-lg flex-shrink-0"
+                        style={{ backgroundColor: `${category.color}20`, color: category.color }}
+                      >
+                        <IconComponent className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-medium text-foreground">{category.name}</h3>
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={() => {}} // Handled by parent onClick
+                            className="border-border/50"
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{category.description}</p>
+                        <div className="flex items-center gap-1 mt-2">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {category.layers.filter(layerId => 
+                              layers.find(l => l.id === layerId)?.enabled
+                            ).length}/{category.layers.length} layers active
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Advanced Layer View */}
+            {showAdvanced && (
+              <div className="mt-6 space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <HelpCircle className="h-4 w-4" />
+                  Advanced: Individual satellite data layers for detailed analysis
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {layers.map(layer => (
+                    <div key={layer.id} className="glass-card p-4 rounded-xl hover-lift">
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          checked={layer.enabled}
+                          onCheckedChange={() => toggleLayer(layer.id)}
+                          id={layer.id}
+                          className="border-border/50"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <label
+                            htmlFor={layer.id}
+                            className="text-sm font-medium cursor-pointer text-foreground block"
+                          >
+                            {layer.name}
+                          </label>
+                          <p className="text-xs text-muted-foreground mt-1 truncate">{layer.dataType}</p>
+                          <Badge variant="outline" className="text-xs mt-2 border-border/30">
+                            {layer.satellite}
+                          </Badge>
+                        </div>
+                        <div 
+                          className="w-4 h-4 rounded-full border-2 border-white/20 flex-shrink-0"
+                          style={{ backgroundColor: layer.color }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Control Buttons */}
@@ -727,14 +997,14 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
         </CardContent>
       </Card>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      {/* Analysis Results & Insights */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
         {/* Main Chart */}
-        <Card className="xl:col-span-2 glass-card card-glow hover-lift chart-glow animate-slide-in-up" style={{ animationDelay: '0.5s' }}>
+        <Card className="xl:col-span-3 glass-card card-glow hover-lift chart-glow animate-slide-in-up" style={{ animationDelay: '0.5s' }}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-2xl">
               <BarChart3 className="h-6 w-6 text-primary" />
-              Urban Health Indices - Area Analysis
+              Urban Health Analysis
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -746,48 +1016,93 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           </CardContent>
         </Card>
 
-        {/* Summary Chart */}
+        {/* Insights Panel */}
         <Card className="glass-card card-glow hover-lift animate-slide-in-up" style={{ animationDelay: '0.6s' }}>
-          <CardHeader className="pb-2 sm:pb-3">
-            <CardTitle className="text-lg sm:text-xl text-white">Index Distribution</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Key Insights
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-2 sm:p-6">
-            <div className="h-64 sm:h-80 lg:h-[500px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={window.innerWidth < 640 ? 40 : 60}
-                    outerRadius={window.innerWidth < 640 ? 80 : 120}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                    labelLine={false}
+          <CardContent className="space-y-4">
+            {generateInsights().slice(0, 4).map((insight, index) => (
+              <div key={index} className="p-3 rounded-lg bg-background/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
+                  <Badge 
+                    variant={insight.status === 'good' ? 'default' : insight.status === 'moderate' ? 'secondary' : 'destructive'}
+                    className="text-xs"
                   >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.9)', 
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      borderRadius: '8px',
-                      backdropFilter: 'blur(16px)',
-                      color: '#ffffff',
-                      padding: '8px 12px',
-                      fontSize: window.innerWidth < 640 ? '12px' : '14px'
-                    }}
-                    itemStyle={{ color: '#ffffff', fontSize: window.innerWidth < 640 ? '11px' : '13px' }}
-                    labelStyle={{ color: '#ffffff', fontSize: window.innerWidth < 640 ? '11px' : '13px' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+                    {insight.status}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Avg: {insight.average}</span>
+                  <div className={cn(
+                    "flex items-center gap-1",
+                    insight.trend === 'improving' ? 'text-green-400' : 
+                    insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
+                  )}>
+                    <TrendingUp className={cn(
+                      "h-3 w-3",
+                      insight.trend === 'declining' && "rotate-180"
+                    )} />
+                    {insight.trend}
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {generateInsights().length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Run analysis to see insights</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Summary Chart */}
+      <Card className="glass-card card-glow hover-lift animate-slide-in-up" style={{ animationDelay: '0.7s' }}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Category Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
+                  labelLine={false}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+                    border: 'none',
+                    borderRadius: '8px',
+                    backdropFilter: 'blur(16px)',
+                    color: 'white'
+                  }} 
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
