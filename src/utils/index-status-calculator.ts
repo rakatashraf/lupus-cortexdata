@@ -1,5 +1,3 @@
-import { readFileSync } from 'fs';
-
 export type StatusVariant = "excellent" | "good" | "moderate" | "critical";
 
 interface IndexDefinition {
@@ -9,24 +7,61 @@ interface IndexDefinition {
   category: string;
 }
 
-// Parse the index definitions from the JSONL file
-const getIndexDefinitions = (): Record<string, IndexDefinition> => {
-  try {
-    const data = readFileSync('/src/data/healthy_city_indices.jsonl', 'utf-8');
-    const definitions: Record<string, IndexDefinition> = {};
-    
-    data.split('\n').forEach(line => {
-      if (line.trim()) {
-        const index = JSON.parse(line);
-        const key = getIndexKey(index.index_name);
-        definitions[key] = index;
-      }
-    });
-    
-    return definitions;
-  } catch (error) {
-    console.warn('Could not load index definitions, using fallback logic');
-    return {};
+// Embedded index definitions from healthy_city_wellbeing_indices.jsonl
+const INDEX_DEFINITIONS: Record<string, IndexDefinition> = {
+  'cri': {
+    index_name: 'Climate Resilience Index (CRI)',
+    measurement_range: '0-100 (0=Highly Vulnerable, 100=Highly Resilient)',
+    healthy_city_target: '≥75 points (Highly Resilient)',
+    category: 'Physical Health & Environmental Quality Indices'
+  },
+  'uhvi': {
+    index_name: 'Urban Heat Vulnerability Index (UHVI)',
+    measurement_range: '0-100 (0=No Heat Risk, 100=Extreme Heat Risk)',
+    healthy_city_target: '≤30 points (Low to Moderate Heat Risk)',
+    category: 'Physical Health & Environmental Quality Indices'
+  },
+  'aqhi': {
+    index_name: 'Air Quality Health Impact (AQHI)',
+    measurement_range: '1-10+ (1=Low Health Risk, 10+=Very High Health Risk)',
+    healthy_city_target: '≤4 points (Low to Moderate Health Risk)',
+    category: 'Physical Health & Environmental Quality Indices'
+  },
+  'wsi': {
+    index_name: 'Water Security Indicator (WSI)',
+    measurement_range: '0-100 (0=Critical Water Stress, 100=Water Secure)',
+    healthy_city_target: '≥70 points (Water Secure)',
+    category: 'Physical Health & Environmental Quality Indices'
+  },
+  'gea': {
+    index_name: 'Green Equity Assessment (GEA)',
+    measurement_range: '0-100 (0=Highly Inequitable, 100=Perfectly Equitable)',
+    healthy_city_target: '≥75 points (High Equity in Green Access)',
+    category: 'Mental Health & Social Wellbeing Indices'
+  },
+  'scm': {
+    index_name: 'Social Cohesion Metrics (SCM)',
+    measurement_range: '0-100 (0=Highly Fragmented, 100=Highly Cohesive)',
+    healthy_city_target: '≥70 points (Strong Community Cohesion)',
+    category: 'Mental Health & Social Wellbeing Indices'
+  },
+  'ejt': {
+    index_name: 'Environmental Justice Tracker (EJT)',
+    measurement_range: '0-100 (0=Extreme Environmental Injustice, 100=Perfect Environmental Justice)',
+    healthy_city_target: '≥80 points (High Environmental Justice)',
+    category: 'Environmental Justice & Equity Indices'
+  },
+  'tas': {
+    index_name: 'Transportation Accessibility Score (TAS)',
+    measurement_range: '0-100 (0=Very Poor Access, 100=Excellent Access)',
+    healthy_city_target: '≥75 points (Excellent Transportation Access)',
+    category: 'Transportation & Mobility Indices'
+  },
+  'dpi': {
+    index_name: 'Disaster Preparedness Index (DPI)',
+    measurement_range: '0-100 (0=Highly Vulnerable, 100=Highly Prepared)',
+    healthy_city_target: '≥70 points (Well-Prepared for Disasters)',
+    category: 'Disaster Preparedness & Safety Indices'
   }
 };
 
@@ -66,18 +101,61 @@ export const calculateIndexStatus = (
   
   switch (key) {
     case 'uhvi': // Urban Heat Vulnerability Index - Lower is better (≤30)
-      if (score <= 15) return 'excellent';     // Green: Very low heat risk
+      if (score <= 15) return 'excellent';     // Green: No to very low heat risk
       if (score <= 25) return 'good';          // Blue: Low heat risk  
       if (score <= 35) return 'moderate';      // Yellow: Moderate heat risk
-      return 'critical';                       // Red: High heat risk
+      return 'critical';                       // Red: High to extreme heat risk
       
     case 'aqhi': // Air Quality Health Impact - Lower is better (≤4)
       if (score <= 2) return 'excellent';      // Green: Low health risk
       if (score <= 3) return 'good';           // Blue: Low-moderate health risk
       if (score <= 6) return 'moderate';       // Yellow: Moderate health risk
-      return 'critical';                       // Red: High health risk
+      return 'critical';                       // Red: High to very high health risk
       
-    // All other indices are "higher is better"
+    // All other indices are "higher is better" with specific targets
+    case 'cri': // Climate Resilience Index - Target ≥75
+      if (score >= 90) return 'excellent';     // Green: Highly resilient
+      if (score >= 75) return 'good';          // Blue: Resilient
+      if (score >= 50) return 'moderate';      // Yellow: Moderately vulnerable
+      return 'critical';                       // Red: Highly vulnerable
+      
+    case 'wsi': // Water Security Indicator - Target ≥70
+      if (score >= 85) return 'excellent';     // Green: Highly water secure
+      if (score >= 70) return 'good';          // Blue: Water secure
+      if (score >= 40) return 'moderate';      // Yellow: Water stressed
+      return 'critical';                       // Red: Critical water stress
+      
+    case 'gea': // Green Equity Assessment - Target ≥75
+      if (score >= 90) return 'excellent';     // Green: Highly equitable
+      if (score >= 75) return 'good';          // Blue: High equity
+      if (score >= 50) return 'moderate';      // Yellow: Moderate equity
+      return 'critical';                       // Red: Highly inequitable
+      
+    case 'scm': // Social Cohesion Metrics - Target ≥70
+      if (score >= 85) return 'excellent';     // Green: Highly cohesive
+      if (score >= 70) return 'good';          // Blue: Strong cohesion
+      if (score >= 40) return 'moderate';      // Yellow: Moderate cohesion
+      return 'critical';                       // Red: Highly fragmented
+      
+    case 'ejt': // Environmental Justice Tracker - Target ≥80
+      if (score >= 90) return 'excellent';     // Green: Perfect environmental justice
+      if (score >= 80) return 'good';          // Blue: High environmental justice
+      if (score >= 50) return 'moderate';      // Yellow: Moderate environmental justice
+      return 'critical';                       // Red: Extreme environmental injustice
+      
+    case 'tas': // Transportation Accessibility Score - Target ≥75
+      if (score >= 90) return 'excellent';     // Green: Excellent access
+      if (score >= 75) return 'good';          // Blue: Good access
+      if (score >= 50) return 'moderate';      // Yellow: Moderate access
+      return 'critical';                       // Red: Very poor access
+      
+    case 'dpi': // Disaster Preparedness Index - Target ≥70
+      if (score >= 85) return 'excellent';     // Green: Highly prepared
+      if (score >= 70) return 'good';          // Blue: Well-prepared
+      if (score >= 40) return 'moderate';      // Yellow: Moderately prepared
+      return 'critical';                       // Red: Highly vulnerable
+      
+    // Fallback for any unknown indices - use percentage-based calculation
     default:
       const percentage = (score / target) * 100;
       if (percentage >= 95) return 'excellent';  // Green: Highly good/Lowest risk
@@ -97,14 +175,34 @@ export const calculateProgressPercentage = (
   const key = indexKey || getIndexKey(indexName);
   
   switch (key) {
-    case 'uhvi': // Urban Heat Vulnerability Index - Lower is better
-      // For UHVI, show progress as "how close are we to the good range"
-      // Target is ≤30, so we want to show progress toward 0
+    case 'uhvi': // Urban Heat Vulnerability Index - Lower is better (≤30)
+      // Progress toward ideal (0), capped at 30 as target
       return Math.max(0, Math.min(100, ((30 - score) / 30) * 100));
       
-    case 'aqhi': // Air Quality Health Impact - Lower is better  
-      // For AQHI, target is ≤4, so progress toward 1 (best possible)
+    case 'aqhi': // Air Quality Health Impact - Lower is better (≤4)  
+      // Progress toward ideal (1), target is ≤4
       return Math.max(0, Math.min(100, ((4 - score) / 3) * 100));
+      
+    case 'cri': // Climate Resilience Index - Target ≥75
+      return Math.min(100, (score / 75) * 100);
+      
+    case 'wsi': // Water Security Indicator - Target ≥70
+      return Math.min(100, (score / 70) * 100);
+      
+    case 'gea': // Green Equity Assessment - Target ≥75
+      return Math.min(100, (score / 75) * 100);
+      
+    case 'scm': // Social Cohesion Metrics - Target ≥70
+      return Math.min(100, (score / 70) * 100);
+      
+    case 'ejt': // Environmental Justice Tracker - Target ≥80
+      return Math.min(100, (score / 80) * 100);
+      
+    case 'tas': // Transportation Accessibility Score - Target ≥75
+      return Math.min(100, (score / 75) * 100);
+      
+    case 'dpi': // Disaster Preparedness Index - Target ≥70
+      return Math.min(100, (score / 70) * 100);
       
     default:
       // Higher is better - standard calculation
