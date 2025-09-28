@@ -1291,100 +1291,296 @@ Example scenarios:
     </div>
   );
 
-  // Enhanced PDF generation for residents (simpler, user-friendly)
+  // Calculate Human Wellbeing Index (HWI) from index scores
+  const calculateHWI = (indexScores: { [key: string]: number }) => {
+    const weights = {
+      'AQHI': 0.20, // Air Quality - 20%
+      'CRI': 0.25,  // Safety/Crime - 25%
+      'WSI': 0.15,  // Water/Sanitation - 15%
+      'TAS': 0.15,  // Transportation - 15%
+      'GEA': 0.10,  // Green Environment - 10%
+      'UHVI': 0.05, // Urban Heat - 5%
+      'SCM': 0.05,  // Smart City - 5%
+      'EJT': 0.05   // Economic Justice - 5%
+    };
+    
+    let totalScore = 0;
+    let totalWeight = 0;
+    
+    Object.entries(indexScores).forEach(([key, score]) => {
+      const weight = weights[key as keyof typeof weights] || 0.05;
+      totalScore += score * weight;
+      totalWeight += weight;
+    });
+    
+    return Math.round(totalWeight > 0 ? totalScore / totalWeight : 0);
+  };
+
+  // Get suitability interpretation based on HWI score
+  const getSuitabilityLevel = (hwi: number) => {
+    if (hwi >= 90) return { level: 'Excellent', desc: 'Highly Suitable', color: '#10b981' };
+    if (hwi >= 70) return { level: 'Good', desc: 'Suitable with minor considerations', color: '#f59e0b' };
+    if (hwi >= 50) return { level: 'Fair', desc: 'Suitable with mitigation measures', color: '#f59e0b' };
+    if (hwi >= 30) return { level: 'Poor', desc: 'Requires significant improvements', color: '#ef4444' };
+    return { level: 'Very Poor', desc: 'Not recommended', color: '#ef4444' };
+  };
+
+  // Enhanced PDF generation for residents (1-page Urban Suitability Analysis)
   const downloadResidentPDF = async (recommendation: EnhancedRecommendation) => {
     try {
       const pdf = new jsPDF();
+      const pageWidth = pdf.internal.pageSize.width;
+      const hwi = calculateHWI(recommendation.indexScores);
+      const suitability = getSuitabilityLevel(hwi);
       
-      // Add logo
-      try {
-        const logoImg = new Image();
-        logoImg.onload = () => {
-          pdf.addImage(logoImg, 'PNG', 15, 15, 30, 30);
-          generateResidentPDFContent(pdf, recommendation);
-        };
-        logoImg.src = lupusLogo;
-      } catch (error) {
-        generateResidentPDFContent(pdf, recommendation);
+      // Header Section
+      pdf.setFontSize(16);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('Urban Suitability Analysis Report', 20, 20);
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text(`Location: ${recommendation.area}`, 20, 30);
+      pdf.text(`Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 20, 36);
+      pdf.text('Prepared for: Resident', 20, 42);
+      
+      // 1. User Requirements
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('1. User Requirements', 20, 55);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Purpose: Residential (family home)', 20, 63);
+      
+      const keyRequirements = recommendation.residentSummary.suitabilityTags.slice(0, 3).join(', ');
+      const wrappedRequirements = pdf.splitTextToSize(`Key Criteria: ${keyRequirements}`, pageWidth - 40);
+      pdf.text(wrappedRequirements, 20, 69);
+      
+      // 2. Location Analysis Table
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('2. Location Analysis', 20, 85);
+      
+      // Table headers
+      pdf.setFontSize(8);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Factor', 20, 95);
+      pdf.text('Score', 80, 95);
+      pdf.text('Status', 120, 95);
+      pdf.text('Notes', 150, 95);
+      
+      // Table data
+      let yPos = 103;
+      const factors = [
+        { name: 'Air Quality', score: recommendation.indexScores.AQHI || 0, note: 'AQHI index' },
+        { name: 'Safety', score: recommendation.indexScores.CRI || 0, note: 'Crime risk index' },
+        { name: 'Water Quality', score: recommendation.indexScores.WSI || 0, note: 'Water services' },
+        { name: 'Transportation', score: recommendation.indexScores.TAS || 0, note: 'Access & mobility' },
+        { name: 'Green Spaces', score: recommendation.indexScores.GEA || 0, note: 'Environmental access' }
+      ];
+      
+      factors.slice(0, 5).forEach(factor => {
+        const status = factor.score >= 70 ? 'Good' : factor.score >= 50 ? 'Fair' : 'Poor';
+        pdf.text(factor.name, 20, yPos);
+        pdf.text(Math.round(factor.score).toString(), 80, yPos);
+        pdf.text(status, 120, yPos);
+        pdf.text(factor.note, 150, yPos);
+        yPos += 8;
+      });
+      
+      // HWI Score
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text(`Human Wellbeing Index (HWI): ${hwi}/100`, 20, yPos + 10);
+      
+      // 3. Requirements vs Reality
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('3. Requirements vs Reality', 20, yPos + 25);
+      
+      pdf.setFontSize(8);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Requirement', 20, yPos + 35);
+      pdf.text('Actual Status', 80, yPos + 35);
+      pdf.text('Gap/Recommendation', 130, yPos + 35);
+      
+      let comparisonY = yPos + 43;
+      const comparisons = [
+        { req: 'Safe environment', actual: recommendation.indexScores.CRI >= 70 ? 'High safety' : 'Moderate safety', rec: recommendation.indexScores.CRI >= 70 ? 'Requirement met' : 'Security measures needed' },
+        { req: 'Clean air', actual: recommendation.indexScores.AQHI >= 70 ? 'Good quality' : 'Moderate quality', rec: recommendation.indexScores.AQHI >= 70 ? 'Requirement met' : 'Air filtration suggested' },
+        { req: 'Good connectivity', actual: recommendation.indexScores.TAS >= 70 ? 'Well connected' : 'Limited access', rec: recommendation.indexScores.TAS >= 70 ? 'Requirement met' : 'Transport improvements needed' }
+      ];
+      
+      comparisons.forEach(comp => {
+        pdf.text(comp.req, 20, comparisonY);
+        pdf.text(comp.actual, 80, comparisonY);
+        const wrappedRec = pdf.splitTextToSize(comp.rec, 60);
+        pdf.text(wrappedRec, 130, comparisonY);
+        comparisonY += 10;
+      });
+      
+      // 4. Recommendations
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('4. Recommendations', 20, comparisonY + 15);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text(`Overall Suitability: ${suitability.level} — ${suitability.desc}`, 20, comparisonY + 25);
+      
+      if (hwi < 70) {
+        pdf.text('Mitigation Measures:', 20, comparisonY + 35);
+        const measures = recommendation.residentSummary.healthConsiderations.slice(0, 2);
+        measures.forEach((measure, i) => {
+          pdf.text(`• ${measure}`, 25, comparisonY + 43 + (i * 8));
+        });
       }
+      
+      // 5. Summary
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('5. Summary', 20, 250);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      const summary = hwi >= 70 ? 
+        'Suitable for residential use with good overall conditions.' :
+        'Conditionally suitable - improvements recommended for optimal living conditions.';
+      pdf.text(`Decision: ${summary}`, 20, 260);
+      
+      // Footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(128, 128, 128);
+      pdf.text('Generated by Lupus Cortex Urban Intelligence Platform', 20, 280);
+      
+      pdf.save(`${recommendation.area.replace(/\s+/g, '_')}_Resident_Analysis.pdf`);
     } catch (error) {
       console.error('Error generating resident PDF:', error);
     }
   };
 
-  const generateResidentPDFContent = (pdf: jsPDF, recommendation: EnhancedRecommendation) => {
-    // Title
-    pdf.setFontSize(20);
-    pdf.setTextColor(0, 102, 204);
-    pdf.text('Location Guide for Residents', 50, 25);
-    
-    pdf.setFontSize(16);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text(recommendation.area, 15, 40);
-    
-    // Rating
-    pdf.setFontSize(12);
-    pdf.text(`Overall Rating: ${recommendation.rating}/5 stars`, 15, 50);
-    
-    // What this means for you
-    pdf.setFontSize(14);
-    pdf.setTextColor(0, 102, 204);
-    pdf.text('What This Means for Your Daily Life:', 15, 65);
-    
-    pdf.setFontSize(10);
-    pdf.setTextColor(0, 0, 0);
-    const dailyLifeLines = pdf.splitTextToSize(recommendation.residentSummary.dailyLifeImpact, 180);
-    pdf.text(dailyLifeLines, 15, 75);
-    
-    // Quick decision factors
-    let yPos = 75 + (dailyLifeLines.length * 5) + 10;
-    pdf.setFontSize(14);
-    pdf.setTextColor(0, 102, 204);
-    pdf.text('Key Benefits:', 15, yPos);
-    
-    yPos += 10;
-    pdf.setFontSize(10);
-    pdf.setTextColor(0, 0, 0);
-    recommendation.residentSummary.quickDecisionFactors.forEach((factor, index) => {
-      pdf.text(`• ${factor}`, 20, yPos + (index * 8));
-    });
-    
-    // Health considerations
-    yPos += recommendation.residentSummary.quickDecisionFactors.length * 8 + 15;
-    pdf.setFontSize(14);
-    pdf.setTextColor(0, 102, 204);
-    pdf.text('Health & Safety Notes:', 15, yPos);
-    
-    yPos += 10;
-    pdf.setFontSize(10);
-    pdf.setTextColor(0, 0, 0);
-    recommendation.residentSummary.healthConsiderations.forEach((consideration, index) => {
-      const lines = pdf.splitTextToSize(`• ${consideration}`, 170);
-      pdf.text(lines, 20, yPos + (index * 12));
-      yPos += lines.length * 5;
-    });
-    
-    // Simple scores explanation
-    yPos += 20;
-    pdf.setFontSize(14);
-    pdf.setTextColor(0, 102, 204);
-    pdf.text('Location Scores (0-100):', 15, yPos);
-    
-    yPos += 10;
-    pdf.setFontSize(10);
-    pdf.setTextColor(0, 0, 0);
-    Object.entries(recommendation.indexScores).forEach(([index, score]) => {
-      const scoreText = `${index}: ${Math.round(score)} (${score >= 70 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Attention'})`;
-      pdf.text(scoreText, 20, yPos);
-      yPos += 8;
-    });
-    
-    pdf.save(`${recommendation.area.replace(/[^a-zA-Z0-9]/g, '_')}_Resident_Guide.pdf`);
-  };
-
-  // Enhanced PDF generation for urban planners (technical, detailed)
+  // Enhanced PDF generation for urban planners (1-page Technical Analysis)
   const downloadPlannerPDF = async (recommendation: EnhancedRecommendation) => {
-    // Use existing downloadPDF function 
-    await downloadPDF(recommendation);
+    try {
+      const pdf = new jsPDF();
+      const pageWidth = pdf.internal.pageSize.width;
+      const hwi = calculateHWI(recommendation.indexScores);
+      const suitability = getSuitabilityLevel(hwi);
+      
+      // Header Section
+      pdf.setFontSize(16);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('Urban Suitability Analysis Report', 20, 20);
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text(`Location: ${recommendation.area}`, 20, 30);
+      pdf.text(`Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 20, 36);
+      pdf.text('Prepared for: Urban Planner / Developer', 20, 42);
+      
+      // 1. Development Requirements
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('1. Development Requirements', 20, 55);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Purpose: Mixed-use urban development', 20, 63);
+      pdf.text('Key Criteria: Infrastructure capacity, zoning compliance, investment viability', 20, 69);
+      
+      // 2. Technical Metrics Analysis
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('2. Technical Analysis', 20, 85);
+      
+      // Detailed metrics table
+      pdf.setFontSize(8);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Index', 20, 95);
+      pdf.text('Score', 60, 95);
+      pdf.text('Benchmark', 90, 95);
+      pdf.text('Status', 130, 95);
+      pdf.text('Impact', 160, 95);
+      
+      let yPos = 103;
+      Object.entries(recommendation.indexScores).forEach(([index, score]) => {
+        const benchmark = 70; // Standard benchmark
+        const status = score >= benchmark ? 'Meets' : 'Below';
+        const impact = score >= 80 ? 'Positive' : score >= 60 ? 'Neutral' : 'Concern';
+        
+        pdf.text(index, 20, yPos);
+        pdf.text(Math.round(score).toString(), 60, yPos);
+        pdf.text(benchmark.toString(), 90, yPos);
+        pdf.text(status, 130, yPos);
+        pdf.text(impact, 160, yPos);
+        yPos += 7;
+      });
+      
+      // HWI Score
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text(`Human Wellbeing Index (HWI): ${hwi}/100`, 20, yPos + 10);
+      
+      // 3. Development Viability Assessment
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('3. Development Viability', 20, yPos + 25);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      const wrappedDevelopment = pdf.splitTextToSize(recommendation.plannerAnalysis.developmentPotential, pageWidth - 40);
+      pdf.text(wrappedDevelopment, 20, yPos + 35);
+      
+      // 4. Policy & Investment Recommendations
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('4. Recommendations', 20, yPos + 60);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text(`Overall Suitability: ${suitability.level} (HWI: ${hwi}/100)`, 20, yPos + 70);
+      
+      // Policy recommendations
+      pdf.text('Policy Actions:', 20, yPos + 80);
+      recommendation.plannerAnalysis.policyRecommendations.slice(0, 3).forEach((policy, i) => {
+        const wrappedPolicy = pdf.splitTextToSize(`• ${policy}`, pageWidth - 45);
+        pdf.text(wrappedPolicy, 25, yPos + 88 + (i * 10));
+      });
+      
+      // Risk factors
+      pdf.text('Risk Mitigation:', 20, yPos + 125);
+      recommendation.plannerAnalysis.riskFactors.slice(0, 2).forEach((risk, i) => {
+        const wrappedRisk = pdf.splitTextToSize(`• ${risk}`, pageWidth - 45);
+        pdf.text(wrappedRisk, 25, yPos + 133 + (i * 10));
+      });
+      
+      // 5. Summary & Decision
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 102, 204);
+      pdf.text('5. Summary', 20, 250);
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      const plannerSummary = hwi >= 80 ? 
+        'Recommended for development with high viability potential.' :
+        hwi >= 60 ?
+        'Suitable for development with strategic improvements.' :
+        'Development requires significant infrastructure investment.';
+      pdf.text(`Decision: ${plannerSummary}`, 20, 260);
+      
+      // Investment analysis
+      const wrappedInvestment = pdf.splitTextToSize(`Investment Analysis: ${recommendation.plannerAnalysis.investmentAnalysis}`, pageWidth - 40);
+      pdf.text(wrappedInvestment, 20, 270);
+      
+      // Footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(128, 128, 128);
+      pdf.text('Generated by Lupus Cortex Urban Intelligence Platform', 20, 285);
+      
+      pdf.save(`${recommendation.area.replace(/\s+/g, '_')}_Planner_Analysis.pdf`);
+    } catch (error) {
+      console.error('Error generating planner PDF:', error);
+    }
   };
 };
