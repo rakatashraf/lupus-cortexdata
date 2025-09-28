@@ -33,7 +33,7 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
         "bg-gradient-to-br from-primary/10 via-primary-glow/5 to-transparent",
         "border-2 border-primary/20 hover:border-primary/40 shadow-glow",
         getStatusVariant(index.total_score, index.target) === 'excellent' && "border-green-500/40 hover:border-green-500/60",
-        "min-h-[200px] aspect-square rounded-lg p-0",
+        "min-h-[150px] sm:min-h-[180px] lg:min-h-[200px] aspect-square rounded-lg p-0 touch-manipulation",
         className
       )}
       onClick={onClick}
@@ -42,20 +42,20 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
       <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-primary/20 via-transparent to-primary-glow/10 opacity-50 group-hover:opacity-70 transition-opacity" />
       
       {/* Content */}
-      <CardContent className="relative flex flex-col items-center justify-center h-full p-6 text-center">
+      <CardContent className="relative flex flex-col items-center justify-center h-full p-4 sm:p-5 lg:p-6 text-center">
         {/* Icon */}
         <div className="mb-4 relative">
           <div className="absolute inset-0 bg-primary/20 rounded-lg blur-xl scale-150"></div>
-          <Heart className="relative h-8 w-8 text-primary group-hover:scale-110 transition-transform duration-300" />
+          <Heart className="relative h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-primary group-hover:scale-110 transition-transform duration-300" />
         </div>
         
         {/* Title */}
-        <h3 className="text-lg font-bold leading-tight mb-2 group-hover:text-primary transition-colors">
+        <h3 className="text-base sm:text-lg font-bold leading-tight mb-2 group-hover:text-primary transition-colors">
           Human Well-being
         </h3>
         
         {/* Score */}
-        <div className="text-3xl font-bold text-primary mb-2">
+        <div className="text-2xl sm:text-3xl font-bold text-primary mb-2">
           {index.total_score}
         </div>
         
@@ -68,16 +68,16 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
         </Badge>
         
         {/* Progress circle */}
-        <div className="w-full max-w-20 mb-3">
+        <div className="w-full max-w-16 sm:max-w-20 mb-3">
           <Progress 
             value={progressPercent} 
-            className="h-2 bg-primary/20"
+            className="h-1.5 sm:h-2 bg-primary/20"
             indicatorClassName={getProgressClass('Human Well-being Index (HWI)', index.total_score, index.target, 'hwi')}
           />
         </div>
         
         {/* Status */}
-        <p className={cn("text-sm font-semibold mb-1", getHealthStatusColor(index.status))}>
+        <p className={cn("text-xs sm:text-sm font-semibold mb-1", getHealthStatusColor(index.status))}>
           {index.status}
         </p>
         

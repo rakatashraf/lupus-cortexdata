@@ -137,7 +137,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Top Header Section - 3 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Index Measurements Overview - Left */}
         <div className="lg:col-span-1">
           <IndexMeasurementsList />
@@ -180,11 +180,11 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
         </div>
         
         {/* Human Well-being Index - Right */}
-        <div className="lg:col-span-1 flex justify-center lg:justify-end">
+        <div className="md:col-span-1 lg:col-span-1 flex justify-center">
           <HumanWellbeingCard 
             index={hwiIndex}
             onClick={() => setSelectedIndex({ index: hwiIndex, key: 'hwi' })}
-            className="w-full max-w-[200px] lg:max-w-none"
+            className="w-full"
           />
         </div>
       </div>

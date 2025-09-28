@@ -54,17 +54,17 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
     <>
       <Card 
         className={cn(
-          "min-h-[200px] aspect-square rounded-lg bg-gradient-card shadow-card cursor-pointer hover:scale-105 transition-all duration-300 hover:shadow-lg group",
+          "min-h-[150px] sm:min-h-[180px] lg:min-h-[200px] aspect-square rounded-lg bg-gradient-card shadow-card cursor-pointer hover:scale-105 transition-all duration-300 hover:shadow-lg group touch-manipulation",
           className
         )}
         onClick={() => setShowModal(true)}
       >
-        <CardContent className="p-6 h-full flex flex-col items-center justify-center text-center">
+        <CardContent className="p-4 sm:p-5 lg:p-6 h-full flex flex-col items-center justify-center text-center">
           <div className="flex items-center justify-center mb-3">
             <List className="h-8 w-8 text-primary" />
           </div>
           
-          <CardTitle className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">
+          <CardTitle className="text-lg sm:text-xl font-bold mb-2 group-hover:text-primary transition-colors">
             Index Measurements
           </CardTitle>
           
@@ -78,7 +78,7 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
               return (
                 <div key={indexName} className="flex items-center gap-2 justify-center">
                   <IconComponent className="h-3 w-3 text-primary" />
-                  <span className="text-xs text-muted-foreground truncate max-w-24">
+                  <span className="text-xs sm:text-sm text-muted-foreground truncate max-w-20 sm:max-w-28">
                     {indexName.replace(/\s*\([^)]*\)/, '')}
                   </span>
                 </div>
