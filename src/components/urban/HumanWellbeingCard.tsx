@@ -32,6 +32,7 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
         "relative overflow-hidden cursor-pointer group transition-all duration-300 hover:scale-105",
         "bg-gradient-to-br from-primary/10 via-primary-glow/5 to-transparent",
         "border-2 border-primary/20 hover:border-primary/40 shadow-glow",
+        getStatusVariant(index.total_score, index.target) === 'excellent' && "border-green-500/40 hover:border-green-500/60",
         "min-h-[200px] aspect-square rounded-full p-0",
         className
       )}

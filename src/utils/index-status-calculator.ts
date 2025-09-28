@@ -114,45 +114,45 @@ export const calculateIndexStatus = (
       
     // All other indices are "higher is better" with specific targets
     case 'cri': // Climate Resilience Index - Target ≥75
-      if (score >= 90) return 'excellent';     // Green: Highly resilient
-      if (score >= 75) return 'good';          // Blue: Resilient
-      if (score >= 50) return 'moderate';      // Yellow: Moderately vulnerable
+      if (score >= 75) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 60) return 'good';          // Blue: Resilient
+      if (score >= 40) return 'moderate';      // Yellow: Moderately vulnerable
       return 'critical';                       // Red: Highly vulnerable
       
     case 'wsi': // Water Security Indicator - Target ≥70
-      if (score >= 85) return 'excellent';     // Green: Highly water secure
-      if (score >= 70) return 'good';          // Blue: Water secure
-      if (score >= 40) return 'moderate';      // Yellow: Water stressed
+      if (score >= 70) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 55) return 'good';          // Blue: Water secure
+      if (score >= 35) return 'moderate';      // Yellow: Water stressed
       return 'critical';                       // Red: Critical water stress
       
     case 'gea': // Green Equity Assessment - Target ≥75
-      if (score >= 90) return 'excellent';     // Green: Highly equitable
-      if (score >= 75) return 'good';          // Blue: High equity
-      if (score >= 50) return 'moderate';      // Yellow: Moderate equity
+      if (score >= 75) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 60) return 'good';          // Blue: High equity
+      if (score >= 40) return 'moderate';      // Yellow: Moderate equity
       return 'critical';                       // Red: Highly inequitable
       
     case 'scm': // Social Cohesion Metrics - Target ≥70
-      if (score >= 85) return 'excellent';     // Green: Highly cohesive
-      if (score >= 70) return 'good';          // Blue: Strong cohesion
-      if (score >= 40) return 'moderate';      // Yellow: Moderate cohesion
+      if (score >= 70) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 55) return 'good';          // Blue: Strong cohesion
+      if (score >= 35) return 'moderate';      // Yellow: Moderate cohesion
       return 'critical';                       // Red: Highly fragmented
       
     case 'ejt': // Environmental Justice Tracker - Target ≥80
-      if (score >= 90) return 'excellent';     // Green: Perfect environmental justice
-      if (score >= 80) return 'good';          // Blue: High environmental justice
-      if (score >= 50) return 'moderate';      // Yellow: Moderate environmental justice
+      if (score >= 80) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 65) return 'good';          // Blue: High environmental justice
+      if (score >= 45) return 'moderate';      // Yellow: Moderate environmental justice
       return 'critical';                       // Red: Extreme environmental injustice
       
     case 'tas': // Transportation Accessibility Score - Target ≥75
-      if (score >= 90) return 'excellent';     // Green: Excellent access
-      if (score >= 75) return 'good';          // Blue: Good access
-      if (score >= 50) return 'moderate';      // Yellow: Moderate access
+      if (score >= 75) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 60) return 'good';          // Blue: Good access
+      if (score >= 40) return 'moderate';      // Yellow: Moderate access
       return 'critical';                       // Red: Very poor access
       
     case 'dpi': // Disaster Preparedness Index - Target ≥70
-      if (score >= 85) return 'excellent';     // Green: Highly prepared
-      if (score >= 70) return 'good';          // Blue: Well-prepared
-      if (score >= 40) return 'moderate';      // Yellow: Moderately prepared
+      if (score >= 70) return 'excellent';     // Green: Meets healthy city target
+      if (score >= 55) return 'good';          // Blue: Well-prepared
+      if (score >= 35) return 'moderate';      // Yellow: Moderately prepared
       return 'critical';                       // Red: Highly vulnerable
       
     // Fallback for any unknown indices - use percentage-based calculation
