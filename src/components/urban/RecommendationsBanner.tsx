@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, ChevronDown, ChevronUp, Lightbulb, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Lightbulb, TrendingUp, ExternalLink } from 'lucide-react';
 import { CityHealthData, UrbanIndex } from '@/types/urban-indices';
 import { cn } from '@/lib/utils';
+import { RecommendationDetailModal } from './RecommendationDetailModal';
 
 interface RecommendationsBannerProps {
   healthData: CityHealthData;
@@ -14,6 +15,7 @@ interface RecommendationsBannerProps {
 
 export function RecommendationsBanner({ healthData, className }: RecommendationsBannerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<{ key: string; index: UrbanIndex } | null>(null);
   
   // Get indices that need improvement
   const indicesNeedingImprovement = Object.entries(healthData.indices)
@@ -88,23 +90,27 @@ export function RecommendationsBanner({ healthData, className }: Recommendations
                 return (
                   <div 
                     key={key}
-                    className="p-3 rounded-lg bg-muted/30 border border-warning/20 hover:bg-muted/40 transition-colors"
+                    className="p-3 rounded-lg bg-muted/30 border border-warning/20 hover:bg-muted/40 transition-all duration-200 cursor-pointer group"
+                    onClick={() => setSelectedIndex({ key, index })}
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-medium text-sm leading-tight">
+                      <h4 className="font-medium text-sm leading-tight group-hover:text-primary transition-colors">
                         {index.index_name}
                       </h4>
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          "ml-2 text-xs",
-                          priority === 'high' && "bg-destructive/20 text-destructive border-destructive/30",
-                          priority === 'medium' && "bg-warning/20 text-warning border-warning/30",
-                          priority === 'low' && "bg-info/20 text-info border-info/30"
-                        )}
-                      >
-                        {priority} priority
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "text-xs",
+                            priority === 'high' && "bg-destructive/20 text-destructive border-destructive/30",
+                            priority === 'medium' && "bg-warning/20 text-warning border-warning/30",
+                            priority === 'low' && "bg-info/20 text-info border-info/30"
+                          )}
+                        >
+                          {priority} priority
+                        </Badge>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-2 mb-2">
@@ -114,9 +120,20 @@ export function RecommendationsBanner({ healthData, className }: Recommendations
                       </p>
                     </div>
                     
-                    <p className="text-xs text-foreground leading-relaxed">
+                    <p className="text-xs text-foreground leading-relaxed mb-2">
                       {getQuickRecommendation(key, index)}
                     </p>
+                    
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-primary font-medium">Click for detailed action plan</p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        View Details
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -130,6 +147,15 @@ export function RecommendationsBanner({ healthData, className }: Recommendations
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
+      
+      {selectedIndex && (
+        <RecommendationDetailModal
+          isOpen={!!selectedIndex}
+          onClose={() => setSelectedIndex(null)}
+          indexKey={selectedIndex.key}
+          index={selectedIndex.index}
+        />
+      )}
     </Card>
   );
 }
