@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Zap, Globe, Activity, Shield, Lightbulb, TrendingUp } from 'lucide-react';
 import heroImage from '@/assets/hero-urban-dashboard.jpg';
+import { TestimonialsCarousel } from './TestimonialsCarousel';
 
 interface WelcomeSectionProps {
   onGetStarted: () => void;
@@ -133,6 +134,9 @@ export function WelcomeSection({ onGetStarted }: WelcomeSectionProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Testimonials Section */}
+      <TestimonialsCarousel />
     </div>
   );
 }
