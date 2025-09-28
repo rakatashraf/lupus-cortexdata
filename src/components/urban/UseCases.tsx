@@ -25,13 +25,16 @@ import {
   Star,
   Info,
   UserCheck,
-  Building
+  Building,
+  Eye,
+  MousePointer2
 } from 'lucide-react';
 import { n8nService } from '@/services/n8n-service';
 import jsPDF from 'jspdf';
 import lupusLogo from '@/assets/lupus-cortex-logo.png';
 import lupusLogoPdf from '@/assets/lupus-cortex-logo-pdf.png';
 import lupusLogoNew from '@/assets/lupus-cortex-new-logo.png';
+import { RecommendationAnalysisModal, EnhancedRecommendation } from './RecommendationAnalysisModal';
 
 interface UseCase {
   id: string;
@@ -214,7 +217,10 @@ export const UseCases: React.FC<UseCasesProps> = ({
   const [location, setLocation] = useState(`${latitude}, ${longitude}`);
   const [userDescription, setUserDescription] = useState('');
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [enhancedRecommendations, setEnhancedRecommendations] = useState<EnhancedRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedRecommendation, setSelectedRecommendation] = useState<EnhancedRecommendation | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const { toast } = useToast();
 
   const generateRecommendations = useCallback(async () => {
@@ -272,7 +278,12 @@ export const UseCases: React.FC<UseCasesProps> = ({
         }
       ];
 
-      setRecommendations(mockRecommendations.sort((a, b) => b.rating - a.rating));
+      const sortedRecommendations = mockRecommendations.sort((a, b) => b.rating - a.rating);
+      setRecommendations(sortedRecommendations);
+      
+      // Transform to enhanced recommendations
+      const enhanced = sortedRecommendations.map(rec => transformToEnhancedRecommendation(rec, userDescription));
+      setEnhancedRecommendations(enhanced);
       
       toast({
         title: "Comprehensive Evaluation Complete",
@@ -289,6 +300,184 @@ export const UseCases: React.FC<UseCasesProps> = ({
       setLoading(false);
     }
   }, [userDescription, location, toast]);
+
+  // Transform basic recommendation to enhanced recommendation with user-friendly content
+  const transformToEnhancedRecommendation = (rec: Recommendation, userDesc: string): EnhancedRecommendation => {
+    const lowerDesc = userDesc.toLowerCase();
+    
+    // Determine suitability based on scores and user description
+    const avgScore = Object.values(rec.indexScores).reduce((a, b) => a + b, 0) / Object.values(rec.indexScores).length;
+    const suitabilityTags = [];
+    
+    // Generate suitability tags based on context
+    if (lowerDesc.includes('family') || lowerDesc.includes('children') || lowerDesc.includes('kids')) {
+      suitabilityTags.push(rec.indexScores.CRI >= 70 && rec.indexScores.AQHI >= 70 ? 'Family-Friendly' : 'Consider Safety for Children');
+    }
+    if (lowerDesc.includes('senior') || lowerDesc.includes('elderly') || lowerDesc.includes('retirement')) {
+      suitabilityTags.push(rec.indexScores.AQHI >= 75 ? 'Senior-Suitable' : 'Health Considerations for Seniors');
+    }
+    if (lowerDesc.includes('business') || lowerDesc.includes('office') || lowerDesc.includes('commercial')) {
+      suitabilityTags.push(rec.indexScores.CRI >= 65 ? 'Business-Ready' : 'Review Security Needs');
+    }
+    if (avgScore >= 75) {
+      suitabilityTags.push('Excellent Overall Conditions');
+    } else if (avgScore >= 60) {
+      suitabilityTags.push('Good with Minor Considerations');
+    } else {
+      suitabilityTags.push('Requires Improvement');
+    }
+
+    // Generate daily life impact description
+    let dailyLifeImpact = '';
+    if (rec.rating >= 4) {
+      dailyLifeImpact = `This location offers excellent conditions for daily life. You'll enjoy ${rec.indexScores.AQHI >= 70 ? 'clean air for breathing comfort' : 'moderate air quality'}, ${rec.indexScores.CRI >= 70 ? 'safe streets for peace of mind' : 'basic safety measures'}, and ${rec.indexScores.UHVI >= 70 ? 'comfortable climate conditions year-round' : 'manageable climate with seasonal considerations'}.`;
+    } else if (rec.rating >= 3) {
+      dailyLifeImpact = `This location provides decent living conditions with some considerations. ${rec.indexScores.AQHI < 60 ? 'Air quality may require attention on high pollution days. ' : ''}${rec.indexScores.CRI < 60 ? 'Extra safety precautions recommended for evening activities. ' : ''}Overall suitable for most daily activities with awareness of local conditions.`;
+    } else {
+      dailyLifeImpact = `This location has challenges that require careful consideration. ${rec.indexScores.AQHI < 50 ? 'Poor air quality may affect sensitive individuals. ' : ''}${rec.indexScores.CRI < 50 ? 'Safety concerns require additional precautions. ' : ''}Consider whether these factors align with your specific needs and risk tolerance.`;
+    }
+
+    // Generate health considerations
+    const healthConsiderations = [];
+    if (rec.indexScores.AQHI < 60) {
+      healthConsiderations.push('Air quality may affect those with respiratory conditions');
+    } else if (rec.indexScores.AQHI >= 80) {
+      healthConsiderations.push('Excellent air quality suitable for outdoor activities');
+    }
+    
+    if (rec.indexScores.UHVI < 50) {
+      healthConsiderations.push('High heat vulnerability - stay hydrated and avoid midday sun');
+    } else if (rec.indexScores.UHVI >= 70) {
+      healthConsiderations.push('Good climate resilience for year-round comfort');
+    }
+
+    // Generate quick decision factors
+    const quickDecisionFactors = [];
+    if (rec.indexScores.CRI >= 70) quickDecisionFactors.push('Safe for evening walks and outdoor activities');
+    if (rec.indexScores.AQHI >= 70) quickDecisionFactors.push('Clean air suitable for children and elderly');
+    if (rec.indexScores.UHVI >= 70) quickDecisionFactors.push('Comfortable climate conditions');
+    if (avgScore >= 70) quickDecisionFactors.push('Overall excellent urban living conditions');
+    if (quickDecisionFactors.length === 0) {
+      quickDecisionFactors.push('Requires careful evaluation of specific needs');
+    }
+
+    return {
+      ...rec,
+      residentSummary: {
+        suitabilityTags,
+        dailyLifeImpact,
+        familyFriendly: rec.indexScores.CRI >= 70 && rec.indexScores.AQHI >= 65,
+        seniorFriendly: rec.indexScores.AQHI >= 75 && rec.indexScores.UHVI >= 65,
+        healthConsiderations,
+        quickDecisionFactors
+      },
+      plannerAnalysis: {
+        technicalMetrics: rec.indexScores,
+        developmentPotential: avgScore >= 70 ? 
+          'High development potential with good infrastructure foundation. Suitable for residential and mixed-use development with minimal environmental constraints.' :
+          avgScore >= 50 ?
+          'Moderate development potential requiring targeted improvements. Infrastructure upgrades needed for optimal development outcomes.' :
+          'Limited development potential without significant intervention. Requires comprehensive planning and substantial investment in infrastructure and environmental remediation.',
+        policyRecommendations: generatePolicyRecommendations(rec.indexScores, userDesc),
+        investmentAnalysis: generateInvestmentAnalysis(rec.indexScores, rec.rating),
+        riskFactors: generateRiskFactors(rec.indexScores),
+        improvementTimeline: generateImprovementTimeline(rec.indexScores),
+        comparativeAnalysis: `Index scores compared to city average: ${Object.entries(rec.indexScores)
+          .map(([index, score]) => `${index}: ${score >= 70 ? 'Above Average' : score >= 50 ? 'Average' : 'Below Average'}`)
+          .join(', ')}`
+      }
+    };
+  };
+
+  const generatePolicyRecommendations = (scores: { [key: string]: number }, userDesc: string): string[] => {
+    const recommendations = [];
+    
+    if (scores.CRI < 60) {
+      recommendations.push('Increase police patrol frequency and install additional street lighting');
+      recommendations.push('Implement community safety programs and neighborhood watch initiatives');
+    }
+    if (scores.AQHI < 60) {
+      recommendations.push('Establish air quality monitoring stations and emission controls');
+      recommendations.push('Promote green transportation and limit vehicle emissions');
+    }
+    if (scores.UHVI < 60) {
+      recommendations.push('Develop urban cooling strategies including tree planting and green roofs');
+      recommendations.push('Install cooling centers and heat warning systems');
+    }
+    
+    if (recommendations.length === 0) {
+      recommendations.push('Maintain current high standards through regular monitoring');
+      recommendations.push('Continue investment in preventive maintenance of infrastructure');
+    }
+    
+    return recommendations;
+  };
+
+  const generateInvestmentAnalysis = (scores: { [key: string]: number }, rating: number): string => {
+    const avgScore = Object.values(scores).reduce((a, b) => a + b, 0) / Object.values(scores).length;
+    
+    if (avgScore >= 70) {
+      return `High ROI potential with estimated property value growth of 8-12% annually. Infrastructure investment needs are minimal, estimated at $50-100K per development unit. Strong market demand expected.`;
+    } else if (avgScore >= 50) {
+      return `Moderate ROI potential requiring strategic investment. Infrastructure improvements needed, estimated at $150-300K per unit. Market demand dependent on improvement implementation timeline.`;
+    } else {
+      return `Lower ROI potential requiring significant upfront investment. Comprehensive infrastructure overhaul needed, estimated at $400-600K per unit. Long-term investment strategy recommended with 5-10 year payback period.`;
+    }
+  };
+
+  const generateRiskFactors = (scores: { [key: string]: number }): string[] => {
+    const risks = [];
+    
+    if (scores.CRI < 50) risks.push('High crime rates pose security risks for residents and businesses');
+    if (scores.AQHI < 50) risks.push('Poor air quality health risks, especially for vulnerable populations');
+    if (scores.UHVI < 50) risks.push('Extreme heat vulnerability affecting habitability and energy costs');
+    
+    if (risks.length === 0) {
+      risks.push('Minimal environmental and safety risks identified');
+    }
+    
+    return risks;
+  };
+
+  const generateImprovementTimeline = (scores: { [key: string]: number }): { [key: string]: string } => {
+    const timeline: { [key: string]: string } = {};
+    
+    if (scores.CRI < 60) {
+      timeline['0-6 months'] = 'Deploy additional security measures and community programs';
+      timeline['6-18 months'] = 'Install permanent security infrastructure and lighting';
+    }
+    if (scores.AQHI < 60) {
+      timeline['0-12 months'] = 'Implement emission controls and monitoring systems';
+      timeline['1-3 years'] = 'Develop green transportation infrastructure';
+    }
+    if (scores.UHVI < 60) {
+      timeline['0-6 months'] = 'Install emergency cooling centers';
+      timeline['1-5 years'] = 'Implement comprehensive urban cooling strategy';
+    }
+    
+    if (Object.keys(timeline).length === 0) {
+      timeline['Ongoing'] = 'Maintain current high standards through regular monitoring';
+    }
+    
+    return timeline;
+  };
+
+  const handleRecommendationClick = (recommendation: EnhancedRecommendation) => {
+    setSelectedRecommendation(recommendation);
+    setIsModalOpen(true);
+  };
+
+  const handleDownloadPDF = async (recommendation: EnhancedRecommendation, type: 'resident' | 'planner') => {
+    // Close modal first
+    setIsModalOpen(false);
+    
+    // Use existing downloadPDF function but adapt for different types
+    if (type === 'resident') {
+      await downloadResidentPDF(recommendation);
+    } else {
+      await downloadPlannerPDF(recommendation);
+    }
+  };
 
   const generateCustomReasons = (description: string, indices: any[], score: number, isGood = false, isBad = false) => {
     const reasons: string[] = [];
@@ -964,19 +1153,29 @@ Example scenarios:
       </Card>
 
       {/* Recommendations */}
-      {recommendations.length > 0 && (
+      {enhancedRecommendations.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold">Recommendations</h2>
+          <h2 className="text-2xl font-bold">Smart Location Recommendations</h2>
+          <p className="text-muted-foreground">
+            Click on any recommendation to see detailed analysis for residents and urban planners
+          </p>
           <div className="grid gap-4">
-            {recommendations.map((rec, index) => (
-              <Card key={index} className="glass-card">
+            {enhancedRecommendations.map((rec, index) => (
+              <Card 
+                key={index} 
+                className="glass-card cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] border-l-4 border-l-primary/50 hover:border-l-primary"
+                onClick={() => handleRecommendationClick(rec)}
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <MapPin className="h-5 w-5 text-primary" />
-                      <div>
-                        <CardTitle className="text-lg">{rec.area}</CardTitle>
-                        <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CardTitle className="text-lg">{rec.area}</CardTitle>
+                          <MousePointer2 className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex items-center gap-2">
                           <div className="flex">
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
@@ -996,27 +1195,52 @@ Example scenarios:
                             LUPUS RECOMMENDED
                           </Badge>
                         </div>
+                        
+                        {/* User-friendly overview */}
+                        <div className="mt-3 space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {rec.residentSummary.suitabilityTags.slice(0, 3).map((tag, tagIndex) => (
+                              <Badge key={tagIndex} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {rec.residentSummary.dailyLifeImpact}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => downloadPDF(rec)}
-                      className="flex items-center gap-2"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download PDF
-                    </Button>
+                    <div className="flex flex-col gap-2 items-end">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadPDF(rec);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        Quick PDF
+                      </Button>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Eye className="h-3 w-3" />
+                        Click for detailed analysis
+                      </div>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div>
-                      <h4 className="font-medium mb-2">Index Scores</h4>
-                      <div className="grid grid-cols-3 gap-4">
+                      <h4 className="font-medium mb-3">Quick Overview</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {Object.entries(rec.indexScores).map(([index, score]) => (
-                          <div key={index} className="text-center">
-                            <div className="text-2xl font-bold text-primary">
+                          <div key={index} className="text-center p-2 rounded-lg bg-muted/30">
+                            <div className={`text-lg font-bold ${
+                              score >= 70 ? 'text-green-600' : score >= 50 ? 'text-yellow-600' : 'text-red-600'
+                            }`}>
                               {score.toFixed(0)}
                             </div>
                             <div className="text-xs text-muted-foreground">{index}</div>
@@ -1024,16 +1248,20 @@ Example scenarios:
                         ))}
                       </div>
                     </div>
+                    
                     <div>
-                      <h4 className="font-medium mb-2">Key Factors</h4>
-                      <ul className="space-y-1">
-                        {rec.reasons.map((reason, i) => (
-                          <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="text-primary">•</span>
-                            {reason}
-                          </li>
+                      <h4 className="font-medium mb-2 flex items-center gap-2">
+                        Key Benefits for You
+                        <Badge variant="outline" className="text-xs">Click to see more</Badge>
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {rec.residentSummary.quickDecisionFactors.slice(0, 4).map((factor, i) => (
+                          <div key={i} className="text-sm text-muted-foreground flex items-start gap-2 p-2 bg-green-50/50 rounded">
+                            <span className="text-green-600 text-xs">✓</span>
+                            {factor}
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -1042,6 +1270,111 @@ Example scenarios:
           </div>
         </div>
       )}
+
+      {/* Enhanced Analysis Modal */}
+      <RecommendationAnalysisModal 
+        recommendation={selectedRecommendation}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onDownloadPDF={handleDownloadPDF}
+      />
     </div>
   );
+
+  // Enhanced PDF generation for residents (simpler, user-friendly)
+  const downloadResidentPDF = async (recommendation: EnhancedRecommendation) => {
+    try {
+      const pdf = new jsPDF();
+      
+      // Add logo
+      try {
+        const logoImg = new Image();
+        logoImg.onload = () => {
+          pdf.addImage(logoImg, 'PNG', 15, 15, 30, 30);
+          generateResidentPDFContent(pdf, recommendation);
+        };
+        logoImg.src = lupusLogo;
+      } catch (error) {
+        generateResidentPDFContent(pdf, recommendation);
+      }
+    } catch (error) {
+      console.error('Error generating resident PDF:', error);
+    }
+  };
+
+  const generateResidentPDFContent = (pdf: jsPDF, recommendation: EnhancedRecommendation) => {
+    // Title
+    pdf.setFontSize(20);
+    pdf.setTextColor(0, 102, 204);
+    pdf.text('Location Guide for Residents', 50, 25);
+    
+    pdf.setFontSize(16);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text(recommendation.area, 15, 40);
+    
+    // Rating
+    pdf.setFontSize(12);
+    pdf.text(`Overall Rating: ${recommendation.rating}/5 stars`, 15, 50);
+    
+    // What this means for you
+    pdf.setFontSize(14);
+    pdf.setTextColor(0, 102, 204);
+    pdf.text('What This Means for Your Daily Life:', 15, 65);
+    
+    pdf.setFontSize(10);
+    pdf.setTextColor(0, 0, 0);
+    const dailyLifeLines = pdf.splitTextToSize(recommendation.residentSummary.dailyLifeImpact, 180);
+    pdf.text(dailyLifeLines, 15, 75);
+    
+    // Quick decision factors
+    let yPos = 75 + (dailyLifeLines.length * 5) + 10;
+    pdf.setFontSize(14);
+    pdf.setTextColor(0, 102, 204);
+    pdf.text('Key Benefits:', 15, yPos);
+    
+    yPos += 10;
+    pdf.setFontSize(10);
+    pdf.setTextColor(0, 0, 0);
+    recommendation.residentSummary.quickDecisionFactors.forEach((factor, index) => {
+      pdf.text(`• ${factor}`, 20, yPos + (index * 8));
+    });
+    
+    // Health considerations
+    yPos += recommendation.residentSummary.quickDecisionFactors.length * 8 + 15;
+    pdf.setFontSize(14);
+    pdf.setTextColor(0, 102, 204);
+    pdf.text('Health & Safety Notes:', 15, yPos);
+    
+    yPos += 10;
+    pdf.setFontSize(10);
+    pdf.setTextColor(0, 0, 0);
+    recommendation.residentSummary.healthConsiderations.forEach((consideration, index) => {
+      const lines = pdf.splitTextToSize(`• ${consideration}`, 170);
+      pdf.text(lines, 20, yPos + (index * 12));
+      yPos += lines.length * 5;
+    });
+    
+    // Simple scores explanation
+    yPos += 20;
+    pdf.setFontSize(14);
+    pdf.setTextColor(0, 102, 204);
+    pdf.text('Location Scores (0-100):', 15, yPos);
+    
+    yPos += 10;
+    pdf.setFontSize(10);
+    pdf.setTextColor(0, 0, 0);
+    Object.entries(recommendation.indexScores).forEach(([index, score]) => {
+      const scoreText = `${index}: ${Math.round(score)} (${score >= 70 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Attention'})`;
+      pdf.text(scoreText, 20, yPos);
+      yPos += 8;
+    });
+    
+    pdf.save(`${recommendation.area.replace(/[^a-zA-Z0-9]/g, '_')}_Resident_Guide.pdf`);
+  };
+
+  // Enhanced PDF generation for urban planners (technical, detailed)
+  const downloadPlannerPDF = async (recommendation: EnhancedRecommendation) => {
+    // Use existing downloadPDF function 
+    await downloadPDF(recommendation);
+  };
 };
