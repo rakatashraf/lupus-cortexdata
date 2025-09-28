@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   FileText, 
   Building2, 
@@ -25,7 +26,10 @@ import {
   Heart,
   TreePine,
   Car,
-  Home
+  Home,
+  ChevronDown,
+  Target,
+  ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +57,21 @@ interface WellbeingData {
     benefits: string[];
     timeline: string;
     actions: string[];
+  };
+  livingConsiderations: {
+    familyImpact: string;
+    longTermOutlook: string;
+    hiddenCosts: string[];
+    riskFactors: string[];
+    lifestyleMatch: string;
+  };
+  buildingConsiderations: {
+    permits: string[];
+    constraints: string[];
+    futureProofing: string[];
+    investment: string;
+    timeline: string;
+    regulations: string[];
   };
   successMetrics: string[];
   caseStudies: {
@@ -113,6 +132,21 @@ const WELLBEING_DATA: Record<string, WellbeingData> = {
         'Choose energy-efficient appliances and renewable energy options',
         'Participate in community air quality monitoring and advocacy'
       ]
+    },
+    livingConsiderations: {
+      familyImpact: "Children and elderly residents may experience respiratory issues. Consider air purifiers and limiting outdoor activities during high pollution days.",
+      longTermOutlook: "Air quality is expected to improve significantly over the next 5-10 years with planned green corridors and emission controls.",
+      hiddenCosts: ["Higher healthcare costs", "Air purification systems", "Indoor activities during poor air days", "Potential property value impacts"],
+      riskFactors: ["Increased asthma and allergies", "Reduced property values", "Limited outdoor lifestyle", "Healthcare access needs"],
+      lifestyleMatch: "Best suited for residents who spend most time indoors or have flexible schedules to avoid peak pollution hours."
+    },
+    buildingConsiderations: {
+      permits: ["Environmental impact assessment", "Air quality compliance certification", "Green building permits"],
+      constraints: ["Enhanced HVAC filtration required", "Sealed building envelope necessary", "Limited outdoor ventilation systems"],
+      futureProofing: ["Install high-efficiency air filtration", "Design for natural ventilation when air improves", "Consider rooftop gardens", "Plan for EV charging infrastructure"],
+      investment: "Property values may initially be lower but expected to increase 15-25% as air quality improves over next decade.",
+      timeline: "Construction may face delays during high pollution days. Plan for 10-15% longer timeline.",
+      regulations: ["New buildings must meet enhanced air quality standards", "Green roof requirements coming in 2025", "Emission control zones expanding"]
     },
     successMetrics: [
       '50% reduction in PM2.5 and NO2 concentrations',
@@ -184,6 +218,21 @@ const WELLBEING_DATA: Record<string, WellbeingData> = {
         'Join or organize neighborhood walking groups for safety and advocacy'
       ]
     },
+    livingConsiderations: {
+      familyImpact: "Car-dependent lifestyle necessary. Budget for vehicle costs, insurance, and gas. Children may need rides to activities and school.",
+      longTermOutlook: "Major walkability improvements planned with new sidewalks, bike lanes, and mixed-use development over next 5 years.",
+      hiddenCosts: ["Higher transportation costs", "Vehicle maintenance", "Parking fees", "Gas and insurance", "Uber/taxi for non-drivers"],
+      riskFactors: ["Social isolation for elderly", "Limited independence for teenagers", "Safety concerns walking at night", "Weather-dependent mobility"],
+      lifestyleMatch: "Ideal for car owners and families comfortable with suburban living. Challenging for those preferring walkable urban lifestyle."
+    },
+    buildingConsiderations: {
+      permits: ["Parking space requirements", "Sidewalk connection permits", "Access road approvals"],
+      constraints: ["Minimum parking spaces required", "Setback requirements from future sidewalks", "Limited public transit access"],
+      futureProofing: ["Design for reduced parking needs", "Include bike storage", "Plan pedestrian access routes", "Consider mixed-use potential"],
+      investment: "Properties near planned walkability improvements may see 20-30% value increase as infrastructure develops.",
+      timeline: "Construction easier due to car access, but plan for future pedestrian infrastructure work affecting access.",
+      regulations: ["New developments must include sidewalk connections", "Parking minimums being reduced", "Complete streets policy coming 2026"]
+    },
     successMetrics: [
       '80% of residents living within 10-minute walk of daily services',
       '50% reduction in pedestrian accidents and injuries',
@@ -254,6 +303,21 @@ const WELLBEING_DATA: Record<string, WellbeingData> = {
         'Support local policies for infrastructure investment and housing quality standards'
       ]
     },
+    livingConsiderations: {
+      familyImpact: "High utility bills strain family budgets. Inconsistent heating/cooling affects comfort and may impact health of vulnerable family members.",
+      longTermOutlook: "City investing in smart grid and efficiency programs. Expect 30-40% reduction in utility costs over next 3-5 years.",
+      hiddenCosts: ["Unexpectedly high utility bills", "Inefficient appliance replacement", "Backup heating/cooling systems", "Insulation improvements"],
+      riskFactors: ["Power outages during extreme weather", "Aging utility infrastructure", "Rising energy costs", "HVAC system failures"],
+      lifestyleMatch: "Suitable for energy-conscious residents willing to invest in efficiency. Challenging for those on fixed incomes."
+    },
+    buildingConsiderations: {
+      permits: ["Energy efficiency compliance", "Solar panel permits", "HVAC upgrade permits", "Electrical system permits"],
+      constraints: ["Aging electrical grid capacity", "Limited renewable energy connections", "Insulation requirements", "HVAC sizing restrictions"],
+      futureProofing: ["Install solar-ready infrastructure", "Plan for battery storage", "Design for smart home integration", "Include EV charging capability"],
+      investment: "Energy-efficient homes command 10-15% premium and have lower operating costs, improving long-term ROI.",
+      timeline: "Utility connections may have delays. Plan for temporary power solutions during construction.",
+      regulations: ["Net-zero energy requirements for new construction starting 2027", "Solar-ready requirements", "Enhanced insulation standards"]
+    },
     successMetrics: [
       '30% reduction in average household utility costs',
       '99.5% utility reliability (less than 4 hours outage per year)',
@@ -323,6 +387,21 @@ const WELLBEING_DATA: Record<string, WellbeingData> = {
         'Use existing parks and facilities to demonstrate community demand',
         'Advocate for inclusive programming that serves all ages and abilities'
       ]
+    },
+    livingConsiderations: {
+      familyImpact: "Limited activities for children and teens. Families may need to travel farther for sports, parks, and entertainment.",
+      longTermOutlook: "Major recreation complex and multiple parks planned. Community will become much more family-friendly over next 4-6 years.",
+      hiddenCosts: ["Travel costs to recreation areas", "Private gym memberships", "Entertainment outside community", "Children's activity fees"],
+      riskFactors: ["Social isolation for families", "Limited youth engagement", "Reduced property appeal", "Community brain drain"],
+      lifestyleMatch: "Good for residents who create their own entertainment or don't prioritize recreational amenities. Less ideal for active families."
+    },
+    buildingConsiderations: {
+      permits: ["Recreation facility permits", "Open space requirements", "Community center approvals"],
+      constraints: ["Recreation space dedication required", "Proximity to future park sites", "Community facility impact fees"],
+      futureProofing: ["Design community-friendly spaces", "Include recreation room/gym", "Plan for neighborhood gathering areas", "Consider sport court space"],
+      investment: "Properties near planned recreation facilities expected to see 25-35% value increase upon completion.",
+      timeline: "Construction may coordinate with park development. Potential for shared utility installation.",
+      regulations: ["New developments must contribute to park fund", "Recreation space requirements increasing", "Community facility impact fees rising"]
     },
     successMetrics: [
       '90% of residents within 10-minute walk of quality recreational space',
@@ -556,6 +635,122 @@ const WellbeingDetailModal: React.FC<WellbeingDetailModalProps> = ({
                 <p className="text-muted-foreground text-sm leading-relaxed">{data.residentPerspective.timeline}</p>
               </CardContent>
             </Card>
+
+            <div className="space-y-4">
+              <Collapsible>
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Home className="h-4 w-4" />
+                    Considering Living Here?
+                  </h4>
+                  <ChevronDown className="h-4 w-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2">
+                  <div className="p-4 border rounded-lg space-y-4">
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Family Impact</h5>
+                      <p className="text-sm">{data.livingConsiderations.familyImpact}</p>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Long-term Outlook</h5>
+                      <p className="text-sm">{data.livingConsiderations.longTermOutlook}</p>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Lifestyle Match</h5>
+                      <p className="text-sm">{data.livingConsiderations.lifestyleMatch}</p>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Hidden Costs to Consider</h5>
+                      <ul className="space-y-1">
+                        {data.livingConsiderations.hiddenCosts.map((cost, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm">
+                            <div className="h-1.5 w-1.5 bg-orange-400 rounded-full flex-shrink-0" />
+                            <span>{cost}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Potential Risks</h5>
+                      <ul className="space-y-1">
+                        {data.livingConsiderations.riskFactors.map((risk, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm">
+                            <div className="h-1.5 w-1.5 bg-red-400 rounded-full flex-shrink-0" />
+                            <span>{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible>
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Planning to Build Here?
+                  </h4>
+                  <ChevronDown className="h-4 w-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2">
+                  <div className="p-4 border rounded-lg space-y-4">
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Required Permits</h5>
+                      <ul className="space-y-1">
+                        {data.buildingConsiderations.permits.map((permit, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm">
+                            <div className="h-1.5 w-1.5 bg-blue-400 rounded-full flex-shrink-0" />
+                            <span>{permit}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Construction Constraints</h5>
+                      <ul className="space-y-1">
+                        {data.buildingConsiderations.constraints.map((constraint, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm">
+                            <div className="h-1.5 w-1.5 bg-yellow-400 rounded-full flex-shrink-0" />
+                            <span>{constraint}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Future-Proofing Tips</h5>
+                      <ul className="space-y-1">
+                        {data.buildingConsiderations.futureProofing.map((tip, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm">
+                            <div className="h-1.5 w-1.5 bg-green-400 rounded-full flex-shrink-0" />
+                            <span>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Investment Outlook</h5>
+                      <p className="text-sm">{data.buildingConsiderations.investment}</p>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Timeline Considerations</h5>
+                      <p className="text-sm">{data.buildingConsiderations.timeline}</p>
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-xs text-muted-foreground mb-1">Upcoming Regulations</h5>
+                      <ul className="space-y-1">
+                        {data.buildingConsiderations.regulations.map((regulation, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm">
+                            <div className="h-1.5 w-1.5 bg-purple-400 rounded-full flex-shrink-0" />
+                            <span>{regulation}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
           </TabsContent>
         </Tabs>
 
