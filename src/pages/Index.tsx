@@ -84,7 +84,6 @@ const Index = () => {
             initialLng={currentLocation.longitude}
             onLocationSelect={handleLocationSelect}
             onAreaSelect={handleAreaSelect}
-            showCommunityNeeds={true}
           />
         );
       case 'charts':

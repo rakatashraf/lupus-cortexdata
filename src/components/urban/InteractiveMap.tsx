@@ -6,15 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Search, Download, Layers, Flag } from 'lucide-react';
+import { MapPin, Search, Download, Layers } from 'lucide-react';
 import { LatLngBounds, LatLng } from 'leaflet';
-import { MapSelectionBounds, CityHealthData } from '@/types/urban-indices';
+import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
-import { CommunityNeedsCalculator, CommunityNeed, NeedsAnalysis } from '@/utils/community-needs-calculator';
-import { EnhancedCommunityNeedsFlags } from './EnhancedCommunityNeedsFlags';
-import { FlagControlPanel } from './FlagControlPanel';
-import { NeedsIndicatorPanel } from './NeedsIndicatorPanel';
-import { AreaSummaryPanel } from './AreaSummaryPanel';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -31,7 +26,6 @@ interface InteractiveMapProps {
   onAreaSelect: (bounds: MapSelectionBounds) => void;
   initialLat?: number;
   initialLng?: number;
-  showCommunityNeeds?: boolean;
 }
 
 interface MapEventsProps {
@@ -89,8 +83,7 @@ export function InteractiveMap({
   onLocationSelect, 
   onAreaSelect, 
   initialLat = 23.8103, 
-  initialLng = 90.4125,
-  showCommunityNeeds = false 
+  initialLng = 90.4125 
 }: InteractiveMapProps) {
   const [selectedPosition, setSelectedPosition] = useState<LatLng | null>(
     new LatLng(initialLat, initialLng)
@@ -103,12 +96,6 @@ export function InteractiveMap({
   const [message, setMessage] = useState('');
   const [mapCenter, setMapCenter] = useState<[number, number]>([initialLat, initialLng]);
   const [mapZoom, setMapZoom] = useState(12);
-  
-  // Community needs states
-  const [needsAnalysis, setNeedsAnalysis] = useState<NeedsAnalysis | null>(null);
-  const [visibleCategories, setVisibleCategories] = useState<string[]>(['food', 'housing', 'transportation', 'pollution']);
-  const [selectedFlag, setSelectedFlag] = useState<CommunityNeed | null>(null);
-  const [showNeedsFlags, setShowNeedsFlags] = useState(showCommunityNeeds);
 
   const searchByCoordinates = () => {
     const lat = parseFloat(searchCoords.lat);
@@ -130,11 +117,6 @@ export function InteractiveMap({
     setMapZoom(14);
     onLocationSelect(lat, lng);
     setMessage(`Location updated: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-    
-    // Load community needs data if enabled
-    if (showNeedsFlags) {
-      loadCommunityNeeds(lat, lng);
-    }
   };
 
   const searchByArea = async () => {
@@ -161,11 +143,6 @@ export function InteractiveMap({
         setMapZoom(14);
         onLocationSelect(lat, lng);
         setMessage(`Found: ${data[0].display_name}`);
-        
-        // Load community needs data if enabled
-        if (showNeedsFlags) {
-          loadCommunityNeeds(lat, lng);
-        }
       } else {
         setMessage('Area not found. Try different search terms.');
       }
@@ -219,105 +196,15 @@ export function InteractiveMap({
     }
   };
 
-  // Load community needs data
-  const loadCommunityNeeds = async (lat: number, lng: number) => {
-    try {
-      const data = await n8nService.getDashboardData(lat, lng);
-      
-      // Use area analysis if bounds are selected, otherwise use point analysis
-      const analysis = selectionBounds 
-        ? CommunityNeedsCalculator.calculateAreaCommunityNeeds(data, selectionBounds)
-        : CommunityNeedsCalculator.calculateCommunityNeeds(data, lat, lng);
-        
-      setNeedsAnalysis(analysis);
-    } catch (error) {
-      console.error('Error loading community needs:', error);
-      // Use fallback data for demo - fetch through public API
-      try {
-        const fallbackData = await n8nService.getDashboardData(lat, lng);
-        const analysis = selectionBounds 
-          ? CommunityNeedsCalculator.calculateAreaCommunityNeeds(fallbackData, selectionBounds)
-          : CommunityNeedsCalculator.calculateCommunityNeeds(fallbackData, lat, lng);
-        setNeedsAnalysis(analysis);
-      } catch (fallbackError) {
-        console.error('Fallback data also failed:', fallbackError);
-        setMessage('Unable to load community needs data');
-      }
-    }
-  };
-
-  const handleToggleCategory = (categoryId: string) => {
-    setVisibleCategories(prev => 
-      prev.includes(categoryId) 
-        ? prev.filter(id => id !== categoryId)
-        : [...prev, categoryId]
-    );
-  };
-
-  const handleToggleAll = (visible: boolean) => {
-    if (visible) {
-      setVisibleCategories(['food', 'housing', 'transportation', 'pollution', 'healthcare', 'parks', 'growth', 'energy']);
-    } else {
-      setVisibleCategories([]);
-    }
-  };
-
-  const handleFlagClick = (need: CommunityNeed) => {
-    setSelectedFlag(need);
-  };
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      {/* Left sidebar - Controls and flags panel */}
-      <div className="lg:col-span-1 space-y-4">
-        {/* Flag Control Panel */}
-        {showNeedsFlags && (
-          <FlagControlPanel
-            needsAnalysis={needsAnalysis}
-            visibleCategories={visibleCategories}
-            onToggleCategory={handleToggleCategory}
-            onToggleAll={handleToggleAll}
-          />
-        )}
-
-        {/* Selected Need Panel */}
-        {selectedFlag && (
-          <NeedsIndicatorPanel
-            selectedNeed={selectedFlag}
-            onClose={() => setSelectedFlag(null)}
-          />
-        )}
-        
-        {/* Area Summary Panel */}
-        {needsAnalysis && selectionBounds && (needsAnalysis as any).areaStats && (
-          <AreaSummaryPanel
-            analysis={needsAnalysis as any}
-            bounds={selectionBounds}
-          />
-        )}
-      </div>
-
-      {/* Main map area */}
-      <div className="lg:col-span-3 space-y-4">
-        <Card className="bg-gradient-card shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-primary" />
-                Interactive Urban Map
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={showNeedsFlags ? "default" : "outline"}
-                  onClick={() => setShowNeedsFlags(!showNeedsFlags)}
-                  size="sm"
-                >
-                  <Flag className="h-4 w-4 mr-2" />
-                  Community Needs
-                </Button>
-              </div>
-            </CardTitle>
-          </CardHeader>
+    <div className="space-y-6">
+      <Card className="bg-gradient-card shadow-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Interactive Urban Map
+          </CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           {/* Search Controls */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -405,86 +292,65 @@ export function InteractiveMap({
               </Badge>
             </div>
           )}
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
 
-        {/* Map Container */}
-        <Card className="bg-gradient-card shadow-card overflow-hidden">
-          <CardContent className="p-0">
-            <div className="h-[600px] w-full">
-              <MapContainer
-                center={mapCenter}
-                zoom={mapZoom}
-                style={{ height: '100%', width: '100%' }}
-                className="rounded-lg"
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      {/* Map Container */}
+      <Card className="bg-gradient-card shadow-card overflow-hidden">
+        <CardContent className="p-0">
+          <div className="h-[600px] w-full">
+            <MapContainer
+              center={mapCenter}
+              zoom={mapZoom}
+              style={{ height: '100%', width: '100%' }}
+              className="rounded-lg"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              
+              <MapEvents
+                onLocationSelect={onLocationSelect}
+                onAreaSelect={onAreaSelect}
+                setSelectedPosition={setSelectedPosition}
+                isAreaSelectionMode={isAreaSelectionMode}
+                setSelectionBounds={setSelectionBounds}
+              />
+
+              {selectedPosition && (
+                <Marker position={selectedPosition}>
+                  <Popup>
+                    <div className="text-center">
+                      <p className="font-medium">Selected Location</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedPosition.lat.toFixed(4)}, {selectedPosition.lng.toFixed(4)}
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              )}
+
+              {selectionBounds && (
+                <Rectangle
+                  bounds={[
+                    [selectionBounds.south, selectionBounds.west],
+                    [selectionBounds.north, selectionBounds.east]
+                  ]}
+                  color="hsl(var(--primary))"
+                  fillOpacity={0.2}
                 />
-                
-                <MapEvents
-                  onLocationSelect={onLocationSelect}
-                  onAreaSelect={onAreaSelect}
-                  setSelectedPosition={setSelectedPosition}
-                  isAreaSelectionMode={isAreaSelectionMode}
-                  setSelectionBounds={setSelectionBounds}
-                />
+              )}
+            </MapContainer>
+          </div>
+        </CardContent>
+      </Card>
 
-                {selectedPosition && (
-                  <Marker position={selectedPosition}>
-                    <Popup>
-                      <div className="text-center">
-                        <p className="font-medium">Selected Location</p>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedPosition.lat.toFixed(4)}, {selectedPosition.lng.toFixed(4)}
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                )}
-
-                {selectionBounds && (
-                  <Rectangle
-                    bounds={[
-                      [selectionBounds.south, selectionBounds.west],
-                      [selectionBounds.north, selectionBounds.east]
-                    ]}
-                    color="hsl(var(--primary))"
-                    fillOpacity={0.2}
-                  />
-                )}
-
-                {/* Community Needs Flags */}
-                {showNeedsFlags && needsAnalysis && (
-                  <EnhancedCommunityNeedsFlags
-                    needs={needsAnalysis.flags}
-                    onFlagClick={handleFlagClick}
-                    visibleCategories={visibleCategories}
-                    animationEnabled={true}
-                  />
-                )}
-              </MapContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Status Messages */}
       {isAreaSelectionMode && (
         <Alert>
           <Layers className="h-4 w-4" />
           <AlertDescription>
             Area selection mode is active. Click and drag on the map to select an area for data analysis.
-          </AlertDescription>
-        </Alert>
-      )}
-      
-      {showNeedsFlags && !needsAnalysis && selectedPosition && (
-        <Alert>
-          <Flag className="h-4 w-4" />
-          <AlertDescription>
-            Loading community needs analysis for selected location...
           </AlertDescription>
         </Alert>
       )}
