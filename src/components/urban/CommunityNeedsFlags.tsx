@@ -13,8 +13,8 @@ interface CommunityNeedsFlagsProps {
 
 // Create custom flag icons
 const createFlagIcon = (need: CommunityNeed) => {
-  const size = need.severity === 'critical' ? 30 : 24;
-  const opacity = need.severity === 'critical' ? 1 : 0.8;
+  const size = need.severity === 'critical' ? 40 : 32; // Increased sizes for better visibility
+  const opacity = need.severity === 'critical' ? 1 : 0.9;
   
   return L.divIcon({
     className: 'community-need-flag',
@@ -27,11 +27,13 @@ const createFlagIcon = (need: CommunityNeed) => {
         display: flex; 
         align-items: center; 
         justify-content: center; 
-        font-size: ${size * 0.6}px;
+        font-size: ${size * 0.7}px;
         opacity: ${opacity};
-        border: 2px solid white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        border: 3px solid white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         animation: ${need.severity === 'critical' ? 'pulse 2s infinite' : 'none'};
+        cursor: pointer;
+        z-index: 1000;
       ">
         ${need.icon}
       </div>

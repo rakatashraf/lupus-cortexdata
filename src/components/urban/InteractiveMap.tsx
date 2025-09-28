@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Search, Download, Layers, Flag } from 'lucide-react';
+import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle } from 'lucide-react';
 import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
@@ -103,6 +105,8 @@ export function InteractiveMap({
   const [communityNeeds, setCommunityNeeds] = useState<CommunityNeed[]>([]);
   const [selectedNeed, setSelectedNeed] = useState<CommunityNeed | null>(null);
   const [isNeedsModalOpen, setIsNeedsModalOpen] = useState(false);
+  const [loadingCommunityNeeds, setLoadingCommunityNeeds] = useState(false);
+  const [communityNeedsError, setCommunityNeedsError] = useState<string | null>(null);
 
   const searchByCoordinates = () => {
     const lat = parseFloat(searchCoords.lat);
@@ -214,13 +218,28 @@ export function InteractiveMap({
   };
 
   const fetchCommunityNeeds = async (lat: number, lng: number) => {
+    setLoadingCommunityNeeds(true);
+    setCommunityNeedsError(null);
+    
     try {
+      console.log('🔍 Fetching community needs for:', { lat, lng });
       const healthData = await n8nService.getDashboardData(lat, lng);
+      console.log('📊 Health data received:', healthData);
+      
       const needs = CommunityNeedsCalculator.analyzeLocation(lat, lng, healthData);
+      console.log('🏴 Community needs analyzed:', needs);
+      
       setCommunityNeeds(needs);
+      
+      if (needs.length === 0) {
+        setCommunityNeedsError('No urgent community needs found in this area - this is good news!');
+      }
     } catch (error) {
-      console.error('Error fetching community needs:', error);
+      console.error('❌ Error fetching community needs:', error);
       setCommunityNeeds([]);
+      setCommunityNeedsError('Failed to load community needs data. Please try again.');
+    } finally {
+      setLoadingCommunityNeeds(false);
     }
   };
 
@@ -311,14 +330,48 @@ export function InteractiveMap({
               Download Data
             </Button>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Button
+                    onClick={toggleCommunityNeeds}
+                    disabled={!selectedPosition || loadingCommunityNeeds}
+                    size="sm"
+                    variant={showCommunityNeeds ? "default" : "outline"}
+                  >
+                    {loadingCommunityNeeds ? (
+                      <LoadingSpinner size="sm" className="mr-2" />
+                    ) : (
+                      <Flag className="h-4 w-4 mr-2" />
+                    )}
+                    Community Needs
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {!selectedPosition ? 
+                  "Select a location on the map first" : 
+                  "Show community needs flags for selected area"}
+              </TooltipContent>
+            </Tooltip>
+
             <Button
-              onClick={toggleCommunityNeeds}
-              disabled={!selectedPosition}
+              onClick={() => {
+                // Quick test location - Dhaka, Bangladesh
+                const testLat = 23.8103;
+                const testLng = 90.4125;
+                const newPosition = new LatLng(testLat, testLng);
+                setSelectedPosition(newPosition);
+                setMapCenter([testLat, testLng]);
+                setMapZoom(12);
+                onLocationSelect(testLat, testLng);
+                setMessage('Test location loaded: Dhaka, Bangladesh');
+              }}
               size="sm"
-              variant={showCommunityNeeds ? "default" : "outline"}
+              variant="ghost"
             >
-              <Flag className="h-4 w-4 mr-2" />
-              Community Needs
+              <HelpCircle className="h-4 w-4 mr-2" />
+              Try Dhaka
             </Button>
           </div>
 
@@ -347,11 +400,55 @@ export function InteractiveMap({
             </div>
           )}
 
-          {showCommunityNeeds && communityNeeds.length > 0 && (
+          {loadingCommunityNeeds && (
             <div className="flex items-center gap-2">
-              <Badge variant="outline">
-                {communityNeeds.length} community need{communityNeeds.length !== 1 ? 's' : ''} identified
-              </Badge>
+              <LoadingSpinner size="sm" />
+              <span className="text-sm text-muted-foreground">Analyzing community needs...</span>
+            </div>
+          )}
+
+          {communityNeedsError && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{communityNeedsError}</AlertDescription>
+            </Alert>
+          )}
+
+          {showCommunityNeeds && communityNeeds.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">
+                  {communityNeeds.length} community need{communityNeeds.length !== 1 ? 's' : ''} identified
+                </Badge>
+              </div>
+              
+              {/* Community Needs Legend */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <span>🍎</span><span>Food Access</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🏠</span><span>Housing</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🚌</span><span>Transportation</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🏭</span><span>Pollution</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🏥</span><span>Healthcare</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🌳</span><span>Parks Access</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🏗️</span><span>Development</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>⚡</span><span>Energy Access</span>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
