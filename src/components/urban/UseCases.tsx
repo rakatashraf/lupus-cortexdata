@@ -1357,67 +1357,124 @@ Example scenarios:
       const wrappedRequirements = pdf.splitTextToSize(`Key Criteria: ${keyRequirements}`, pageWidth - 40);
       pdf.text(wrappedRequirements, 20, 69);
       
-      // 2. Location Analysis Table
+      const specificRequests = recommendation.residentSummary.quickDecisionFactors.slice(0, 2).join(', ');
+      const wrappedRequests = pdf.splitTextToSize(`Specific Requests: ${specificRequests}`, pageWidth - 40);
+      pdf.text(wrappedRequests, 20, 76);
+      
+      // 2. Location Analysis - Enhanced Table Format
       pdf.setFontSize(12);
       pdf.setTextColor(0, 102, 204);
-      pdf.text('2. Location Analysis', 20, 85);
+      pdf.text('2. Location Analysis', 20, 90);
       
-      // Table headers
+      // Table headers with exact format
       pdf.setFontSize(8);
       pdf.setTextColor(0, 0, 0);
-      pdf.text('Factor', 20, 95);
-      pdf.text('Score', 80, 95);
-      pdf.text('Status', 120, 95);
-      pdf.text('Notes', 150, 95);
+      pdf.text('Factor', 20, 100);
+      pdf.text('Measured Value/Status', 65, 100);
+      pdf.text('Score (0-100)', 110, 100);
+      pdf.text('Notes/Implications', 150, 100);
       
-      // Table data
-      let yPos = 103;
+      // Enhanced factors with measured values
+      let yPos = 108;
       const factors = [
-        { name: 'Air Quality', score: recommendation.indexScores.AQHI || 0, note: 'AQHI index' },
-        { name: 'Safety', score: recommendation.indexScores.CRI || 0, note: 'Crime risk index' },
-        { name: 'Water Quality', score: recommendation.indexScores.WSI || 0, note: 'Water services' },
-        { name: 'Transportation', score: recommendation.indexScores.TAS || 0, note: 'Access & mobility' },
-        { name: 'Green Spaces', score: recommendation.indexScores.GEA || 0, note: 'Environmental access' }
+        { 
+          name: 'Air Quality', 
+          score: recommendation.indexScores.AQHI || 0,
+          measured: (recommendation.indexScores.AQHI || 0) >= 70 ? 'Good (AQI <50)' : 'Moderate (AQI 65)',
+          note: (recommendation.indexScores.AQHI || 0) >= 70 ? 'Meets requirements' : 'Air filtration suggested'
+        },
+        { 
+          name: 'Safety', 
+          score: recommendation.indexScores.CRI || 0,
+          measured: (recommendation.indexScores.CRI || 0) >= 70 ? 'High (low crime)' : 'Moderate risk',
+          note: (recommendation.indexScores.CRI || 0) >= 70 ? 'Safe environment' : 'Extra precautions advised'
+        },
+        { 
+          name: 'Noise Levels', 
+          score: 100 - (recommendation.indexScores.UHVI || 30),
+          measured: (100 - (recommendation.indexScores.UHVI || 30)) >= 60 ? 'Quiet area' : 'High (near traffic)',
+          note: (100 - (recommendation.indexScores.UHVI || 30)) >= 60 ? 'Peaceful living' : 'Noise barriers recommended'
+        },
+        { 
+          name: 'Accessibility', 
+          score: recommendation.indexScores.TAS || 0,
+          measured: (recommendation.indexScores.TAS || 0) >= 70 ? 'Good (10 min to center)' : 'Medium (15 min)',
+          note: (recommendation.indexScores.TAS || 0) >= 70 ? 'Well connected' : 'Transport enhancement needed'
+        },
+        { 
+          name: 'Social Amenities', 
+          score: (recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 || 0,
+          measured: ((recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 || 0) >= 60 ? 'Good facilities' : 'Limited (1 school)',
+          note: ((recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 || 0) >= 60 ? 'Adequate services' : 'Consider nearby facilities'
+        },
+        { 
+          name: 'Green Coverage', 
+          score: recommendation.indexScores.GEA || 0,
+          measured: (recommendation.indexScores.GEA || 0) >= 60 ? 'High (parks nearby)' : 'Medium coverage',
+          note: (recommendation.indexScores.GEA || 0) >= 60 ? 'Good for wellbeing' : 'Increase greenery'
+        }
       ];
       
-      factors.slice(0, 5).forEach(factor => {
-        const status = factor.score >= 70 ? 'Good' : factor.score >= 50 ? 'Fair' : 'Poor';
+      factors.slice(0, 6).forEach(factor => {
         pdf.text(factor.name, 20, yPos);
-        pdf.text(Math.round(factor.score).toString(), 80, yPos);
-        pdf.text(status, 120, yPos);
-        pdf.text(factor.note, 150, yPos);
+        pdf.text(factor.measured, 65, yPos);
+        pdf.text(Math.round(factor.score).toString(), 110, yPos);
+        const wrappedNote = pdf.splitTextToSize(factor.note, 40);
+        pdf.text(wrappedNote, 150, yPos);
         yPos += 8;
       });
       
       // HWI Score
       pdf.setFontSize(10);
       pdf.setTextColor(0, 102, 204);
-      pdf.text(`Human Wellbeing Index (HWI): ${hwi}/100`, 20, yPos + 10);
+      pdf.text(`Human Wellbeing Index (HWI): ${hwi}/100`, 20, yPos + 8);
       
-      // 3. Requirements vs Reality
+      // 3. Comparison: Requirements vs Reality
       pdf.setFontSize(12);
       pdf.setTextColor(0, 102, 204);
-      pdf.text('3. Requirements vs Reality', 20, yPos + 25);
+      pdf.text('3. Comparison: Requirements vs Reality', 20, yPos + 20);
       
       pdf.setFontSize(8);
       pdf.setTextColor(0, 0, 0);
-      pdf.text('Requirement', 20, yPos + 35);
-      pdf.text('Actual Status', 80, yPos + 35);
-      pdf.text('Gap/Recommendation', 130, yPos + 35);
+      pdf.text('Requirement', 20, yPos + 30);
+      pdf.text('Actual Status', 70, yPos + 30);
+      pdf.text('Gap/Recommendation', 130, yPos + 30);
       
-      let comparisonY = yPos + 43;
+      let comparisonY = yPos + 38;
       const comparisons = [
-        { req: 'Safe environment', actual: recommendation.indexScores.CRI >= 70 ? 'High safety' : 'Moderate safety', rec: recommendation.indexScores.CRI >= 70 ? 'Requirement met' : 'Security measures needed' },
-        { req: 'Clean air', actual: recommendation.indexScores.AQHI >= 70 ? 'Good quality' : 'Moderate quality', rec: recommendation.indexScores.AQHI >= 70 ? 'Requirement met' : 'Air filtration suggested' },
-        { req: 'Good connectivity', actual: recommendation.indexScores.TAS >= 70 ? 'Well connected' : 'Limited access', rec: recommendation.indexScores.TAS >= 70 ? 'Requirement met' : 'Transport improvements needed' }
+        { 
+          req: 'Low air pollution', 
+          actual: (recommendation.indexScores.AQHI || 0) >= 70 ? 'Good' : 'Moderate', 
+          rec: (recommendation.indexScores.AQHI || 0) >= 70 ? 'Requirement met' : 'Install air filters, plant greenery' 
+        },
+        { 
+          req: 'Quiet environment', 
+          actual: (100 - (recommendation.indexScores.UHVI || 30)) >= 60 ? 'Peaceful' : 'High noise', 
+          rec: (100 - (recommendation.indexScores.UHVI || 30)) >= 60 ? 'Requirement met' : 'Noise barriers or soundproofing' 
+        },
+        { 
+          req: 'Safety', 
+          actual: (recommendation.indexScores.CRI || 0) >= 70 ? 'High' : 'Moderate', 
+          rec: (recommendation.indexScores.CRI || 0) >= 70 ? 'Requirement met' : 'Security measures needed' 
+        },
+        { 
+          req: 'Proximity to amenities', 
+          actual: ((recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 || 0) >= 60 ? 'Good access' : 'Limited', 
+          rec: ((recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 || 0) >= 60 ? 'Requirement met' : 'Recommend nearby schools/clinics' 
+        },
+        { 
+          req: 'Green spaces', 
+          actual: (recommendation.indexScores.GEA || 0) >= 60 ? 'Good' : 'Moderate', 
+          rec: (recommendation.indexScores.GEA || 0) >= 60 ? 'Requirement met' : 'Expand parks or rooftop gardens' 
+        }
       ];
       
-      comparisons.forEach(comp => {
+      comparisons.slice(0, 5).forEach(comp => {
         pdf.text(comp.req, 20, comparisonY);
-        pdf.text(comp.actual, 80, comparisonY);
+        pdf.text(comp.actual, 70, comparisonY);
         const wrappedRec = pdf.splitTextToSize(comp.rec, 60);
         pdf.text(wrappedRec, 130, comparisonY);
-        comparisonY += 10;
+        comparisonY += 8;
       });
       
       // 4. Recommendations
@@ -1427,13 +1484,29 @@ Example scenarios:
       
       pdf.setFontSize(9);
       pdf.setTextColor(0, 0, 0);
-      pdf.text(`Overall Suitability: ${suitability.level} — ${suitability.desc}`, 20, comparisonY + 25);
       
-      if (hwi < 70) {
-        pdf.text('Mitigation Measures:', 20, comparisonY + 35);
-        const measures = recommendation.residentSummary.healthConsiderations.slice(0, 2);
-        measures.forEach((measure, i) => {
-          pdf.text(`• ${measure}`, 25, comparisonY + 43 + (i * 8));
+      // Conditional recommendations based on HWI
+      if (hwi >= 80) {
+        pdf.text('Location meets most requirements. Minor improvements suggested.', 20, comparisonY + 25);
+      } else if (hwi >= 60) {
+        pdf.text(`Overall Suitability: Medium — can be used for residence with mitigation.`, 20, comparisonY + 25);
+        pdf.text('Alternative Locations: Consider nearby areas with higher HWI scores.', 20, comparisonY + 33);
+      } else {
+        pdf.text(`Location does not meet key requirements. Consider alternatives.`, 20, comparisonY + 25);
+      }
+      
+      // Mitigation measures if staying
+      if (hwi < 80) {
+        pdf.text('Mitigation Measures if Staying:', 20, comparisonY + 43);
+        const mitigationMeasures = [
+          ...(recommendation.indexScores.AQHI < 70 ? ['Install air purifiers'] : []),
+          ...((100 - (recommendation.indexScores.UHVI || 30)) < 60 ? ['Build noise barriers or soundproofing'] : []),
+          ...(recommendation.indexScores.GEA < 60 ? ['Add green buffers around the house'] : []),
+          ...((recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 < 60 ? ['Ensure access to nearest school and clinic'] : [])
+        ];
+        
+        mitigationMeasures.slice(0, 4).forEach((measure, i) => {
+          pdf.text(`• ${measure}`, 25, comparisonY + 51 + (i * 8));
         });
       }
       
@@ -1444,15 +1517,32 @@ Example scenarios:
       
       pdf.setFontSize(9);
       pdf.setTextColor(0, 0, 0);
-      const summary = hwi >= 70 ? 
-        'Suitable for residential use with good overall conditions.' :
-        'Conditionally suitable - improvements recommended for optimal living conditions.';
-      pdf.text(`Decision: ${summary}`, 20, 260);
+      
+      const decision = hwi >= 80 ? 
+        'Suitable for residential use with minor adjustments.' :
+        hwi >= 60 ?
+        'Conditionally suitable for residential use with mitigations.' :
+        'Not recommended; consider alternative zones with better scores.';
+        
+      pdf.text(`Decision: ${decision}`, 20, 260);
+      pdf.text('Resident Action: Apply mitigation measures or consider alternative nearby areas.', 20, 268);
+      
+      // Optional Visual (text-based radar chart)
+      pdf.setFontSize(8);
+      pdf.setTextColor(128, 128, 128);
+      const airScore = Math.round(recommendation.indexScores.AQHI || 0);
+      const safetyScore = Math.round(recommendation.indexScores.CRI || 0);
+      const noiseScore = Math.round(100 - (recommendation.indexScores.UHVI || 30));
+      const accessScore = Math.round(recommendation.indexScores.TAS || 0);
+      const amenityScore = Math.round((recommendation.indexScores.CRI + recommendation.indexScores.WSI) / 2 || 0);
+      const greenScore = Math.round(recommendation.indexScores.GEA || 0);
+      
+      pdf.text(`HWI Factors: Air ${airScore} | Safety ${safetyScore} | Noise ${noiseScore} | Access ${accessScore} | Amenities ${amenityScore} | Green ${greenScore}`, 20, 278);
       
       // Footer
       pdf.setFontSize(8);
       pdf.setTextColor(128, 128, 128);
-      pdf.text('Generated by Lupus Cortex Urban Intelligence Platform', 20, 280);
+      pdf.text('Generated by Lupus Cortex Urban Intelligence Platform', 20, 285);
       
       pdf.save(`${recommendation.area.replace(/\s+/g, '_')}_Resident_Analysis.pdf`);
     } catch (error) {
@@ -1486,92 +1576,194 @@ Example scenarios:
       
       pdf.setFontSize(9);
       pdf.setTextColor(0, 0, 0);
-      pdf.text('Purpose: Mixed-use urban development', 20, 63);
-      pdf.text('Key Criteria: Infrastructure capacity, zoning compliance, investment viability', 20, 69);
+      pdf.text('Type of Infrastructure: Mixed-use urban development', 20, 63);
+      pdf.text('Key Criteria: Infrastructure capacity, zoning compliance, investment ROI, sustainability', 20, 69);
+      pdf.text('Specific Requests: High-density development potential, transport connectivity, utility capacity', 20, 75);
       
-      // 2. Technical Metrics Analysis
+      // 2. Location Analysis - Technical Metrics
       pdf.setFontSize(12);
       pdf.setTextColor(0, 102, 204);
-      pdf.text('2. Technical Analysis', 20, 85);
+      pdf.text('2. Location Analysis', 20, 88);
       
-      // Detailed metrics table
+      // Enhanced technical table format
       pdf.setFontSize(8);
       pdf.setTextColor(0, 0, 0);
-      pdf.text('Index', 20, 95);
-      pdf.text('Score', 60, 95);
-      pdf.text('Benchmark', 90, 95);
-      pdf.text('Status', 130, 95);
-      pdf.text('Impact', 160, 95);
+      pdf.text('Factor', 20, 98);
+      pdf.text('Measured Value/Status', 65, 98);
+      pdf.text('Score (0-100)', 110, 98);
+      pdf.text('Notes/Implications', 150, 98);
       
-      let yPos = 103;
-      Object.entries(recommendation.indexScores).forEach(([index, score]) => {
-        const benchmark = 70; // Standard benchmark
-        const status = score >= benchmark ? 'Meets' : 'Below';
-        const impact = score >= 80 ? 'Positive' : score >= 60 ? 'Neutral' : 'Concern';
-        
-        pdf.text(index, 20, yPos);
-        pdf.text(Math.round(score).toString(), 60, yPos);
-        pdf.text(benchmark.toString(), 90, yPos);
-        pdf.text(status, 130, yPos);
-        pdf.text(impact, 160, yPos);
+      let yPos = 106;
+      const technicalFactors = [
+        {
+          name: 'Air Quality',
+          score: recommendation.indexScores.AQHI || 0,
+          measured: `AQHI: ${Math.round(recommendation.indexScores.AQHI || 0)}`,
+          note: (recommendation.indexScores.AQHI || 0) >= 70 ? 'Meets EPA standards' : 'Mitigation required'
+        },
+        {
+          name: 'Safety Index',
+          score: recommendation.indexScores.CRI || 0,
+          measured: `CRI: ${Math.round(recommendation.indexScores.CRI || 0)}`,
+          note: (recommendation.indexScores.CRI || 0) >= 70 ? 'Low crime risk' : 'Security investment needed'
+        },
+        {
+          name: 'Transportation',
+          score: recommendation.indexScores.TAS || 0,
+          measured: `TAS: ${Math.round(recommendation.indexScores.TAS || 0)}`,
+          note: (recommendation.indexScores.TAS || 0) >= 70 ? 'Excellent connectivity' : 'Infrastructure gaps'
+        },
+        {
+          name: 'Water/Sanitation',
+          score: recommendation.indexScores.WSI || 0,
+          measured: `WSI: ${Math.round(recommendation.indexScores.WSI || 0)}`,
+          note: (recommendation.indexScores.WSI || 0) >= 70 ? 'Adequate capacity' : 'Utility upgrades needed'
+        },
+        {
+          name: 'Green Environment',
+          score: recommendation.indexScores.GEA || 0,
+          measured: `GEA: ${Math.round(recommendation.indexScores.GEA || 0)}`,
+          note: (recommendation.indexScores.GEA || 0) >= 60 ? 'Sustainable potential' : 'Green space deficit'
+        },
+        {
+          name: 'Smart City Metrics',
+          score: recommendation.indexScores.SCM || 0,
+          measured: `SCM: ${Math.round(recommendation.indexScores.SCM || 0)}`,
+          note: (recommendation.indexScores.SCM || 0) >= 60 ? 'Tech-ready' : 'Digital infrastructure gaps'
+        }
+      ];
+      
+      technicalFactors.slice(0, 6).forEach(factor => {
+        pdf.text(factor.name, 20, yPos);
+        pdf.text(factor.measured, 65, yPos);
+        pdf.text(Math.round(factor.score).toString(), 110, yPos);
+        const wrappedNote = pdf.splitTextToSize(factor.note, 40);
+        pdf.text(wrappedNote, 150, yPos);
         yPos += 7;
       });
+      
+      // Zoning & Regulations
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Zoning & Regulations: Mixed-use zoning compliant, development permits required', 20, yPos + 5);
       
       // HWI Score
       pdf.setFontSize(10);
       pdf.setTextColor(0, 102, 204);
-      pdf.text(`Human Wellbeing Index (HWI): ${hwi}/100`, 20, yPos + 10);
+      pdf.text(`Human Wellbeing Index (HWI): ${hwi}/100`, 20, yPos + 15);
       
-      // 3. Development Viability Assessment
+      // 3. Development Comparison Table
       pdf.setFontSize(12);
       pdf.setTextColor(0, 102, 204);
-      pdf.text('3. Development Viability', 20, yPos + 25);
+      pdf.text('3. Comparison: Requirements vs Reality', 20, yPos + 27);
       
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.setTextColor(0, 0, 0);
-      const wrappedDevelopment = pdf.splitTextToSize(recommendation.plannerAnalysis.developmentPotential, pageWidth - 40);
-      pdf.text(wrappedDevelopment, 20, yPos + 35);
+      pdf.text('Development Requirement', 20, yPos + 37);
+      pdf.text('Actual Situation', 80, yPos + 37);
+      pdf.text('Score/Rating', 120, yPos + 37);
+      pdf.text('Comments/Gap', 150, yPos + 37);
+      
+      let comparisonY = yPos + 45;
+      const developmentComparisons = [
+        {
+          req: 'High infrastructure capacity',
+          actual: hwi >= 70 ? 'Adequate capacity' : 'Limited capacity',
+          score: `${Math.round(hwi)}/100`,
+          comment: hwi >= 70 ? 'Ready for development' : 'Infrastructure investment needed'
+        },
+        {
+          req: 'Sustainable development',
+          actual: (recommendation.indexScores.GEA || 0) >= 60 ? 'Green compliant' : 'Below standards',
+          score: `${Math.round(recommendation.indexScores.GEA || 0)}/100`,
+          comment: (recommendation.indexScores.GEA || 0) >= 60 ? 'LEED potential' : 'Sustainability upgrades required'
+        },
+        {
+          req: 'Transport connectivity',
+          actual: (recommendation.indexScores.TAS || 0) >= 70 ? 'Excellent access' : 'Limited access',
+          score: `${Math.round(recommendation.indexScores.TAS || 0)}/100`,
+          comment: (recommendation.indexScores.TAS || 0) >= 70 ? 'Transit-oriented development' : 'Transport infrastructure gaps'
+        },
+        {
+          req: 'Economic viability',
+          actual: ((recommendation.indexScores.CRI + recommendation.indexScores.TAS) / 2 || 0) >= 65 ? 'High ROI potential' : 'Moderate ROI',
+          score: `${Math.round((recommendation.indexScores.CRI + recommendation.indexScores.TAS) / 2 || 0)}/100`,
+          comment: ((recommendation.indexScores.CRI + recommendation.indexScores.TAS) / 2 || 0) >= 65 ? 'Investment attractive' : 'Risk mitigation required'
+        }
+      ];
+      
+      developmentComparisons.forEach(comp => {
+        pdf.text(comp.req, 20, comparisonY);
+        pdf.text(comp.actual, 80, comparisonY);
+        pdf.text(comp.score, 120, comparisonY);
+        const wrappedComment = pdf.splitTextToSize(comp.comment, 40);
+        pdf.text(wrappedComment, 150, comparisonY);
+        comparisonY += 8;
+      });
       
       // 4. Policy & Investment Recommendations
       pdf.setFontSize(12);
       pdf.setTextColor(0, 102, 204);
-      pdf.text('4. Recommendations', 20, yPos + 60);
+      pdf.text('4. Recommendations', 20, comparisonY + 15);
       
       pdf.setFontSize(9);
       pdf.setTextColor(0, 0, 0);
-      pdf.text(`Overall Suitability: ${suitability.level} (HWI: ${hwi}/100)`, 20, yPos + 70);
       
-      // Policy recommendations
-      pdf.text('Policy Actions:', 20, yPos + 80);
-      recommendation.plannerAnalysis.policyRecommendations.slice(0, 3).forEach((policy, i) => {
-        const wrappedPolicy = pdf.splitTextToSize(`• ${policy}`, pageWidth - 45);
-        pdf.text(wrappedPolicy, 25, yPos + 88 + (i * 10));
-      });
+      // Conditional recommendations for developers/planners
+      if (hwi >= 80) {
+        pdf.text('Location meets development requirements. Minor infrastructure improvements suggested.', 20, comparisonY + 25);
+      } else if (hwi >= 60) {
+        pdf.text(`Overall Suitability: Good — suitable for development with strategic improvements.`, 20, comparisonY + 25);
+        pdf.text('Alternative Locations: Consider zones with HWI >80 for premium developments.', 20, comparisonY + 33);
+      } else {
+        pdf.text(`Location does not meet key development criteria. Significant investment required.`, 20, comparisonY + 25);
+        pdf.text('Alternatives: Recommend zones A or B with better infrastructure readiness.', 20, comparisonY + 33);
+      }
       
-      // Risk factors
-      pdf.text('Risk Mitigation:', 20, yPos + 125);
-      recommendation.plannerAnalysis.riskFactors.slice(0, 2).forEach((risk, i) => {
-        const wrappedRisk = pdf.splitTextToSize(`• ${risk}`, pageWidth - 45);
-        pdf.text(wrappedRisk, 25, yPos + 133 + (i * 10));
-      });
+      // Mitigation measures for development
+      if (hwi < 80) {
+        pdf.text('Infrastructure Investment Required:', 20, comparisonY + 45);
+        const investmentNeeds = [
+          ...(recommendation.indexScores.AQHI < 70 ? ['Air quality monitoring and mitigation systems'] : []),
+          ...(recommendation.indexScores.TAS < 70 ? ['Transport infrastructure upgrades'] : []),
+          ...(recommendation.indexScores.WSI < 70 ? ['Water and sanitation capacity expansion'] : []),
+          ...(recommendation.indexScores.GEA < 60 ? ['Green infrastructure and sustainability features'] : [])
+        ];
+        
+        investmentNeeds.slice(0, 4).forEach((need, i) => {
+          const wrappedNeed = pdf.splitTextToSize(`• ${need}`, pageWidth - 45);
+          pdf.text(wrappedNeed, 25, comparisonY + 53 + (i * 8));
+        });
+      }
       
-      // 5. Summary & Decision
+      // 5. Summary & Investment Analysis
       pdf.setFontSize(12);
       pdf.setTextColor(0, 102, 204);
-      pdf.text('5. Summary', 20, 250);
+      pdf.text('5. Summary', 20, 245);
       
       pdf.setFontSize(9);
       pdf.setTextColor(0, 0, 0);
-      const plannerSummary = hwi >= 80 ? 
+      
+      // Overall Suitability Score
+      pdf.text(`Overall Suitability Score: ${hwi}/100 (${suitability.level})`, 20, 255);
+      
+      const plannerDecision = hwi >= 80 ? 
         'Recommended for development with high viability potential.' :
         hwi >= 60 ?
-        'Suitable for development with strategic improvements.' :
-        'Development requires significant infrastructure investment.';
-      pdf.text(`Decision: ${plannerSummary}`, 20, 260);
+        'Suitable for development with strategic infrastructure improvements.' :
+        'Not recommended for development; consider alternative zones with better scores.';
+        
+      pdf.text(`Recommendation: ${plannerDecision}`, 20, 263);
       
-      // Investment analysis
-      const wrappedInvestment = pdf.splitTextToSize(`Investment Analysis: ${recommendation.plannerAnalysis.investmentAnalysis}`, pageWidth - 40);
-      pdf.text(wrappedInvestment, 20, 270);
+      // Investment Analysis
+      const investmentAnalysis = hwi >= 80 ?
+        'High ROI potential with minimal infrastructure investment required.' :
+        hwi >= 60 ?
+        'Moderate ROI with strategic infrastructure investment (Est. 15-25% of project cost).' :
+        'Low ROI potential - requires significant infrastructure investment (Est. 35-50% of project cost).';
+        
+      const wrappedInvestment = pdf.splitTextToSize(`Investment Analysis: ${investmentAnalysis}`, pageWidth - 40);
+      pdf.text(wrappedInvestment, 20, 271);
       
       // Footer
       pdf.setFontSize(8);
