@@ -70,61 +70,53 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
 
   return (
     <>
-      <Card className={cn("bg-gradient-card shadow-card", className)}>
+      <Card className={cn(
+        "relative overflow-hidden cursor-pointer group transition-all duration-300 hover:scale-105",
+        "bg-gradient-to-br from-primary/10 via-primary-glow/5 to-transparent", 
+        "border-2 border-primary/20 hover:border-primary/40 shadow-glow",
+        "min-h-[200px] aspect-square rounded-full p-0",
+        className
+      )}>
         <CardHeader 
-          className="cursor-pointer hover:bg-muted/50 transition-colors p-4"
+          className="cursor-pointer hover:bg-muted/50 transition-colors p-4 text-center"
           onClick={() => setShowModal(true)}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <List className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg font-semibold">
-                Index Measurements
-              </CardTitle>
+          <div className="flex flex-col items-center gap-2">
+            <div className="mb-2 relative">
+              <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl scale-150"></div>
+              <List className="relative h-8 w-8 text-primary group-hover:scale-110 transition-transform duration-300" />
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {Object.keys(groupedMeasurements).length} indices
-              </Badge>
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
-            </div>
+            <CardTitle className="text-lg font-bold leading-tight mb-2 group-hover:text-primary transition-colors">
+              Index Measurements
+            </CardTitle>
+            <Badge variant="secondary" className="text-xs mb-2">
+              {Object.keys(groupedMeasurements).length} indices
+            </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Click to explore all urban health measurements and their components
-          </p>
         </CardHeader>
         
-        <CardContent className="p-4 pt-0">
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-foreground/80 mb-3">Quick Overview</h4>
-            <div className="grid gap-1.5 max-h-64 overflow-y-auto">
-              {Object.entries(groupedMeasurements).map(([indexName, measurements]) => {
-                const IconComponent = INDEX_ICONS[indexName as keyof typeof INDEX_ICONS] || Info;
-                const quickDesc = INDEX_QUICK_DESCRIPTIONS[indexName as keyof typeof INDEX_QUICK_DESCRIPTIONS];
-                
-                return (
-                  <div 
-                    key={indexName}
-                    className="flex items-center gap-2 p-2 rounded hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => setShowModal(true)}
-                  >
-                    <IconComponent className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {indexName.replace(/\s*\([^)]*\)/, '')}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {quickDesc}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {measurements.length}
-                    </Badge>
-                  </div>
-                );
-              })}
+        <CardContent className="relative flex flex-col items-center justify-center h-full p-6 pt-0 text-center">
+          <div className="space-y-1 mb-4">
+            <div className="text-3xl font-bold text-primary mb-2">
+              {Object.keys(groupedMeasurements).length}
+            </div>
+            <p className="text-sm font-semibold text-muted-foreground">
+              Urban Health Indices
+            </p>
+          </div>
+          
+          <div className="w-full max-w-20 mb-3">
+            <div className="h-2 bg-primary/20 rounded-full overflow-hidden">
+              <div className="h-full w-full bg-primary rounded-full"></div>
             </div>
           </div>
+          
+          <p className="text-xs text-muted-foreground mb-2">
+            Click to explore all measurements
+          </p>
+          
+          {/* Pulse animation */}
+          <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse opacity-0 group-hover:opacity-30 transition-opacity duration-500" />
         </CardContent>
       </Card>
       
