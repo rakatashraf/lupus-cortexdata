@@ -48,6 +48,8 @@
     --gradient-pink: linear-gradient(135deg, #5eead4 0%, #14b8a6 100%);
     --gradient-emerald: linear-gradient(135deg, #10b981 0%, #059669 100%);
     --gradient-yellow: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+    --gradient-hero: linear-gradient(135deg, #14b8a6 0%, #0891b2 50%, #0e7490 100%);
+    --gradient-primary: linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%);
     
     --gradient-card: linear-gradient(145deg, rgba(20, 184, 166, 0.05) 0%, rgba(20, 184, 166, 0.02) 100%);
     --gradient-ambient: radial-gradient(ellipse at center, rgba(20, 184, 166, 0.15) 0%, transparent 70%);
@@ -233,6 +235,14 @@
 
   .gradient-yellow {
     background: var(--gradient-yellow);
+  }
+
+  .bg-gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .bg-gradient-primary {
+    background: var(--gradient-primary);
   }
 
   .chart-glow {

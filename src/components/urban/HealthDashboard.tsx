@@ -9,6 +9,9 @@ import { CityHealthData, UrbanIndex } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
 import { cn } from '@/lib/utils';
 import { IndexDetailModal } from './IndexDetailModal';
+import { IndexMeasurementsList } from './IndexMeasurementsList';
+import { HumanWellbeingCard } from './HumanWellbeingCard';
+import { RecommendationsBanner } from './RecommendationsBanner';
 
 interface HealthDashboardProps {
   latitude?: number;
@@ -119,45 +122,71 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
     return null;
   }
 
+  // Filter out HWI from the regular grid
+  const regularIndices = Object.entries(healthData.indices).filter(([key]) => key !== 'hwi');
+  const hwiIndex = healthData.indices.hwi;
+
   return (
     <div className="space-y-6 sm:space-y-8">
-      {/* Overall City Health Score - responsive */}
-      <Card className="bg-gradient-hero shadow-glow border-0 text-white">
-        <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-2xl sm:text-3xl font-bold text-center">
-            City Health Overview
-          </CardTitle>
-          <p className="text-center text-white/80 text-sm sm:text-base">
-            {healthData.location.latitude.toFixed(4)}°, {healthData.location.longitude.toFixed(4)}°
-          </p>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6">
-          <div className="text-center space-y-3 sm:space-y-4">
-            <div className="text-4xl sm:text-5xl lg:text-6xl font-bold">
-              {healthData.overall_score}
-            </div>
-            <div className="text-lg sm:text-xl">
-              Overall Health Score
-            </div>
-            <Badge 
-              variant="secondary" 
-              className={cn(
-                "text-sm sm:text-lg px-3 py-1 sm:px-4 sm:py-2 bg-white/20 text-white border-white/30",
-                getHealthStatusColor(healthData.city_health_status)
-              )}
-            >
-              {healthData.city_health_status}
-            </Badge>
-            <div className="text-xs sm:text-sm text-white/70 mt-4">
-              Last updated: {new Date(healthData.last_updated).toLocaleDateString()}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Top Header Section - 3 columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Index Measurements Overview - Left */}
+        <div className="lg:col-span-1">
+          <IndexMeasurementsList />
+        </div>
+        
+        {/* City Health Overview - Center */}
+        <div className="lg:col-span-1">
+          <Card className="bg-gradient-hero shadow-glow border-0 text-white h-full">
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-center">
+                City Health Overview
+              </CardTitle>
+              <p className="text-center text-white/80 text-sm">
+                {healthData.location.latitude.toFixed(4)}°, {healthData.location.longitude.toFixed(4)}°
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <div className="text-center space-y-3">
+                <div className="text-4xl sm:text-5xl font-bold">
+                  {healthData.overall_score}
+                </div>
+                <div className="text-base sm:text-lg">
+                  Overall Health Score
+                </div>
+                <Badge 
+                  variant="secondary" 
+                  className={cn(
+                    "text-sm px-3 py-1 sm:px-4 sm:py-2 bg-white/20 text-white border-white/30",
+                    getHealthStatusColor(healthData.city_health_status)
+                  )}
+                >
+                  {healthData.city_health_status}
+                </Badge>
+                <div className="text-xs text-white/70 mt-2">
+                  Last updated: {new Date(healthData.last_updated).toLocaleDateString()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* Human Well-being Index - Right */}
+        <div className="lg:col-span-1 flex justify-center lg:justify-end">
+          <HumanWellbeingCard 
+            index={hwiIndex}
+            onClick={() => setSelectedIndex({ index: hwiIndex, key: 'hwi' })}
+            className="w-full max-w-[200px] lg:max-w-none"
+          />
+        </div>
+      </div>
 
-      {/* Index Grid - mobile optimized */}
+      {/* Recommendations Banner */}
+      <RecommendationsBanner healthData={healthData} />
+
+      {/* Remaining Indices Grid - 9 indices (excluding HWI) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
-        {Object.entries(healthData.indices).map(([key, index]) => {
+        {regularIndices.map(([key, index]) => {
           const Icon = INDEX_ICONS[key as keyof typeof INDEX_ICONS];
           const colorClass = INDEX_COLORS[key as keyof typeof INDEX_COLORS];
           
@@ -232,33 +261,6 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
           );
         })}
       </div>
-
-      {/* Recommendations Section */}
-      <Card className="bg-gradient-card shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-warning" />
-            Improvement Recommendations
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-            {Object.entries(healthData.indices)
-              .filter(([_, index]) => index.total_score < index.target)
-              .map(([key, index]) => (
-                <div key={key} className="p-4 rounded-lg bg-muted/50 border border-border">
-                  <h4 className="font-semibold text-sm">{index.index_name}</h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Current: {index.total_score}/{index.target} • Gap: {index.target - index.total_score} points
-                  </p>
-                  <p className="text-xs mt-2 text-foreground">
-                    {getRecommendation(key, index)}
-                  </p>
-                </div>
-              ))}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Refresh Button */}
       <div className="flex justify-center">
