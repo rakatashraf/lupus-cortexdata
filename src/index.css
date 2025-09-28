@@ -74,6 +74,13 @@
     --shadow-elevated: 0 20px 40px rgba(0, 0, 0, 0.5);
     --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.3);
     --shadow-interactive: 0 12px 40px rgba(20, 184, 166, 0.2);
+    
+    /* Status-based shadows for visual hierarchy */
+    --shadow-excellent: 0 0 25px hsl(142 76% 36% / 0.4), 0 0 40px hsl(142 76% 36% / 0.2);
+    --shadow-good: 0 0 20px hsl(217 91% 60% / 0.3), 0 0 35px hsl(217 91% 60% / 0.15);
+    --shadow-moderate: 0 0 20px hsl(43 96% 56% / 0.35), 0 0 35px hsl(43 96% 56% / 0.2);
+    --shadow-poor: 0 0 25px hsl(24 95% 53% / 0.4), 0 0 40px hsl(0 84% 60% / 0.25);
+    --shadow-critical: 0 0 30px hsl(0 84% 60% / 0.5), 0 0 50px hsl(0 84% 60% / 0.3);
 
     /* Animation variables */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -277,6 +284,82 @@
 
   .safe-right {
     padding-right: env(safe-area-inset-right);
+  }
+
+  /* Mobile-optimized card with better touch targets */
+  .mobile-card {
+    @apply min-h-[120px] p-4 rounded-lg bg-card border shadow-sm;
+    @apply hover:shadow-md transition-all duration-200;
+    @apply touch-manipulation select-none;
+  }
+  
+  .mobile-card:active {
+    @apply scale-95;
+  }
+  
+  /* Status-based card effects for visual engagement */
+  .status-excellent {
+    @apply border-green-500/30 bg-green-50/5;
+    box-shadow: var(--shadow-excellent);
+  }
+  
+  .status-good {
+    @apply border-blue-500/30 bg-blue-50/5;
+    box-shadow: var(--shadow-good);
+  }
+  
+  .status-moderate {
+    @apply border-amber-500/30 bg-amber-50/5;
+    box-shadow: var(--shadow-moderate);
+  }
+  
+  .status-poor {
+    @apply border-orange-500/30 bg-orange-50/5;
+    box-shadow: var(--shadow-poor);
+  }
+  
+  .status-critical {
+    @apply border-red-500/30 bg-red-50/5;
+    box-shadow: var(--shadow-critical);
+    animation: pulse-critical 2s infinite;
+  }
+  
+  @keyframes pulse-critical {
+    0%, 100% { 
+      transform: scale(1);
+      box-shadow: var(--shadow-critical);
+    }
+    50% { 
+      transform: scale(1.02);
+      box-shadow: 0 0 35px hsl(0 84% 60% / 0.6), 0 0 60px hsl(0 84% 60% / 0.4);
+    }
+  }
+  
+  /* Status-based progress bars */
+  .progress-excellent {
+    @apply bg-gradient-to-r from-green-500 to-emerald-500;
+  }
+  
+  .progress-good {
+    @apply bg-gradient-to-r from-blue-500 to-cyan-500;
+  }
+  
+  .progress-moderate {
+    @apply bg-gradient-to-r from-amber-500 to-yellow-500;
+  }
+  
+  .progress-poor {
+    @apply bg-gradient-to-r from-orange-500 to-red-500;
+  }
+  
+  .progress-critical {
+    @apply bg-gradient-to-r from-red-600 to-red-800;
+    animation: progress-pulse 1.5s infinite;
+  }
+  
+  @keyframes progress-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
 }
 

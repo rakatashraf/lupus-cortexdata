@@ -75,9 +75,30 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
   };
 
   const getStatusVariant = (score: number, target: number) => {
-    if (score >= target) return 'default';
-    if (score >= target * 0.8) return 'secondary';
-    return 'destructive';
+    const percentage = (score / target) * 100;
+    if (percentage >= 95) return 'excellent';
+    if (percentage >= 80) return 'good';
+    if (percentage >= 60) return 'moderate';
+    if (percentage >= 40) return 'poor';
+    return 'critical';
+  };
+
+  const getStatusClass = (score: number, target: number) => {
+    const percentage = (score / target) * 100;
+    if (percentage >= 95) return 'status-excellent';
+    if (percentage >= 80) return 'status-good';
+    if (percentage >= 60) return 'status-moderate';
+    if (percentage >= 40) return 'status-poor';
+    return 'status-critical';
+  };
+
+  const getProgressClass = (score: number, target: number) => {
+    const percentage = (score / target) * 100;
+    if (percentage >= 95) return 'progress-excellent';
+    if (percentage >= 80) return 'progress-good';
+    if (percentage >= 60) return 'progress-moderate';
+    if (percentage >= 40) return 'progress-poor';
+    return 'progress-critical';
   };
 
   const getHealthStatusColor = (status: string) => {
@@ -193,7 +214,10 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
           return (
             <Card 
               key={key} 
-              className="bg-gradient-card shadow-card hover:shadow-interactive transition-all duration-300 hover:scale-105 cursor-pointer group min-h-[200px] touch-manipulation"
+              className={cn(
+                "bg-gradient-card shadow-card hover:shadow-interactive transition-all duration-300 hover:scale-105 cursor-pointer group min-h-[200px] touch-manipulation",
+                getStatusClass(index.total_score, index.target)
+              )}
               onClick={() => setSelectedIndex({ index, key })}
             >
               <CardHeader className="pb-3 p-4 sm:p-6">
@@ -201,7 +225,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                   <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6 group-hover:scale-110 transition-transform", `text-${colorClass}`)} />
                   <Badge 
                     variant={getStatusVariant(index.total_score, index.target)}
-                    className="text-xs"
+                    className="text-xs font-bold shadow-sm"
                   >
                     {index.total_score}/{index.target}
                   </Badge>
@@ -224,6 +248,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                   <Progress 
                     value={(index.total_score / index.target) * 100} 
                     className="h-2"
+                    indicatorClassName={getProgressClass(index.total_score, index.target)}
                   />
                 </div>
                 
