@@ -97,8 +97,8 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
         <CardContent className="p-4 pt-0">
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-foreground/80 mb-3">Quick Overview</h4>
-            <div className="grid gap-1.5">
-              {Object.entries(groupedMeasurements).slice(0, 4).map(([indexName, measurements]) => {
+            <div className="grid gap-1.5 max-h-64 overflow-y-auto">
+              {Object.entries(groupedMeasurements).map(([indexName, measurements]) => {
                 const IconComponent = INDEX_ICONS[indexName as keyof typeof INDEX_ICONS] || Info;
                 const quickDesc = INDEX_QUICK_DESCRIPTIONS[indexName as keyof typeof INDEX_QUICK_DESCRIPTIONS];
                 
@@ -123,15 +123,6 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
                   </div>
                 );
               })}
-              
-              {Object.keys(groupedMeasurements).length > 4 && (
-                <div 
-                  className="text-xs text-muted-foreground text-center py-2 hover:text-foreground transition-colors cursor-pointer"
-                  onClick={() => setShowModal(true)}
-                >
-                  +{Object.keys(groupedMeasurements).length - 4} more indices • Click to view all
-                </div>
-              )}
             </div>
           </div>
         </CardContent>

@@ -252,11 +252,14 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                   />
                 </div>
                 
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <p className="text-sm font-medium">Status:</p>
-                  <p className={cn("text-sm font-semibold", getHealthStatusColor(index.status))}>
+                  <Badge 
+                    variant={getStatusVariant(index.total_score, index.target)}
+                    className="text-sm font-semibold px-3 py-1 w-full justify-center"
+                  >
                     {index.status}
-                  </p>
+                  </Badge>
                 </div>
 
                 {/* Component Breakdown */}
