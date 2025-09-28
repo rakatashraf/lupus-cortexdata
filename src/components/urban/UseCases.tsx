@@ -1782,13 +1782,6 @@ Example scenarios:
     return "Development approval recommended with conditions. The location demonstrates strong fundamentals for high-density residential development with excellent safety ratings and infrastructure access. Mandatory requirements: (1) Acoustic barriers minimum 3m height along roadway frontage, (2) Community facility integration minimum 200sqm, (3) Environmental monitoring system for ongoing air quality assessment. Investment requirements are moderate and within acceptable ranges for this development type.";
   };
   
-  const getSuitabilityLevel = (hwi: number) => {
-    if (hwi >= 80) return 'Excellent';
-    if (hwi >= 60) return 'Good';  
-    if (hwi >= 40) return 'Fair';
-    return 'Poor';
-  };
-  
   const getFinalRecommendation = (hwi: number) => {
     if (hwi >= 80) {
       return "Location is highly recommended, provided noise and amenity gaps are addressed.";
