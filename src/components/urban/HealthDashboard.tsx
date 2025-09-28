@@ -74,31 +74,28 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
     }
   };
 
-  const getStatusVariant = (score: number, target: number) => {
+  const getStatusVariant = (score: number, target: number): "excellent" | "good" | "moderate" | "critical" => {
     const percentage = (score / target) * 100;
-    if (percentage >= 95) return 'excellent';
-    if (percentage >= 80) return 'good';
-    if (percentage >= 60) return 'moderate';
-    if (percentage >= 40) return 'poor';
-    return 'critical';
+    if (percentage >= 95) return "excellent";  // Green: Highly good/Lowest risk
+    if (percentage >= 70) return "good";       // Blue: Moderate good/Low risk  
+    if (percentage >= 50) return "moderate";   // Yellow: Needs attention/Emerging risks
+    return "critical";                         // Red: Critical/High risk
   };
 
   const getStatusClass = (score: number, target: number) => {
     const percentage = (score / target) * 100;
     if (percentage >= 95) return 'status-excellent';
-    if (percentage >= 80) return 'status-good';
-    if (percentage >= 60) return 'status-moderate';
-    if (percentage >= 40) return 'status-poor';
+    if (percentage >= 70) return 'status-good';
+    if (percentage >= 50) return 'status-moderate';
     return 'status-critical';
   };
 
   const getProgressClass = (score: number, target: number) => {
     const percentage = (score / target) * 100;
-    if (percentage >= 95) return 'progress-excellent';
-    if (percentage >= 80) return 'progress-good';
-    if (percentage >= 60) return 'progress-moderate';
-    if (percentage >= 40) return 'progress-poor';
-    return 'progress-critical';
+    if (percentage >= 95) return "bg-green-600";   // Green: Highly good
+    if (percentage >= 70) return "bg-blue-600";    // Blue: Moderate good
+    if (percentage >= 50) return "bg-yellow-500";  // Yellow: Needs attention
+    return "bg-red-600";                           // Red: Critical
   };
 
   const getHealthStatusColor = (status: string) => {
