@@ -12,29 +12,22 @@ export interface GeminiResponse {
 }
 
 export class GeminiService {
-  private apiKey = API_CONFIG.gemini.apiKey;
-  private baseUrl = API_ENDPOINTS.gemini.text;
+  private n8nEndpoint = API_CONFIG.n8n.endpoint;
 
   async generateText(prompt: string, context?: string): Promise<string> {
-    if (!API_CONFIG.gemini.enabled || !this.apiKey) {
-      throw new Error('Gemini API is not configured');
+    if (!API_CONFIG.n8n.enabled || !this.n8nEndpoint) {
+      throw new Error('n8n webhook is not configured');
     }
 
     try {
       const fullPrompt = context ? `${context}\n\nUser question: ${prompt}` : prompt;
       
       const response = await axios.post(
-        `${this.baseUrl}?key=${this.apiKey}`,
+        this.n8nEndpoint,
         {
-          contents: [
-            {
-              parts: [
-                {
-                  text: fullPrompt
-                }
-              ]
-            }
-          ]
+          prompt: fullPrompt,
+          type: 'gemini-request',
+          timestamp: new Date().toISOString()
         },
         {
           headers: {
@@ -44,21 +37,28 @@ export class GeminiService {
         }
       );
 
-      const geminiResponse: GeminiResponse = response.data;
-      
-      if (geminiResponse.candidates && geminiResponse.candidates.length > 0) {
-        return geminiResponse.candidates[0].content.parts[0].text;
+      // Handle n8n response - assuming n8n returns the response in a standard format
+      if (response.data && typeof response.data === 'string') {
+        return response.data;
       }
       
-      throw new Error('No response from Gemini AI');
+      if (response.data && response.data.response) {
+        return response.data.response;
+      }
+
+      if (response.data && response.data.text) {
+        return response.data.text;
+      }
+      
+      throw new Error('No response from n8n webhook');
     } catch (error) {
-      console.error('Gemini API error:', error);
+      console.error('n8n webhook error:', error);
       throw error;
     }
   }
 
   async analyzeUrbanData(data: any, location: { latitude: number; longitude: number }): Promise<string> {
-    const context = `You are an expert AI urban planning assistant powered by Gemini 2.5 Flash, specializing in policy-making for urban planners and residents. 
+    const context = `You are an expert AI urban planning assistant powered by Gemini 1.5 Flash via n8n, specializing in policy-making for urban planners and residents. 
     Analyze the following urban health data for location ${location.latitude}, ${location.longitude} and provide insights, recommendations, and actionable policy advice for urban planners, city officials, and residents working together.
     
     IMPORTANT: All analysis is based on mock data for demonstration purposes.
@@ -81,7 +81,7 @@ export class GeminiService {
   }
 
   async generateUrbanInsights(query: string, location: { latitude: number; longitude: number }): Promise<string> {
-    const context = `You are an expert AI urban intelligence assistant powered by Gemini 2.5 Flash, specialized in policy-making for urban planners and residents. Help users understand urban health, sustainability, smart city concepts, and collaborative policy development. 
+    const context = `You are an expert AI urban intelligence assistant powered by Gemini 1.5 Flash via n8n, specialized in policy-making for urban planners and residents. Help users understand urban health, sustainability, smart city concepts, and collaborative policy development. 
     Current location: ${location.latitude}, ${location.longitude}
     
     IMPORTANT: All insights are based on mock data for demonstration purposes.

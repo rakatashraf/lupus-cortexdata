@@ -31,10 +31,10 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     const welcomeMessages: AIMessage[] = [
       {
         id: 'welcome-1',
-        content: "🏛️ Hello! I'm your AI assistant powered by Gemini 1.5 Flash for urban planning and policy-making!",
+        content: "🏛️ Hello! I'm your AI assistant powered by Gemini 1.5 Flash via n8n for urban planning and policy-making!",
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Gemini 1.5 Flash' }
+        metadata: { model: 'Gemini 1.5 Flash (via n8n)' }
       },
       {
         id: 'welcome-2',
@@ -96,7 +96,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
         content: response,
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Gemini 1.5 Flash' }
+        metadata: { model: 'Gemini 1.5 Flash (via n8n)' }
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -107,10 +107,10 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
       // Show error message - only use Gemini 2.5 Flash
       const errorMessage: AIMessage = {
         id: `assistant-${Date.now()}`,
-        content: "🤖 I apologize, but I'm currently unable to connect to Gemini 1.5 Flash. Please check your internet connection and try again. I only provide responses through Google's Gemini 1.5 Flash model for the best urban planning insights.",
+        content: "🤖 I apologize, but I'm currently unable to connect to the n8n webhook for Gemini 1.5 Flash. Please check the n8n workflow and try again. I only provide responses through n8n → Gemini 1.5 Flash for the best urban planning insights.",
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Gemini 1.5 Flash - Error' }
+        metadata: { model: 'Gemini 1.5 Flash (via n8n) - Error' }
       };
 
       setMessages(prev => [...prev, errorMessage]);
@@ -143,7 +143,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
-              AI Urban Policy Assistant - Gemini 1.5 Flash
+              AI Urban Policy Assistant - Gemini 1.5 Flash (via n8n)
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge variant={serviceStatus.gemini ? "default" : "secondary"}>
@@ -166,7 +166,7 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
             <Info className="h-4 w-4" />
             <AlertDescription>
               Location: {latitude.toFixed(4)}°, {longitude.toFixed(4)}° • 
-              Connected to Gemini 1.5 Flash AI for urban planning and policy-making assistance
+              Connected to Gemini 1.5 Flash via n8n webhook for urban planning and policy-making assistance
             </AlertDescription>
           </Alert>
 
