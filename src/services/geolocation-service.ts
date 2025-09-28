@@ -201,3 +201,42 @@ export const getDistance = (
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
+
+// Calculate bounding box for an area name search result
+export const calculateBoundingBox = (
+  centerLat: number,
+  centerLng: number,
+  radiusKm: number = 1
+): { north: number; south: number; east: number; west: number } => {
+  // Approximate degrees per kilometer
+  const latDegreesPerKm = 1 / 111;
+  const lngDegreesPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
+  
+  const latOffset = radiusKm * latDegreesPerKm;
+  const lngOffset = radiusKm * lngDegreesPerKm;
+  
+  return {
+    north: centerLat + latOffset,
+    south: centerLat - latOffset,
+    east: centerLng + lngOffset,
+    west: centerLng - lngOffset
+  };
+};
+
+// Calculate area size in square kilometers from bounding box
+export const calculateAreaSize = (bounds: {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}): number => {
+  const latDiff = bounds.north - bounds.south;
+  const lngDiff = bounds.east - bounds.west;
+  const centerLat = (bounds.north + bounds.south) / 2;
+  
+  // Convert to kilometers
+  const heightKm = latDiff * 111;
+  const widthKm = lngDiff * 111 * Math.cos(centerLat * Math.PI / 180);
+  
+  return heightKm * widthKm;
+};

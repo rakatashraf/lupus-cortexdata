@@ -14,6 +14,7 @@ interface N8NWebhookParams {
   endDate?: string;
   layers?: string[];
   message?: string;
+  bounds?: { north: number; south: number; east: number; west: number };
   [key: string]: any;
 }
 
@@ -95,6 +96,38 @@ export class N8NService {
       return response.data;
     } catch (error) {
       console.error('❌ Chart data webhook error:', error);
+      return this.getFallbackChartData();
+    }
+  }
+
+  /**
+   * Trigger n8n webhook for area-based chart data
+   */
+  async getAreaChartData(
+    bounds: { north: number; south: number; east: number; west: number },
+    layers: string[],
+    startDate: string,
+    endDate: string
+  ): Promise<any> {
+    try {
+      const params: N8NWebhookParams = {
+        action: 'areachartdata',
+        bounds,
+        layers,
+        startDate,
+        endDate
+      };
+
+      console.log('📊 Calling n8n webhook for area chart data:', params);
+
+      const response = await axios.get(this.baseUrl, {
+        params,
+        timeout: this.timeout
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('❌ Area chart data webhook error:', error);
       return this.getFallbackChartData();
     }
   }

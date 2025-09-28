@@ -8,14 +8,22 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap } from 'lucide-react';
+import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin } from 'lucide-react';
 import { n8nService } from '@/services/n8n-service';
 import { ChartDataPoint } from '@/types/urban-indices';
 import { cn } from '@/lib/utils';
+import { searchLocationByName } from '@/services/geolocation-service';
 
 interface DataVisualizationProps {
   latitude?: number;
   longitude?: number;
+}
+
+interface AreaBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
 }
 
 interface DataLayer {
@@ -66,10 +74,15 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
-  const [coordinates, setCoordinates] = useState({
-    lat: latitude.toString(),
-    lng: longitude.toString()
+  const [searchMode, setSearchMode] = useState<'coordinates' | 'area-name'>('coordinates');
+  const [areaSearch, setAreaSearch] = useState({
+    startLat: latitude.toString(),
+    startLng: longitude.toString(),
+    endLat: (latitude + 0.01).toString(),
+    endLng: (longitude + 0.01).toString(),
+    areaName: ''
   });
+  const [areaBounds, setAreaBounds] = useState<AreaBounds | null>(null);
 
   useEffect(() => {
     loadChartData();
@@ -81,14 +94,32 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
 
     try {
       const enabledLayers = layers.filter(layer => layer.enabled).map(layer => layer.id);
-      const lat = parseFloat(coordinates.lat);
-      const lng = parseFloat(coordinates.lng);
+      
+      let bounds: AreaBounds;
+      if (searchMode === 'coordinates') {
+        const startLat = parseFloat(areaSearch.startLat);
+        const startLng = parseFloat(areaSearch.startLng);
+        const endLat = parseFloat(areaSearch.endLat);
+        const endLng = parseFloat(areaSearch.endLng);
 
-      if (isNaN(lat) || isNaN(lng)) {
-        throw new Error('Invalid coordinates');
+        if (isNaN(startLat) || isNaN(startLng) || isNaN(endLat) || isNaN(endLng)) {
+          throw new Error('Invalid coordinates');
+        }
+
+        bounds = {
+          north: Math.max(startLat, endLat),
+          south: Math.min(startLat, endLat),
+          east: Math.max(startLng, endLng),
+          west: Math.min(startLng, endLng)
+        };
+      } else {
+        if (!areaBounds) {
+          throw new Error('Please search for an area first');
+        }
+        bounds = areaBounds;
       }
 
-      const data = await n8nService.getChartData(lat, lng, enabledLayers, dateRange.start, dateRange.end);
+      const data = await n8nService.getAreaChartData(bounds, enabledLayers, dateRange.start, dateRange.end);
       
       if (data && data.success !== false) {
         setChartData(processChartData(data));
@@ -162,6 +193,39 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
 
   const updateChart = () => {
     loadChartData();
+  };
+
+  const searchAreaByName = async () => {
+    if (!areaSearch.areaName.trim()) {
+      setError('Please enter an area name to search');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const results = await searchLocationByName(areaSearch.areaName);
+      if (results.length > 0) {
+        const location = results[0];
+        // Create a small area around the found location (approximately 1km x 1km)
+        const offset = 0.005; // roughly 0.5km in each direction
+        const bounds: AreaBounds = {
+          north: location.latitude + offset,
+          south: location.latitude - offset,
+          east: location.longitude + offset,
+          west: location.longitude - offset
+        };
+        setAreaBounds(bounds);
+      } else {
+        setError('No area found with that name. Please try a different search term.');
+      }
+    } catch (err) {
+      console.error('Area search failed:', err);
+      setError('Failed to search for area. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const downloadChart = () => {
@@ -333,7 +397,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
             Urban Analytics Dashboard
           </h1>
-          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Real-time satellite data visualization and analysis</p>
+          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Area-based satellite data visualization and analysis</p>
         </div>
 
         {/* Stats Cards */}
@@ -402,44 +466,175 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
       <Card className="glass-card card-glow hover-lift animate-slide-in-up" style={{ animationDelay: '0.4s' }}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
-            <TrendingUp className="h-6 w-6 text-primary" />
-            Visualization Controls
+            <MapPin className="h-6 w-6 text-primary" />
+            Area Search & Controls
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-8">
-          {/* Coordinates and Chart Type */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-foreground">Latitude</Label>
-              <Input
-                value={coordinates.lat}
-                onChange={(e) => setCoordinates(prev => ({ ...prev, lat: e.target.value }))}
-                placeholder="23.8103"
-                className="bg-background/50 border-border/50 backdrop-blur-sm"
-              />
+          {/* Search Mode Toggle */}
+          <div className="space-y-4">
+            <Label className="text-lg font-semibold text-foreground">Search Mode</Label>
+            <Select value={searchMode} onValueChange={(value: any) => setSearchMode(value)}>
+              <SelectTrigger className="bg-background/50 border-border/50 backdrop-blur-sm max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="coordinates">Point-to-Point Coordinates</SelectItem>
+                <SelectItem value="area-name">Search Area by Name</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Area Search Controls */}
+          {searchMode === 'coordinates' ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-foreground">Start Latitude</Label>
+                  <Input
+                    value={areaSearch.startLat}
+                    onChange={(e) => setAreaSearch(prev => ({ ...prev, startLat: e.target.value }))}
+                    placeholder="23.8103"
+                    className="bg-background/50 border-border/50 backdrop-blur-sm"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-foreground">Start Longitude</Label>
+                  <Input
+                    value={areaSearch.startLng}
+                    onChange={(e) => setAreaSearch(prev => ({ ...prev, startLng: e.target.value }))}
+                    placeholder="90.4125"
+                    className="bg-background/50 border-border/50 backdrop-blur-sm"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-foreground">End Latitude</Label>
+                  <Input
+                    value={areaSearch.endLat}
+                    onChange={(e) => setAreaSearch(prev => ({ ...prev, endLat: e.target.value }))}
+                    placeholder="23.8203"
+                    className="bg-background/50 border-border/50 backdrop-blur-sm"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-foreground">End Longitude</Label>
+                  <Input
+                    value={areaSearch.endLng}
+                    onChange={(e) => setAreaSearch(prev => ({ ...prev, endLng: e.target.value }))}
+                    placeholder="90.4225"
+                    className="bg-background/50 border-border/50 backdrop-blur-sm"
+                  />
+                </div>
+              </div>
+              
+              {/* Calculated Area Info */}
+              {(() => {
+                const startLat = parseFloat(areaSearch.startLat);
+                const startLng = parseFloat(areaSearch.startLng);
+                const endLat = parseFloat(areaSearch.endLat);
+                const endLng = parseFloat(areaSearch.endLng);
+                
+                if (!isNaN(startLat) && !isNaN(startLng) && !isNaN(endLat) && !isNaN(endLng)) {
+                  const north = Math.max(startLat, endLat);
+                  const south = Math.min(startLat, endLat);
+                  const east = Math.max(startLng, endLng);
+                  const west = Math.min(startLng, endLng);
+                  
+                  // Calculate approximate area in km²
+                  const latDiff = north - south;
+                  const lngDiff = east - west;
+                  const approxArea = (latDiff * 111) * (lngDiff * 111 * Math.cos(((north + south) / 2) * Math.PI / 180));
+                  
+                  return (
+                    <div className="glass-card p-4 rounded-xl space-y-2">
+                      <h4 className="font-medium text-foreground">Calculated Area Bounds:</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">North:</span>
+                          <span className="ml-2 font-mono">{north.toFixed(4)}°</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">South:</span>
+                          <span className="ml-2 font-mono">{south.toFixed(4)}°</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">East:</span>
+                          <span className="ml-2 font-mono">{east.toFixed(4)}°</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">West:</span>
+                          <span className="ml-2 font-mono">{west.toFixed(4)}°</span>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-border/30">
+                        <span className="text-muted-foreground">Approximate Area:</span>
+                        <span className="ml-2 font-semibold text-primary">{approxArea.toFixed(2)} km²</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-foreground">Longitude</Label>
-              <Input
-                value={coordinates.lng}
-                onChange={(e) => setCoordinates(prev => ({ ...prev, lng: e.target.value }))}
-                placeholder="90.4125"
-                className="bg-background/50 border-border/50 backdrop-blur-sm"
-              />
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-3">
+                  <Label className="text-sm font-medium text-foreground">Search Area by Name</Label>
+                  <Input
+                    value={areaSearch.areaName}
+                    onChange={(e) => setAreaSearch(prev => ({ ...prev, areaName: e.target.value }))}
+                    placeholder="Enter city, district, or area name..."
+                    className="bg-background/50 border-border/50 backdrop-blur-sm"
+                  />
+                </div>
+                <Button 
+                  onClick={searchAreaByName}
+                  className="mt-8 bg-primary hover:bg-primary/80"
+                >
+                  Search Area
+                </Button>
+              </div>
+              
+              {areaBounds && (
+                <div className="glass-card p-4 rounded-xl space-y-2">
+                  <h4 className="font-medium text-foreground">Found Area Bounds:</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">North:</span>
+                      <span className="ml-2 font-mono">{areaBounds.north.toFixed(4)}°</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">South:</span>
+                      <span className="ml-2 font-mono">{areaBounds.south.toFixed(4)}°</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">East:</span>
+                      <span className="ml-2 font-mono">{areaBounds.east.toFixed(4)}°</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">West:</span>
+                      <span className="ml-2 font-mono">{areaBounds.west.toFixed(4)}°</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-foreground">Chart Type</Label>
-              <Select value={chartType} onValueChange={(value: any) => setChartType(value)}>
-                <SelectTrigger className="bg-background/50 border-border/50 backdrop-blur-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="line">Line Chart</SelectItem>
-                  <SelectItem value="area">Area Chart</SelectItem>
-                  <SelectItem value="bar">Bar Chart</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          )}
+
+          {/* Chart Type */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium text-foreground">Chart Type</Label>
+            <Select value={chartType} onValueChange={(value: any) => setChartType(value)}>
+              <SelectTrigger className="bg-background/50 border-border/50 backdrop-blur-sm max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="line">Line Chart</SelectItem>
+                <SelectItem value="area">Area Chart</SelectItem>
+                <SelectItem value="bar">Bar Chart</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Date Range */}
@@ -539,7 +734,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-2xl">
               <BarChart3 className="h-6 w-6 text-primary" />
-              Urban Health Indices Trends
+              Urban Health Indices - Area Analysis
             </CardTitle>
           </CardHeader>
           <CardContent>
