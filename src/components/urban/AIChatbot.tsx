@@ -104,125 +104,22 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     } catch (error) {
       console.error('Error with Gemini service:', error);
       
-      // Fallback to local processing
-      const fallbackResponse = await processMessageLocally(userMessage.content);
-      const assistantMessage: AIMessage = {
+      // Show error message - only use Gemini 2.5 Flash
+      const errorMessage: AIMessage = {
         id: `assistant-${Date.now()}`,
-        content: fallbackResponse,
+        content: "🤖 I apologize, but I'm currently unable to connect to Gemini 2.5 Flash. Please check your internet connection and try again. I only provide responses through Google's Gemini 2.5 Flash model for the best urban planning insights.",
         type: 'assistant',
         timestamp: new Date(),
-        metadata: { model: 'Local Assistant' }
+        metadata: { model: 'Gemini 2.5 Flash - Error' }
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
     }
   };
 
-  const processMessageLocally = async (message: string): Promise<string> => {
-    const lowerMessage = message.toLowerCase();
-
-    // Detect different types of requests
-    if (lowerMessage.includes('generate') && (lowerMessage.includes('image') || lowerMessage.includes('photo') || lowerMessage.includes('picture'))) {
-      return "🖼️ I can help generate images, but this requires connecting to the image generation service. Please make sure your AI services are properly configured.";
-    }
-
-    if (lowerMessage.includes('chart') || lowerMessage.includes('graph') || lowerMessage.includes('visualization')) {
-      return `📊 I can help you create data visualizations! Based on your current location (${latitude.toFixed(4)}, ${longitude.toFixed(4)}), I can generate charts showing:
-
-• Climate Resilience Index trends
-• Air Quality Health Impact over time
-• Urban Heat Vulnerability patterns
-• Water Security indicators
-• Green Equity Assessment data
-
-Would you like me to create a specific type of chart for your area?`;
-    }
-
-    if (lowerMessage.includes('air quality') || lowerMessage.includes('pollution')) {
-      return `🌬️ Air Quality Analysis for your area:
-
-Based on typical urban patterns, here are key recommendations:
-• Monitor PM2.5 and NO2 levels regularly
-• Increase green infrastructure to filter air pollutants
-• Promote electric vehicle adoption
-• Implement clean energy sources
-• Create car-free zones in city centers
-
-The Air Quality Health Impact (AQHI) index considers NO2, PM2.5, PM10, O3, and SO2 concentrations. Lower scores indicate better air quality.`;
-    }
-
-    if (lowerMessage.includes('climate') || lowerMessage.includes('temperature') || lowerMessage.includes('heat')) {
-      return `🌡️ Climate Resilience Insights:
-
-For your location (${latitude.toFixed(4)}, ${longitude.toFixed(4)}):
-• Focus on heat adaptation strategies
-• Implement urban cooling solutions
-• Enhance green infrastructure coverage
-• Prepare for extreme weather events
-• Improve flood risk management
-
-The Climate Resilience Index (CRI) measures temperature adaptation, heat wave preparedness, flood management, air quality resilience, and green infrastructure.`;
-    }
-
-    if (lowerMessage.includes('sustainability') || lowerMessage.includes('urban planning') || lowerMessage.includes('policy')) {
-      return `🏛️ Urban Policy & Sustainability Best Practices for Planners & Residents:
-
-**Policy Development Framework:**
-1. **Community Engagement Policies**: Resident participation in planning decisions
-2. **Green Infrastructure Policies**: Parks, green roofs, urban forest regulations
-3. **Transportation Policies**: Public transit, cycling networks, walkability standards
-4. **Energy Transition Policies**: Renewable energy mandates, efficiency standards
-5. **Water Management Policies**: Conservation, rainwater harvesting, quality protection
-6. **Waste Reduction Policies**: Circular economy, recycling mandates, producer responsibility
-7. **Social Equity Policies**: Affordable housing, equal access to green spaces
-8. **Smart City Governance**: Data privacy, digital inclusion, transparent technology use
-
-**Collaborative Implementation:**
-• Resident advisory councils for policy development
-• Community-led sustainability initiatives
-• Transparent policy implementation tracking
-• Regular feedback mechanisms between planners and residents
-
-*Note: Analysis based on mock data for demonstration purposes.*`;
-    }
-
-    if (lowerMessage.includes('data') || lowerMessage.includes('analysis') || lowerMessage.includes('indices')) {
-      return `📈 Urban Health Data Analysis:
-
-I can analyze data from 9 key indices:
-1. **Climate Resilience Index (CRI)** - Climate adaptation capacity
-2. **Urban Heat Vulnerability Index (UHVI)** - Heat risk assessment  
-3. **Air Quality Health Impact (AQHI)** - Pollution health effects
-4. **Water Security Indicator (WSI)** - Water resource availability
-5. **Green Equity Assessment (GEA)** - Green space access
-6. **Social Cohesion Metrics (SCM)** - Community connectivity
-7. **Environmental Justice Tracker (EJT)** - Equity in environmental burden
-8. **Transportation Accessibility Score (TAS)** - Mobility options
-9. **Disaster Preparedness Index (DPI)** - Emergency readiness
-
-Each index uses satellite data and ground measurements for comprehensive urban health assessment.`;
-    }
-
-    // Default helpful response
-    return `🏛️ I'm here to help with urban planning policy-making for planners and residents! 
-
-I can assist with:
-• Policy recommendations for urban planners
-• Community engagement strategies for residents
-• Collaborative policy development frameworks
-• Urban health indices analysis and policy implications
-• Environmental data interpretation for policy-making
-• Sustainability policy recommendations
-• Climate adaptation policy strategies
-• Resident-centered urban development insights
-
-*All analysis is based on mock data for demonstration purposes.*
-
-What specific aspect of urban policy or collaborative planning would you like to explore?`;
-  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
