@@ -54,7 +54,7 @@ export function IndexMeasurementsList({ className }: IndexMeasurementsListProps)
     <>
       <Card 
         className={cn(
-          "min-h-[200px] aspect-square rounded-full bg-gradient-card shadow-card cursor-pointer hover:scale-105 transition-all duration-300 hover:shadow-lg group",
+          "min-h-[200px] aspect-square rounded-lg bg-gradient-card shadow-card cursor-pointer hover:scale-105 transition-all duration-300 hover:shadow-lg group",
           className
         )}
         onClick={() => setShowModal(true)}

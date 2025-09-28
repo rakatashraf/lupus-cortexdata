@@ -33,19 +33,19 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
         "bg-gradient-to-br from-primary/10 via-primary-glow/5 to-transparent",
         "border-2 border-primary/20 hover:border-primary/40 shadow-glow",
         getStatusVariant(index.total_score, index.target) === 'excellent' && "border-green-500/40 hover:border-green-500/60",
-        "min-h-[200px] aspect-square rounded-full p-0",
+        "min-h-[200px] aspect-square rounded-lg p-0",
         className
       )}
       onClick={onClick}
     >
       {/* Glow effect */}
-      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 via-transparent to-primary-glow/10 opacity-50 group-hover:opacity-70 transition-opacity" />
+      <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-primary/20 via-transparent to-primary-glow/10 opacity-50 group-hover:opacity-70 transition-opacity" />
       
       {/* Content */}
       <CardContent className="relative flex flex-col items-center justify-center h-full p-6 text-center">
         {/* Icon */}
         <div className="mb-4 relative">
-          <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl scale-150"></div>
+          <div className="absolute inset-0 bg-primary/20 rounded-lg blur-xl scale-150"></div>
           <Heart className="relative h-8 w-8 text-primary group-hover:scale-110 transition-transform duration-300" />
         </div>
         
@@ -87,7 +87,7 @@ export function HumanWellbeingCard({ index, onClick, className }: HumanWellbeing
         </p>
         
         {/* Pulse animation */}
-        <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse opacity-0 group-hover:opacity-30 transition-opacity duration-500" />
+        <div className="absolute inset-0 rounded-lg bg-primary/10 animate-pulse opacity-0 group-hover:opacity-30 transition-opacity duration-500" />
       </CardContent>
     </Card>
   );
