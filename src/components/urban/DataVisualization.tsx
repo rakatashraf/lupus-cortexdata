@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin, ChevronDown, ChevronUp, Thermometer, Leaf, Droplets, Building2, Car, Cloud, Home, HelpCircle } from 'lucide-react';
+import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin, ChevronDown, ChevronUp, Thermometer, Leaf, Droplets, Building2, Car, Cloud, Home, HelpCircle, FileText, Users, Clock, AlertCircle, CheckCircle, Target, BookOpen } from 'lucide-react';
 import { n8nService } from '@/services/n8n-service';
 import { ChartDataPoint } from '@/types/urban-indices';
 import { cn } from '@/lib/utils';
@@ -185,6 +186,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['climate', 'environment', 'air']);
   const [selectedPreset, setSelectedPreset] = useState<string>('health');
+  const [expandedPriorities, setExpandedPriorities] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadChartData();
@@ -387,6 +389,174 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     
     // Sort by priority (Critical zones first)
     return insights.sort((a, b) => a.average - b.average);
+  };
+
+  // Generate detailed planning content based on category and intervention level
+  const getDetailedPlanningContent = (insight: any) => {
+    const layerName = insight.layer.toLowerCase();
+    const score = insight.average;
+    const category = DATA_CATEGORIES.find(cat => 
+      cat.layers.some(layer => 
+        layers.find(l => l.name === insight.layer)?.id.includes(layer.split('_')[0])
+      )
+    );
+
+    const planningContent = {
+      suggestions: [],
+      tips: [],
+      implementation: [],
+      monitoring: []
+    };
+
+    // Category-specific content based on planning impact zones
+    if (category?.id === 'climate') {
+      planningContent.suggestions = [
+        'Implement heat island mitigation strategies through green corridors',
+        'Develop climate-resilient building codes and zoning regulations',
+        'Create emergency cooling centers and heat warning systems',
+        'Establish urban tree canopy expansion programs'
+      ];
+      planningContent.tips = [
+        'Prioritize heat-vulnerable communities for immediate intervention',
+        'Coordinate with public health department for heat emergency protocols',
+        'Engage community stakeholders in climate adaptation planning',
+        'Consider long-term climate projections in infrastructure planning'
+      ];
+    } else if (category?.id === 'environment') {
+      planningContent.suggestions = [
+        'Develop comprehensive green infrastructure master plan',
+        'Implement biodiversity corridors connecting green spaces',
+        'Create community gardens and pocket parks in underserved areas',
+        'Establish green building incentives and requirements'
+      ];
+      planningContent.tips = [
+        'Ensure equitable distribution of green spaces across neighborhoods',
+        'Integrate green infrastructure with stormwater management',
+        'Partner with environmental organizations for implementation',
+        'Consider maintenance and stewardship in long-term planning'
+      ];
+    } else if (category?.id === 'water') {
+      planningContent.suggestions = [
+        'Upgrade water infrastructure to meet projected demand',
+        'Implement smart water management systems and leak detection',
+        'Develop flood resilience and stormwater management plans',
+        'Create water conservation incentives and regulations'
+      ];
+      planningContent.tips = [
+        'Coordinate with utility providers for infrastructure upgrades',
+        'Consider climate change impacts on water resources',
+        'Engage communities in water conservation education',
+        'Plan for emergency water supply during disasters'
+      ];
+    } else if (category?.id === 'urban') {
+      planningContent.suggestions = [
+        'Develop mixed-use, transit-oriented development policies',
+        'Create affordable housing strategies and inclusionary zoning',
+        'Enhance community connectivity through walkable design',
+        'Implement smart growth principles in development review'
+      ];
+      planningContent.tips = [
+        'Balance development density with community character',
+        'Ensure adequate public services and infrastructure capacity',
+        'Facilitate community input in development planning',
+        'Address gentrification and displacement concerns proactively'
+      ];
+    } else if (category?.id === 'transport') {
+      planningContent.suggestions = [
+        'Expand public transit network and improve accessibility',
+        'Develop complete streets design standards',
+        'Create bicycle and pedestrian infrastructure networks',
+        'Implement transportation demand management programs'
+      ];
+      planningContent.tips = [
+        'Prioritize transit investments in underserved communities',
+        'Coordinate transportation and land use planning',
+        'Consider emerging mobility technologies in planning',
+        'Ensure accessibility for people with disabilities'
+      ];
+    } else if (category?.id === 'air') {
+      planningContent.suggestions = [
+        'Implement air quality monitoring and alert systems',
+        'Develop emission reduction strategies for industrial areas',
+        'Create car-free zones and promote clean transportation',
+        'Establish green buffers around pollution sources'
+      ];
+      planningContent.tips = [
+        'Focus interventions on environmental justice communities',
+        'Coordinate with regional air quality management agencies',
+        'Integrate air quality considerations in development review',
+        'Educate community about air quality health impacts'
+      ];
+    } else if (category?.id === 'community') {
+      planningContent.suggestions = [
+        'Conduct comprehensive community needs assessment',
+        'Develop emergency preparedness and response plans',
+        'Create community benefit agreements for new developments',
+        'Establish social equity indicators and monitoring systems'
+      ];
+      planningContent.tips = [
+        'Center community voices in planning processes',
+        'Address historical inequities in resource allocation',
+        'Build partnerships with community-based organizations',
+        'Ensure cultural competency in planning initiatives'
+      ];
+    }
+
+    // Implementation guidance based on intervention level
+    if (score < 30) {
+      planningContent.implementation = [
+        '1. Declare planning emergency and allocate emergency resources',
+        '2. Form crisis response team with key stakeholders',
+        '3. Develop 90-day immediate action plan',
+        '4. Begin community engagement and needs assessment',
+        '5. Seek emergency funding and regulatory relief'
+      ];
+    } else if (score < 50) {
+      planningContent.implementation = [
+        '1. Establish planning task force and timeline',
+        '2. Conduct comprehensive policy review and gap analysis',
+        '3. Develop 6-month policy framework',
+        '4. Engage stakeholders and gather community input',
+        '5. Prepare budget requests and implementation plan'
+      ];
+    } else if (score < 70) {
+      planningContent.implementation = [
+        '1. Form planning working group with technical experts',
+        '2. Review best practices and develop recommendations',
+        '3. Create 12-month implementation roadmap',
+        '4. Coordinate with relevant departments and agencies',
+        '5. Develop monitoring and evaluation framework'
+      ];
+    } else {
+      planningContent.implementation = [
+        '1. Continue regular monitoring and data collection',
+        '2. Maintain stakeholder relationships and communication',
+        '3. Plan for continuous improvement and optimization',
+        '4. Document best practices and lessons learned',
+        '5. Prepare for periodic policy review and updates'
+      ];
+    }
+
+    // Monitoring framework
+    planningContent.monitoring = [
+      'Establish baseline metrics and data collection protocols',
+      'Set up quarterly progress reviews with stakeholders',
+      'Create public dashboard for transparency and accountability',
+      'Develop early warning indicators for intervention triggers',
+      'Plan annual comprehensive assessment and strategy updates'
+    ];
+
+    return planningContent;
+  };
+
+  const togglePriorityExpansion = (index: number) => {
+    const newExpanded = new Set(expandedPriorities);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedPriorities(newExpanded);
   };
 
   const searchAreaByName = async () => {
@@ -1101,42 +1271,146 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {generateInsights().slice(0, 4).map((insight, index) => (
-              <div key={index} className="p-3 rounded-lg bg-background/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
-                  <Badge 
-                    variant={insight.interventionLevel as any}
-                    className="text-xs"
-                  >
-                    {insight.priority} Priority
-                  </Badge>
-                </div>
-                <div className="text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Status:</span>
-                    <span className="font-medium">{insight.status}</span>
-                  </div>
-                  <div className="text-muted-foreground text-wrap">
-                    {insight.recommendation}
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-muted-foreground">Score: {insight.average}</span>
-                    <div className={cn(
-                      "flex items-center gap-1",
-                      insight.trend === 'improving' ? 'text-green-400' : 
-                      insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
-                    )}>
-                      <TrendingUp className={cn(
-                        "h-3 w-3",
-                        insight.trend === 'declining' && "rotate-180"
-                      )} />
-                      {insight.trend}
+            {generateInsights().slice(0, 4).map((insight, index) => {
+              const detailedContent = getDetailedPlanningContent(insight);
+              const isExpanded = expandedPriorities.has(index);
+              
+              return (
+                <Collapsible key={index} open={isExpanded} onOpenChange={() => togglePriorityExpansion(index)}>
+                  <CollapsibleTrigger className="w-full">
+                    <div className="p-3 rounded-lg bg-background/30 space-y-2 hover:bg-background/40 transition-colors cursor-pointer">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={insight.interventionLevel as any}
+                            className="text-xs"
+                          >
+                            {insight.priority} Priority
+                          </Badge>
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Status:</span>
+                          <span className="font-medium">{insight.status}</span>
+                        </div>
+                        <div className="text-muted-foreground text-wrap">
+                          {insight.recommendation}
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-muted-foreground">Score: {insight.average}</span>
+                          <div className={cn(
+                            "flex items-center gap-1",
+                            insight.trend === 'improving' ? 'text-green-400' : 
+                            insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
+                          )}>
+                            <TrendingUp className={cn(
+                              "h-3 w-3",
+                              insight.trend === 'declining' && "rotate-180"
+                            )} />
+                            {insight.trend}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+                  </CollapsibleTrigger>
+                  
+                  <CollapsibleContent className="px-3 pb-3">
+                    <div className="mt-3 space-y-4 bg-background/20 rounded-lg p-4">
+                      
+                      {/* Planning Suggestions */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <Target className="h-4 w-4 text-primary" />
+                          Planning Suggestions
+                        </div>
+                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
+                          {detailedContent.suggestions.map((suggestion, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <div className="w-1 h-1 bg-primary rounded-full mt-2 flex-shrink-0" />
+                              {suggestion}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Urban Planning Tips */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <BookOpen className="h-4 w-4 text-blue-400" />
+                          Urban Planning Tips
+                        </div>
+                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
+                          {detailedContent.tips.map((tip, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <div className="w-1 h-1 bg-blue-400 rounded-full mt-2 flex-shrink-0" />
+                              {tip}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Implementation Roadmap */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <Clock className="h-4 w-4 text-orange-400" />
+                          Implementation Roadmap
+                        </div>
+                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
+                          {detailedContent.implementation.map((step, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <div className="w-1 h-1 bg-orange-400 rounded-full mt-2 flex-shrink-0" />
+                              {step}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Monitoring & Evaluation */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <CheckCircle className="h-4 w-4 text-green-400" />
+                          Monitoring & Evaluation
+                        </div>
+                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
+                          {detailedContent.monitoring.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <div className="w-1 h-1 bg-green-400 rounded-full mt-2 flex-shrink-0" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Quick Actions */}
+                      <div className="pt-2 border-t border-border/30">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
+                          <AlertCircle className="h-4 w-4 text-yellow-400" />
+                          Quick Action Checklist
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                          <Button size="sm" variant="outline" className="justify-start h-8">
+                            <FileText className="h-3 w-3 mr-2" />
+                            Download Report
+                          </Button>
+                          <Button size="sm" variant="outline" className="justify-start h-8">
+                            <Users className="h-3 w-3 mr-2" />
+                            Schedule Meeting
+                          </Button>
+                        </div>
+                      </div>
+
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })}
             
             {generateInsights().length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
