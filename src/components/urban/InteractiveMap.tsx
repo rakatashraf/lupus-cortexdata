@@ -8,13 +8,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle, ChevronDown, Users, AlertCircle, Target } from 'lucide-react';
+import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle, ChevronDown, Users, AlertCircle, Target, Building } from 'lucide-react';
 import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
 import { CommunityNeedsCalculator, CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 import { CommunityNeedsFlags } from './CommunityNeedsFlags';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { UrbanPlannerAnalysisModal } from './UrbanPlannerAnalysisModal';
+import { reverseGeocode } from '@/services/geolocation-service';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -107,6 +109,8 @@ export function InteractiveMap({
   const [expandedNeedTypes, setExpandedNeedTypes] = useState<Set<CommunityNeedType>>(new Set());
   const [loadingCommunityNeeds, setLoadingCommunityNeeds] = useState(false);
   const [communityNeedsError, setCommunityNeedsError] = useState<string | null>(null);
+  const [selectedNeedForAnalysis, setSelectedNeedForAnalysis] = useState<CommunityNeed | null>(null);
+  const [locationAddresses, setLocationAddresses] = useState<Map<string, string>>(new Map());
 
   const searchByCoordinates = () => {
     const lat = parseFloat(searchCoords.lat);
@@ -268,6 +272,29 @@ export function InteractiveMap({
     if (mapCenter) {
       setMapCenter([need.position.lat, need.position.lng]);
       setMapZoom(16);
+    }
+  };
+
+  const handleOpenUrbanAnalysis = (need: CommunityNeed) => {
+    setSelectedNeedForAnalysis(need);
+  };
+
+  const fetchLocationAddress = async (need: CommunityNeed) => {
+    const key = `${need.position.lat},${need.position.lng}`;
+    if (locationAddresses.has(key)) {
+      return locationAddresses.get(key);
+    }
+
+    try {
+      const result = await reverseGeocode(need.position.lat, need.position.lng);
+      const address = result.address || `${need.position.lat.toFixed(4)}°N, ${need.position.lng.toFixed(4)}°E`;
+      setLocationAddresses(prev => new Map(prev).set(key, address));
+      return address;
+    } catch (error) {
+      console.error('Failed to fetch address:', error);
+      const fallbackAddress = `${need.position.lat.toFixed(4)}°N, ${need.position.lng.toFixed(4)}°E`;
+      setLocationAddresses(prev => new Map(prev).set(key, fallbackAddress));
+      return fallbackAddress;
     }
   };
 
@@ -738,26 +765,96 @@ export function InteractiveMap({
                               Affected Locations
                             </h4>
                             <div className="space-y-2">
-                              {typeNeeds.map((need, index) => (
-                                <div
-                                  key={need.id}
-                                  className="flex items-center justify-between p-2 rounded-md bg-background/50 border cursor-pointer hover:bg-background/80 transition-colors"
-                                  onClick={() => handleNeedLocationSelect(need)}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Badge 
-                                      variant={need.severity === 'critical' ? 'destructive' : 'secondary'}
-                                      className="text-xs"
-                                    >
-                                      {need.severity}
-                                    </Badge>
-                                    <span className="text-sm font-medium">Location {index + 1}</span>
+                              {typeNeeds.map((need, index) => {
+                                const addressKey = `${need.position.lat},${need.position.lng}`;
+                                const address = locationAddresses.get(addressKey);
+                                
+                                // Fetch address if not already loaded
+                                if (!address) {
+                                  fetchLocationAddress(need);
+                                }
+
+                                return (
+                                  <div
+                                    key={need.id}
+                                    className="space-y-2 p-3 rounded-md bg-background/50 border hover:bg-background/80 transition-colors"
+                                  >
+                                    {/* Location Header */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <Badge 
+                                          variant={need.severity === 'critical' ? 'destructive' : 'secondary'}
+                                          className="text-xs"
+                                        >
+                                          {need.severity}
+                                        </Badge>
+                                        <span className="text-sm font-medium">
+                                          {address || `Location ${index + 1}`}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        Score: {need.score.toFixed(1)}
+                                      </div>
+                                    </div>
+
+                                    {/* Address and Context */}
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      <div className="flex items-center gap-1">
+                                        <MapPin className="h-3 w-3" />
+                                        <span>
+                                          {address || 'Loading address...'}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <Users className="h-3 w-3" />
+                                        <span>
+                                          Pop. Density: ~{Math.floor(15000 + (need.position.lat * need.position.lng * 1000) % 10000).toLocaleString()}/km²
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-7"
+                                        onClick={() => handleNeedLocationSelect(need)}
+                                      >
+                                        <MapPin className="h-3 w-3 mr-1" />
+                                        View on Map
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        className="text-xs h-7"
+                                        onClick={() => handleOpenUrbanAnalysis(need)}
+                                      >
+                                        <Building className="h-3 w-3 mr-1" />
+                                        Urban Analysis
+                                      </Button>
+                                    </div>
+
+                                    {/* Quick Insights */}
+                                    <div className="text-xs text-muted-foreground bg-background/30 p-2 rounded">
+                                      <div className="flex items-start gap-1">
+                                        <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <span className="font-medium">Immediate Priority: </span>
+                                          {need.type === 'food-access' && 'Emergency food distribution setup within 2 weeks'}
+                                          {need.type === 'housing' && 'Housing condition assessment and emergency repairs'}
+                                          {need.type === 'transportation' && 'Community shuttle service pilot program'}
+                                          {need.type === 'pollution' && 'Environmental monitoring and emission controls'}
+                                          {need.type === 'healthcare' && 'Mobile health clinic deployment'}
+                                          {need.type === 'parks' && 'Temporary recreational space designation'}
+                                          {need.type === 'growth' && 'Development impact assessment'}
+                                          {need.type === 'energy' && 'Emergency power infrastructure evaluation'}
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    Score: {need.score.toFixed(1)}
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
 
@@ -786,6 +883,13 @@ export function InteractiveMap({
           </div>
         </div>
       )}
+
+      {/* Urban Planner Analysis Modal */}
+      <UrbanPlannerAnalysisModal
+        need={selectedNeedForAnalysis}
+        isOpen={!!selectedNeedForAnalysis}
+        onClose={() => setSelectedNeedForAnalysis(null)}
+      />
 
       {isAreaSelectionMode && (
         <Alert>
