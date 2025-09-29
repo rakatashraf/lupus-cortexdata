@@ -13,6 +13,8 @@ import { IndexMeasurementsList } from './IndexMeasurementsList';
 import { HumanWellbeingCard } from './HumanWellbeingCard';
 import { RecommendationsBanner } from './RecommendationsBanner';
 import { calculateIndexStatus, calculateProgressPercentage, getProgressClass } from '@/utils/index-status-calculator';
+import { getPlannerFriendlyName, reorderByPlanningPriority, shouldUsePlannerTerminology } from '@/utils/planner-terminology-mapper';
+import { getImplementationStatus } from '@/utils/action-status-calculator';
 
 interface HealthDashboardProps {
   latitude?: number;
@@ -130,8 +132,9 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
     return null;
   }
 
-  // Filter out HWI from the regular grid
-  const regularIndices = Object.entries(healthData.indices).filter(([key]) => key !== 'hwi');
+  // Filter out HWI from the regular grid and reorder by planning priority
+  const filteredIndices = Object.entries(healthData.indices).filter(([key]) => key !== 'hwi');
+  const regularIndices = reorderByPlanningPriority(filteredIndices);
   const hwiIndex = healthData.indices.hwi;
 
   return (
@@ -197,6 +200,9 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
         {regularIndices.map(([key, index]) => {
           const Icon = INDEX_ICONS[key as keyof typeof INDEX_ICONS];
           const colorClass = INDEX_COLORS[key as keyof typeof INDEX_COLORS];
+          const progressPercentage = calculateProgressPercentage(index.index_name, index.total_score, index.target, key);
+          const implementationStatus = getImplementationStatus(progressPercentage);
+          const plannerName = getPlannerFriendlyName(key, index.index_name);
           
           return (
             <Card 
@@ -218,7 +224,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
                   </Badge>
                 </div>
                 <CardTitle className="text-base sm:text-lg leading-tight group-hover:text-primary transition-colors">
-                  {index.index_name}
+                  {plannerName}
                 </CardTitle>
                 <p className="text-xs sm:text-sm text-muted-foreground">
                   {index.category}
@@ -227,25 +233,25 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
               <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs sm:text-sm font-medium">Progress to Target</span>
+                    <span className="text-xs sm:text-sm font-medium">Implementation Readiness</span>
                     <span className="text-xs sm:text-sm text-muted-foreground">
-                      {Math.round(calculateProgressPercentage(index.index_name, index.total_score, index.target, key))}%
+                      {Math.round(progressPercentage)}%
                     </span>
                   </div>
                   <Progress 
-                    value={calculateProgressPercentage(index.index_name, index.total_score, index.target, key)} 
+                    value={progressPercentage} 
                     className="h-2"
                     indicatorClassName={getIndexProgressClass(index.index_name, index.total_score, index.target, key)}
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Status:</p>
+                  <p className="text-sm font-medium">Action Status:</p>
                   <Badge 
                     variant={getStatusVariant(index.index_name, index.total_score, index.target, key)}
                     className="text-sm font-semibold px-3 py-1 w-full justify-center"
                   >
-                    {index.status}
+                    {implementationStatus.status}
                   </Badge>
                 </div>
 
@@ -268,7 +274,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
 
                 <div className="pt-2 border-t border-border/50">
                   <p className="text-xs text-muted-foreground">
-                    Click to view detailed analysis, satellite data, and formulas
+                    Click for planning analysis and recommendations
                   </p>
                 </div>
               </CardContent>
