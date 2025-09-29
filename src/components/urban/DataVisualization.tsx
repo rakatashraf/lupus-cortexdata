@@ -1277,48 +1277,47 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
               
               return (
                 <Collapsible key={index} open={isExpanded} onOpenChange={() => togglePriorityExpansion(index)}>
-                  <CollapsibleTrigger className="w-full">
-                    <div className="p-3 rounded-lg bg-background/30 space-y-2 hover:bg-background/40 transition-colors cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
-                        <div className="flex items-center gap-2">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between h-auto p-4 text-left hover:bg-background/50 transition-all duration-200" type="button">
+                      <div className="space-y-2 w-full">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
                           <Badge 
                             variant={insight.interventionLevel as any}
-                            className="text-xs"
+                            className="text-xs shrink-0 ml-2"
                           >
                             {insight.priority} Priority
                           </Badge>
-                          {isExpanded ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
                         </div>
-                      </div>
-                      <div className="text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Status:</span>
-                          <span className="font-medium">{insight.status}</span>
-                        </div>
-                        <div className="text-muted-foreground text-wrap">
-                          {insight.recommendation}
-                        </div>
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-muted-foreground">Score: {insight.average}</span>
-                          <div className={cn(
-                            "flex items-center gap-1",
-                            insight.trend === 'improving' ? 'text-green-400' : 
-                            insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
-                          )}>
-                            <TrendingUp className={cn(
-                              "h-3 w-3",
-                              insight.trend === 'declining' && "rotate-180"
-                            )} />
-                            {insight.trend}
+                        <div className="text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Status:</span>
+                            <span className="font-medium">{insight.status}</span>
+                          </div>
+                          <div className="text-muted-foreground text-wrap text-left">
+                            {insight.recommendation}
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-muted-foreground">Score: {insight.average}</span>
+                            <div className={cn(
+                              "flex items-center gap-1",
+                              insight.trend === 'improving' ? 'text-green-400' : 
+                              insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
+                            )}>
+                              <TrendingUp className={cn(
+                                "h-3 w-3",
+                                insight.trend === 'declining' && "rotate-180"
+                              )} />
+                              {insight.trend}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                      <ChevronDown className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform duration-200 shrink-0 ml-2",
+                        isExpanded && "rotate-180"
+                      )} />
+                    </Button>
                   </CollapsibleTrigger>
                   
                   <CollapsibleContent className="px-3 pb-3">
