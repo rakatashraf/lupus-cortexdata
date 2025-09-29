@@ -1269,30 +1269,36 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
               const detailedContent = getDetailedPlanningContent(insight);
               
               return (
-                <Card key={index} className="cursor-pointer hover:bg-background/50 transition-all duration-200" onClick={() => openPriorityModal(insight)}>
-                  <CardContent className="p-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
+                <Card key={index} className="cursor-pointer hover:bg-background/50 transition-all duration-200 overflow-hidden max-w-full" onClick={() => openPriorityModal(insight)}>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-3 min-w-0 w-full">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs sm:text-sm font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap flex-1 min-w-0 max-w-[calc(100%-6rem)] hyphens-auto" style={{ wordBreak: 'break-all' }}>
+                          {insight.layer}
+                        </span>
                         <Badge 
                           variant={insight.interventionLevel as any}
-                          className="text-xs shrink-0 ml-2"
+                          className="text-[10px] sm:text-xs shrink-0 px-1.5 py-0.5"
                         >
-                          {insight.priority} Priority
+                          {insight.priority}
                         </Badge>
                       </div>
-                      <div className="text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Status:</span>
-                          <span className="font-medium">{insight.status}</span>
+                      <div className="text-xs space-y-2 min-w-0">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <span className="text-muted-foreground shrink-0">Status:</span>
+                          <span className="font-medium text-right overflow-hidden text-ellipsis whitespace-nowrap max-w-[60%]">
+                            {insight.status.length > 20 ? insight.status.substring(0, 20) + '...' : insight.status}
+                          </span>
                         </div>
-                        <div className="text-muted-foreground text-wrap text-left">
-                          {insight.recommendation}
+                        <div className="bg-background/50 rounded-md p-2 min-w-0 max-w-full">
+                          <div className="text-muted-foreground text-xs leading-tight line-clamp-2 overflow-hidden max-h-8 hyphens-auto" style={{ wordBreak: 'break-word' }}>
+                            {insight.recommendation}
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-muted-foreground">Score: {insight.average}</span>
+                        <div className="flex items-center justify-between gap-2 pt-1 min-w-0">
+                          <span className="text-muted-foreground text-[10px] sm:text-xs shrink-0">Score: {insight.average}</span>
                           <div className={cn(
-                            "flex items-center gap-1",
+                            "flex items-center gap-1 shrink-0",
                             insight.trend === 'improving' ? 'text-green-400' : 
                             insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
                           )}>
@@ -1300,7 +1306,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
                               "h-3 w-3",
                               insight.trend === 'declining' && "rotate-180"
                             )} />
-                            {insight.trend}
+                            <span className="text-[10px] sm:text-xs">{insight.trend}</span>
                           </div>
                         </div>
                       </div>
