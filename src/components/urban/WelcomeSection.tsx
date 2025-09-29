@@ -40,7 +40,7 @@ export function WelcomeSection({ onGetStarted }: WelcomeSectionProps) {
       <Card 
         className="relative overflow-hidden border-0 text-white min-h-[300px] sm:min-h-[400px] lg:min-h-[500px] flex items-center"
         style={{
-          backgroundImage: `linear-gradient(135deg, hsl(var(--primary) / 0.9) 0%, hsl(var(--primary-light) / 0.8) 100%), url(${heroImage})`,
+          backgroundImage: `linear-gradient(135deg, hsl(var(--primary) / 0.6) 0%, hsl(var(--primary-light) / 0.5) 100%), url(${heroImage})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}
