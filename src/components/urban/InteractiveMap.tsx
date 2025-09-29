@@ -14,7 +14,8 @@ import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
 import { CommunityNeedsCalculator, CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 import { CommunityNeedsFlags } from './CommunityNeedsFlags';
-import { CommunityNeedsSidebar } from './CommunityNeedsSidebar';
+import { CommunityNeedsModal } from './CommunityNeedsModal';
+import { NeedTypeDetailModal } from './NeedTypeDetailModal';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -103,10 +104,11 @@ export function InteractiveMap({
   const [mapZoom, setMapZoom] = useState(12);
   const [showCommunityNeeds, setShowCommunityNeeds] = useState(false);
   const [communityNeeds, setCommunityNeeds] = useState<CommunityNeed[]>([]);
+  const [selectedNeed, setSelectedNeed] = useState<CommunityNeed | null>(null);
+  const [isNeedModalOpen, setIsNeedModalOpen] = useState(false);
   const [selectedNeedType, setSelectedNeedType] = useState<CommunityNeedType | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isNeedTypeModalOpen, setIsNeedTypeModalOpen] = useState(false);
   const [filteredNeedType, setFilteredNeedType] = useState<CommunityNeedType | null>(null);
-  const [selectedNeedDetails, setSelectedNeedDetails] = useState<CommunityNeed[]>([]);
   const [loadingCommunityNeeds, setLoadingCommunityNeeds] = useState(false);
   const [communityNeedsError, setCommunityNeedsError] = useState<string | null>(null);
 
@@ -246,24 +248,8 @@ export function InteractiveMap({
   };
 
   const handleViewNeedDetails = (need: CommunityNeed) => {
-    setSelectedNeedType(need.type);
-    setSelectedNeedDetails([need]);
-    setIsSidebarOpen(true);
-  };
-
-  const handleLegendClick = (needType: CommunityNeedType) => {
-    const filteredNeeds = communityNeeds.filter(need => need.type === needType);
-    setSelectedNeedType(needType);
-    setSelectedNeedDetails(filteredNeeds);
-    setIsSidebarOpen(true);
-  };
-
-  const handleNeedLocationSelect = (need: CommunityNeed) => {
-    // Focus map on the selected location
-    if (mapCenter) {
-      setMapCenter([need.position.lat, need.position.lng]);
-      setMapZoom(16);
-    }
+    setSelectedNeed(need);
+    setIsNeedModalOpen(true);
   };
 
   const toggleCommunityNeeds = async () => {
@@ -482,7 +468,8 @@ export function InteractiveMap({
                         } ${isFiltered ? 'ring-2 ring-primary' : ''}`}
                         onClick={() => {
                           if (hasNeeds) {
-                            handleLegendClick(type);
+                            setSelectedNeedType(type);
+                            setIsNeedTypeModalOpen(true);
                           }
                         }}
                         disabled={!hasNeeds}
@@ -516,79 +503,64 @@ export function InteractiveMap({
         </CardContent>
       </Card>
 
-      {/* Map Container with Sidebar Layout */}
-      <div className="flex relative">
-        <Card className="bg-gradient-card shadow-card overflow-hidden flex-1">
-          <CardContent className="p-0">
-            <div className="h-[600px] w-full">
-              <MapContainer
-                center={mapCenter}
-                zoom={mapZoom}
-                style={{ height: '100%', width: '100%' }}
-                className="rounded-lg"
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      {/* Map Container */}
+      <Card className="bg-gradient-card shadow-card overflow-hidden">
+        <CardContent className="p-0">
+          <div className="h-[600px] w-full">
+            <MapContainer
+              center={mapCenter}
+              zoom={mapZoom}
+              style={{ height: '100%', width: '100%' }}
+              className="rounded-lg"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              
+              <MapEvents
+                onLocationSelect={onLocationSelect}
+                onAreaSelect={onAreaSelect}
+                setSelectedPosition={setSelectedPosition}
+                isAreaSelectionMode={isAreaSelectionMode}
+                setSelectionBounds={setSelectionBounds}
+              />
+
+              {selectedPosition && (
+                <Marker position={selectedPosition}>
+                  <Popup>
+                    <div className="text-center">
+                      <p className="font-medium">Selected Location</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedPosition.lat.toFixed(4)}, {selectedPosition.lng.toFixed(4)}
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              )}
+
+              {selectionBounds && (
+                <Rectangle
+                  bounds={[
+                    [selectionBounds.south, selectionBounds.west],
+                    [selectionBounds.north, selectionBounds.east]
+                  ]}
+                  color="hsl(var(--primary))"
+                  fillOpacity={0.2}
                 />
-                
-                <MapEvents
-                  onLocationSelect={onLocationSelect}
-                  onAreaSelect={onAreaSelect}
-                  setSelectedPosition={setSelectedPosition}
-                  isAreaSelectionMode={isAreaSelectionMode}
-                  setSelectionBounds={setSelectionBounds}
+              )}
+
+              {showCommunityNeeds && (
+                <CommunityNeedsFlags
+                  needs={communityNeeds}
+                  filteredType={filteredNeedType}
+                  onViewDetails={handleViewNeedDetails}
                 />
-
-                {selectedPosition && (
-                  <Marker position={selectedPosition}>
-                    <Popup>
-                      <div className="text-center">
-                        <p className="font-medium">Selected Location</p>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedPosition.lat.toFixed(4)}, {selectedPosition.lng.toFixed(4)}
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                )}
-
-                {selectionBounds && (
-                  <Rectangle
-                    bounds={[
-                      [selectionBounds.south, selectionBounds.west],
-                      [selectionBounds.north, selectionBounds.east]
-                    ]}
-                    color="hsl(var(--primary))"
-                    fillOpacity={0.2}
-                  />
-                )}
-
-                {showCommunityNeeds && (
-                  <CommunityNeedsFlags
-                    needs={communityNeeds}
-                    filteredType={filteredNeedType}
-                    onViewDetails={handleViewNeedDetails}
-                  />
-                )}
-              </MapContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Community Needs Sidebar */}
-        <CommunityNeedsSidebar
-          selectedNeedType={selectedNeedType}
-          needs={selectedNeedDetails}
-          isOpen={isSidebarOpen}
-          onClose={() => {
-            setIsSidebarOpen(false);
-            setSelectedNeedType(null);
-            setSelectedNeedDetails([]);
-          }}
-          onLocationSelect={handleNeedLocationSelect}
-        />
-      </div>
+              )}
+            </MapContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {isAreaSelectionMode && (
         <Alert>
@@ -598,6 +570,32 @@ export function InteractiveMap({
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Community Needs Modals */}
+      <CommunityNeedsModal
+        need={selectedNeed}
+        isOpen={isNeedModalOpen}
+        onClose={() => {
+          setIsNeedModalOpen(false);
+          setSelectedNeed(null);
+        }}
+      />
+
+      <NeedTypeDetailModal
+        needType={selectedNeedType}
+        needs={communityNeeds}
+        isOpen={isNeedTypeModalOpen}
+        onClose={() => {
+          setIsNeedTypeModalOpen(false);
+          setSelectedNeedType(null);
+        }}
+        onLocationSelect={(need) => {
+          setIsNeedTypeModalOpen(false);
+          setSelectedNeedType(null);
+          setSelectedNeed(need);
+          setIsNeedModalOpen(true);
+        }}
+      />
     </div>
   );
 }
