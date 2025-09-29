@@ -66,19 +66,19 @@ export function PlanningPriorityDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <Activity className="h-6 w-6 text-primary" />
-            {priority.layer}
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="space-y-4 pb-4 border-b border-border/50">
+          <DialogTitle className="flex items-center gap-3 text-2xl">
+            <Activity className="h-7 w-7 text-primary" />
+            <span className="break-words">{priority.layer}</span>
           </DialogTitle>
-          <div className="flex items-center gap-4 mt-2">
-            <Badge variant={priority.interventionLevel as any} className="text-sm">
+          <div className="flex flex-wrap items-center gap-4">
+            <Badge variant={priority.interventionLevel as any} className="text-sm font-medium px-3 py-1">
               {priority.priority} Priority
             </Badge>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Status:</span>
-              <span className="text-sm font-medium">{priority.status}</span>
+              <span className="text-sm font-medium break-words">{priority.status}</span>
             </div>
             <div className={cn("flex items-center gap-1", getTrendColor(priority.trend))}>
               <TrendingUp className={cn(
@@ -91,154 +91,163 @@ export function PlanningPriorityDetailModal({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="mt-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="planning">Planning</TabsTrigger>
-            <TabsTrigger value="implementation">Implementation</TabsTrigger>
-            <TabsTrigger value="tips">Best Practices</TabsTrigger>
-            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5 bg-background/50">
+            <TabsTrigger value="overview" className="text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="planning" className="text-sm">Planning</TabsTrigger>
+            <TabsTrigger value="implementation" className="text-sm">Implementation</TabsTrigger>
+            <TabsTrigger value="tips" className="text-sm">Best Practices</TabsTrigger>
+            <TabsTrigger value="monitoring" className="text-sm">Monitoring</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5 text-primary" />
+          <TabsContent value="overview" className="space-y-6 mt-6">
+            <Card className="border-border/50">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Target className="h-6 w-6 text-primary" />
                   Priority Overview
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{priority.average}</div>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center p-4 bg-background/30 rounded-lg border border-border/30">
+                    <div className="text-3xl font-bold text-primary mb-1">{priority.average}</div>
                     <div className="text-sm text-muted-foreground">Current Score</div>
                   </div>
-                  <div className="text-center">
-                    <div className={cn("text-2xl font-bold", getPriorityColor(priority.priority))}>
+                  <div className="text-center p-4 bg-background/30 rounded-lg border border-border/30">
+                    <div className={cn("text-3xl font-bold mb-1", getPriorityColor(priority.priority))}>
                       {priority.priority}
                     </div>
                     <div className="text-sm text-muted-foreground">Priority Level</div>
                   </div>
-                  <div className="text-center">
-                    <div className={cn("text-2xl font-bold", getTrendColor(priority.trend))}>
+                  <div className="text-center p-4 bg-background/30 rounded-lg border border-border/30">
+                    <div className={cn("text-3xl font-bold mb-1 capitalize", getTrendColor(priority.trend))}>
                       {priority.trend}
                     </div>
                     <div className="text-sm text-muted-foreground">Trend</div>
                   </div>
                 </div>
-                <div className="mt-6 p-4 bg-background/50 rounded-lg">
-                  <h4 className="font-medium mb-2">Primary Recommendation</h4>
-                  <p className="text-sm text-muted-foreground">{priority.recommendation}</p>
+                <div className="p-5 bg-background/50 rounded-lg border border-border/30">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-primary" />
+                    Primary Recommendation
+                  </h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed break-words">{priority.recommendation}</p>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="planning" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5 text-primary" />
+          <TabsContent value="planning" className="space-y-6 mt-6">
+            <Card className="border-border/50">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Target className="h-6 w-6 text-primary" />
                   Planning Suggestions
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-base mt-2">
                   Strategic recommendations for urban planning interventions
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-3">
+                <div className="space-y-4">
                   {detailedContent.suggestions.map((suggestion, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-sm">{suggestion}</span>
-                    </li>
+                    <div key={idx} className="flex items-start gap-4 p-4 bg-background/30 rounded-lg border border-border/30 hover:bg-background/50 transition-colors">
+                      <div className="w-6 h-6 bg-primary/20 text-primary rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 mt-0.5">
+                        {idx + 1}
+                      </div>
+                      <span className="text-sm leading-relaxed break-words min-w-0 flex-1">{suggestion}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="implementation" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-orange-400" />
+          <TabsContent value="implementation" className="space-y-6 mt-6">
+            <Card className="border-border/50">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Clock className="h-6 w-6 text-orange-400" />
                   Implementation Roadmap
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-base mt-2">
                   Step-by-step implementation strategy and timeline
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-3">
+                <div className="space-y-4">
                   {detailedContent.implementation.map((step, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <div className="w-6 h-6 bg-orange-400/20 text-orange-400 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
+                    <div key={idx} className="flex items-start gap-4 p-4 bg-background/30 rounded-lg border border-border/30 hover:bg-background/50 transition-colors">
+                      <div className="w-8 h-8 bg-orange-400/20 text-orange-400 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
                         {idx + 1}
                       </div>
-                      <span className="text-sm">{step}</span>
-                    </li>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm leading-relaxed break-words">{step}</span>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="tips" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-blue-400" />
-                  Urban Planning Tips
+          <TabsContent value="tips" className="space-y-6 mt-6">
+            <Card className="border-border/50">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <BookOpen className="h-6 w-6 text-blue-400" />
+                  Best Practice Guidelines
                 </CardTitle>
-                <CardDescription>
-                  Best practices and expert guidance for successful implementation
+                <CardDescription className="text-base mt-2">
+                  Expert guidance and proven strategies for successful implementation
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-3">
+                <div className="space-y-4">
                   {detailedContent.tips.map((tip, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-sm">{tip}</span>
-                    </li>
+                    <div key={idx} className="flex items-start gap-4 p-4 bg-background/30 rounded-lg border border-border/30 hover:bg-background/50 transition-colors">
+                      <div className="w-6 h-6 bg-blue-400/20 text-blue-400 rounded-full flex items-center justify-center flex-shrink-0">
+                        <BookOpen className="w-3 h-3" />
+                      </div>
+                      <span className="text-sm leading-relaxed break-words min-w-0 flex-1">{tip}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="monitoring" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-400" />
-                  Monitoring & Evaluation
+          <TabsContent value="monitoring" className="space-y-6 mt-6">
+            <Card className="border-border/50">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <CheckCircle className="h-6 w-6 text-green-400" />
+                  Monitoring & Evaluation Framework
                 </CardTitle>
-                <CardDescription>
-                  Key performance indicators and evaluation metrics
+                <CardDescription className="text-base mt-2">
+                  Key performance indicators and success metrics for tracking progress
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-3">
+                <div className="space-y-4">
                   {detailedContent.monitoring.map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm">{item}</span>
-                    </li>
+                    <div key={idx} className="flex items-start gap-4 p-4 bg-background/30 rounded-lg border border-border/30 hover:bg-background/50 transition-colors">
+                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm leading-relaxed break-words min-w-0 flex-1">{item}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
-          <Button variant="outline" className="flex items-center gap-2">
+        <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-border/50">
+          <Button variant="outline" className="flex items-center gap-2 px-6 py-2">
             <FileText className="h-4 w-4" />
             Export Plan
           </Button>
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button variant="outline" className="flex items-center gap-2 px-6 py-2">
             <Users className="h-4 w-4" />
             Share with Team
           </Button>

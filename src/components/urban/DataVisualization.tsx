@@ -1269,38 +1269,46 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
               const detailedContent = getDetailedPlanningContent(insight);
               
               return (
-                <Card key={index} className="cursor-pointer hover:bg-background/50 transition-all duration-200" onClick={() => openPriorityModal(insight)}>
-                  <CardContent className="p-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
+                <Card key={index} className="group cursor-pointer hover:bg-background/60 hover:shadow-md transition-all duration-300 hover:scale-[1.02] border-border/50" onClick={() => openPriorityModal(insight)}>
+                  <CardContent className="p-4 min-w-0">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-medium text-foreground leading-tight line-clamp-2 min-w-0 flex-1">{insight.layer}</span>
                         <Badge 
                           variant={insight.interventionLevel as any}
-                          className="text-xs shrink-0 ml-2"
+                          className="text-xs shrink-0 font-medium"
                         >
-                          {insight.priority} Priority
+                          {insight.priority}
                         </Badge>
                       </div>
-                      <div className="text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Status:</span>
-                          <span className="font-medium">{insight.status}</span>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted-foreground">Status:</span>
+                          <span className="text-xs font-medium truncate">{insight.status}</span>
                         </div>
-                        <div className="text-muted-foreground text-wrap text-left">
-                          {insight.recommendation}
+                        
+                        <div className="bg-background/30 rounded-md p-2 border border-border/30">
+                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 break-words">
+                            {insight.recommendation}
+                          </p>
                         </div>
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-muted-foreground">Score: {insight.average}</span>
+                        
+                        <div className="flex items-center justify-between pt-1 border-t border-border/30">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Score:</span>
+                            <span className="text-xs font-bold text-primary">{insight.average}</span>
+                          </div>
                           <div className={cn(
-                            "flex items-center gap-1",
-                            insight.trend === 'improving' ? 'text-green-400' : 
-                            insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
+                            "flex items-center gap-1 text-xs font-medium",
+                            insight.trend === 'improving' ? 'text-green-500' : 
+                            insight.trend === 'declining' ? 'text-red-500' : 'text-muted-foreground'
                           )}>
                             <TrendingUp className={cn(
                               "h-3 w-3",
                               insight.trend === 'declining' && "rotate-180"
                             )} />
-                            {insight.trend}
+                            <span className="capitalize">{insight.trend}</span>
                           </div>
                         </div>
                       </div>
