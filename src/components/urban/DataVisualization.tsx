@@ -49,57 +49,57 @@ interface DataCategory {
 const DATA_CATEGORIES: DataCategory[] = [
   {
     id: 'climate',
-    name: 'Climate & Temperature',
+    name: 'Climate Resilience Planning',
     icon: Thermometer,
-    description: 'Temperature patterns and heat islands',
+    description: 'Climate adaptation readiness and heat mitigation zones',
     color: '#ff7675',
     layers: ['CRI_Landsat', 'UHVI_MODIS', 'CRI_MODIS', 'UHVI_VIIRS']
   },
   {
     id: 'environment',
-    name: 'Green Spaces & Nature',
+    name: 'Green Infrastructure Development',
     icon: Leaf,
-    description: 'Vegetation health and green coverage',
+    description: 'Green space equity and environmental planning priorities',
     color: '#00b894',
     layers: ['GEA_Landsat', 'GEA_Sentinel2', 'GEA_VIIRS']
   },
   {
     id: 'water',
-    name: 'Water Quality',
+    name: 'Water Management Planning',
     icon: Droplets,
-    description: 'Water bodies and quality indicators',
+    description: 'Water infrastructure capacity and flood resilience zones',
     color: '#0984e3',
     layers: ['WSI_Landsat', 'WSI_MODIS', 'WSI_Sentinel2', 'WSI_GRACE', 'WSI_SMAP']
   },
   {
     id: 'urban',
-    name: 'Urban Development',
+    name: 'Community Development Zones',
     icon: Building2,
-    description: 'Built environment and infrastructure',
+    description: 'Housing development priorities and community connectivity',
     color: '#6c5ce7',
     layers: ['SCM_Landsat', 'SCM_Sentinel1', 'SCM_VIIRS']
   },
   {
     id: 'transport',
-    name: 'Transportation',
+    name: 'Mobility & Access Planning',
     icon: Car,
-    description: 'Traffic patterns and infrastructure',
+    description: 'Transit development priorities and accessibility planning',
     color: '#fdcb6e',
     layers: ['TAS_Landsat', 'TAS_VIIRS']
   },
   {
     id: 'air',
-    name: 'Air Quality',
+    name: 'Environmental Health Zones',
     icon: Cloud,
-    description: 'Air pollution and atmospheric conditions',
+    description: 'Air quality planning priorities and health impact zones',
     color: '#fd79a8',
     layers: ['AQHI_MODIS', 'AQHI_Sentinel5P']
   },
   {
     id: 'community',
-    name: 'Community Well-being',
+    name: 'Social Equity Assessment',
     icon: Home,
-    description: 'Social and environmental factors',
+    description: 'Equity impact assessment and emergency preparedness zones',
     color: '#a29bfe',
     layers: ['EJT_Landsat', 'EJT_MODIS', 'EJT_Sentinel5P', 'EJT_VIIRS', 'DPI_Sentinel1', 'DPI_GPM']
   }
@@ -109,26 +109,26 @@ const DATA_CATEGORIES: DataCategory[] = [
 const ANALYSIS_PRESETS = [
   {
     id: 'health',
-    name: '🏥 Health Overview',
-    description: 'Air quality, temperature, and green spaces',
+    name: '🏥 Public Health Assessment',
+    description: 'Health impact zones and environmental health planning',
     categories: ['air', 'climate', 'environment']
   },
   {
     id: 'environmental',
-    name: '🌍 Environmental Check',
-    description: 'Nature, water, and air quality assessment',
+    name: '🌍 Environmental Compliance Review',
+    description: 'Environmental regulations and sustainability planning',
     categories: ['environment', 'water', 'air']
   },
   {
     id: 'urban-planning',
-    name: '🏙️ Urban Planning',
-    description: 'Development, transport, and community factors',
+    name: '🏙️ Development Impact Analysis',
+    description: 'Housing development, transit, and community impact assessment',
     categories: ['urban', 'transport', 'community']
   },
   {
     id: 'climate-resilience',
-    name: '🌡️ Climate Resilience',
-    description: 'Temperature, water, and weather patterns',
+    name: '🌡️ Climate Adaptation Planning',
+    description: 'Climate resilience and disaster preparedness planning',
     categories: ['climate', 'water', 'community']
   }
 ];
@@ -338,14 +338,14 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     }
   };
 
-  // Generate insights based on data
+  // Generate planning insights based on data
   const generateInsights = () => {
     if (chartData.length === 0) return [];
     
     const insights = [];
     const enabledLayers = layers.filter(l => l.enabled);
     
-    // Calculate trends and averages
+    // Calculate planning priorities and intervention needs
     enabledLayers.forEach(layer => {
       const layerData = chartData.filter(d => d.index === layer.name);
       if (layerData.length > 0) {
@@ -353,16 +353,40 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
         const recent = layerData.slice(-7).reduce((sum, d) => sum + d.value, 0) / Math.min(7, layerData.length);
         const trend = recent > avg ? 'improving' : recent < avg ? 'declining' : 'stable';
         
+        // Planning-focused status and recommendations
+        let planningStatus, recommendation, interventionLevel;
+        if (avg >= 70) {
+          planningStatus = 'Implementation Ready';
+          recommendation = 'Continue monitoring and maintain current policies';
+          interventionLevel = 'excellent';
+        } else if (avg >= 50) {
+          planningStatus = 'Policy Development Needed';
+          recommendation = 'Develop policy framework and implementation plan';
+          interventionLevel = 'good';
+        } else if (avg >= 30) {
+          planningStatus = 'Immediate Planning Required';
+          recommendation = 'Urgent planning intervention and resource allocation needed';
+          interventionLevel = 'moderate';
+        } else {
+          planningStatus = 'Critical Action Zone';
+          recommendation = 'Emergency planning response and immediate action required';
+          interventionLevel = 'critical';
+        }
+        
         insights.push({
           layer: layer.name,
           average: Math.round(avg),
           trend,
-          status: avg > 70 ? 'good' : avg > 40 ? 'moderate' : 'needs attention'
+          status: planningStatus,
+          recommendation,
+          interventionLevel,
+          priority: avg < 30 ? 'High' : avg < 50 ? 'Medium' : 'Low'
         });
       }
     });
     
-    return insights;
+    // Sort by priority (Critical zones first)
+    return insights.sort((a, b) => a.average - b.average);
   };
 
   const searchAreaByName = async () => {
@@ -414,7 +438,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
   // Calculate statistics for gradient cards
   const enabledLayersData = layers.filter(layer => layer.enabled);
   const totalLayers = enabledLayersData.length;
-  const avgDataQuality = Math.floor(Math.random() * 30) + 70; // 70-99%
+        const avgDataQuality = Math.floor(Math.random() * 30) + 70; // 70-99%
   const dataPoints = chartData.length;
   const updateFrequency = '24h';
 
@@ -447,6 +471,13 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
   const renderChart = () => {
     const enabledLayers = layers.filter(layer => layer.enabled);
     
+    // Planning decision thresholds for reference lines
+    const thresholds = [
+      { value: 70, label: 'Implementation Ready (70%)', color: '#10b981', strokeDasharray: '5 5' },
+      { value: 50, label: 'Policy Development (50%)', color: '#f59e0b', strokeDasharray: '8 4' },
+      { value: 30, label: 'Planning Required (30%)', color: '#ef4444', strokeDasharray: '3 3' }
+    ];
+    
     switch (chartType) {
       case 'area':
         return (
@@ -477,6 +508,21 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
               }} 
             />
             <Legend />
+            {/* Planning Decision Threshold Lines */}
+            {thresholds.map((threshold, index) => (
+              <Line
+                key={`threshold-${index}`}
+                type="monotone"
+                data={[{ date: chartDataFormatted[0]?.date, value: threshold.value }, { date: chartDataFormatted[chartDataFormatted.length - 1]?.date, value: threshold.value }]}
+                dataKey="value"
+                stroke={threshold.color}
+                strokeWidth={2}
+                strokeDasharray={threshold.strokeDasharray}
+                dot={false}
+                connectNulls={false}
+                name={`${threshold.label}`}
+              />
+            ))}
             {enabledLayers.map(layer => (
               <Area
                 key={layer.id}
@@ -511,6 +557,21 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
               }} 
             />
             <Legend />
+            {/* Planning Decision Threshold Lines */}
+            {thresholds.map((threshold, index) => (
+              <Line
+                key={`threshold-${index}`}
+                type="monotone"
+                data={[{ date: chartDataFormatted[0]?.date, value: threshold.value }, { date: chartDataFormatted[chartDataFormatted.length - 1]?.date, value: threshold.value }]}
+                dataKey="value"
+                stroke={threshold.color}
+                strokeWidth={2}
+                strokeDasharray={threshold.strokeDasharray}
+                dot={false}
+                connectNulls={false}
+                name={`${threshold.label}`}
+              />
+            ))}
             {enabledLayers.map(layer => (
               <Bar
                 key={layer.id}
@@ -543,6 +604,21 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
               }} 
             />
             <Legend />
+            {/* Planning Decision Threshold Lines */}
+            {thresholds.map((threshold, index) => (
+              <Line
+                key={`threshold-${index}`}
+                type="monotone"
+                data={[{ date: chartDataFormatted[0]?.date, value: threshold.value }, { date: chartDataFormatted[chartDataFormatted.length - 1]?.date, value: threshold.value }]}
+                dataKey="value"
+                stroke={threshold.color}
+                strokeWidth={2}
+                strokeDasharray={threshold.strokeDasharray}
+                dot={false}
+                connectNulls={false}
+                name={`${threshold.label}`}
+              />
+            ))}
             {enabledLayers.map(layer => (
               <Line
                 key={layer.id}
@@ -565,9 +641,9 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
       <div className="space-y-4 sm:space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
-            Urban Analytics Dashboard
+            Planning Decision Dashboard
           </h1>
-          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Area-based satellite data visualization and analysis</p>
+          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">Strategic planning support through satellite data analysis</p>
         </div>
 
         {/* Stats Cards */}
@@ -839,7 +915,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <div className="space-y-4">
             <Label className="flex items-center gap-2 text-lg font-semibold text-foreground">
               <Zap className="h-5 w-5" />
-              Quick Analysis Presets
+              Planning Workflows
             </Label>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {ANALYSIS_PRESETS.map(preset => (
@@ -860,8 +936,8 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                <Layers className="h-5 w-5" />
-                Data Categories
+              <Layers className="h-5 w-5" />
+              Planning Impact Zones
               </Label>
               <Button
                 variant="ghost"
@@ -1004,7 +1080,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-2xl">
               <BarChart3 className="h-6 w-6 text-primary" />
-              Urban Health Analysis
+              Planning Impact Analysis
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1021,7 +1097,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Activity className="h-5 w-5" />
-              Key Insights
+              Planning Priorities
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1030,24 +1106,33 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
                   <Badge 
-                    variant={insight.status === 'good' ? 'default' : insight.status === 'moderate' ? 'secondary' : 'destructive'}
+                    variant={insight.interventionLevel as any}
                     className="text-xs"
                   >
-                    {insight.status}
+                    {insight.priority} Priority
                   </Badge>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Avg: {insight.average}</span>
-                  <div className={cn(
-                    "flex items-center gap-1",
-                    insight.trend === 'improving' ? 'text-green-400' : 
-                    insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
-                  )}>
-                    <TrendingUp className={cn(
-                      "h-3 w-3",
-                      insight.trend === 'declining' && "rotate-180"
-                    )} />
-                    {insight.trend}
+                <div className="text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Status:</span>
+                    <span className="font-medium">{insight.status}</span>
+                  </div>
+                  <div className="text-muted-foreground text-wrap">
+                    {insight.recommendation}
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-muted-foreground">Score: {insight.average}</span>
+                    <div className={cn(
+                      "flex items-center gap-1",
+                      insight.trend === 'improving' ? 'text-green-400' : 
+                      insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
+                    )}>
+                      <TrendingUp className={cn(
+                        "h-3 w-3",
+                        insight.trend === 'declining' && "rotate-180"
+                      )} />
+                      {insight.trend}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1056,7 +1141,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
             {generateInsights().length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Run analysis to see insights</p>
+                <p className="text-sm">Run analysis to see planning priorities</p>
               </div>
             )}
           </CardContent>
