@@ -15,7 +15,7 @@ import { n8nService } from '@/services/n8n-service';
 import { CommunityNeedsCalculator, CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 import { CommunityNeedsFlags } from './CommunityNeedsFlags';
 import { CommunityNeedsModal } from './CommunityNeedsModal';
-import { NeedTypeDetailModal } from './NeedTypeDetailModal';
+import { CommunityNeedsSidePanel } from './CommunityNeedsSidePanel';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -107,7 +107,7 @@ export function InteractiveMap({
   const [selectedNeed, setSelectedNeed] = useState<CommunityNeed | null>(null);
   const [isNeedModalOpen, setIsNeedModalOpen] = useState(false);
   const [selectedNeedType, setSelectedNeedType] = useState<CommunityNeedType | null>(null);
-  const [isNeedTypeModalOpen, setIsNeedTypeModalOpen] = useState(false);
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [filteredNeedType, setFilteredNeedType] = useState<CommunityNeedType | null>(null);
   const [loadingCommunityNeeds, setLoadingCommunityNeeds] = useState(false);
   const [communityNeedsError, setCommunityNeedsError] = useState<string | null>(null);
@@ -469,7 +469,7 @@ export function InteractiveMap({
                         onClick={() => {
                           if (hasNeeds) {
                             setSelectedNeedType(type);
-                            setIsNeedTypeModalOpen(true);
+                            setIsSidePanelOpen(true);
                           }
                         }}
                         disabled={!hasNeeds}
@@ -571,29 +571,13 @@ export function InteractiveMap({
         </Alert>
       )}
 
-      {/* Community Needs Modals */}
+      {/* Community Needs Modal */}
       <CommunityNeedsModal
         need={selectedNeed}
         isOpen={isNeedModalOpen}
         onClose={() => {
           setIsNeedModalOpen(false);
           setSelectedNeed(null);
-        }}
-      />
-
-      <NeedTypeDetailModal
-        needType={selectedNeedType}
-        needs={communityNeeds}
-        isOpen={isNeedTypeModalOpen}
-        onClose={() => {
-          setIsNeedTypeModalOpen(false);
-          setSelectedNeedType(null);
-        }}
-        onLocationSelect={(need) => {
-          setIsNeedTypeModalOpen(false);
-          setSelectedNeedType(null);
-          setSelectedNeed(need);
-          setIsNeedModalOpen(true);
         }}
       />
     </div>
