@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { PlanningPriorityDetailModal } from '@/components/urban/PlanningPriorityDetailModal';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin, ChevronDown, ChevronUp, Thermometer, Leaf, Droplets, Building2, Car, Cloud, Home, HelpCircle, FileText, Users, Clock, AlertCircle, CheckCircle, Target, BookOpen } from 'lucide-react';
 import { n8nService } from '@/services/n8n-service';
@@ -186,7 +186,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['climate', 'environment', 'air']);
   const [selectedPreset, setSelectedPreset] = useState<string>('health');
-  const [expandedPriorities, setExpandedPriorities] = useState<Set<number>>(new Set());
+  const [selectedPriority, setSelectedPriority] = useState<any>(null);
 
   useEffect(() => {
     loadChartData();
@@ -549,14 +549,8 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
     return planningContent;
   };
 
-  const togglePriorityExpansion = (index: number) => {
-    const newExpanded = new Set(expandedPriorities);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedPriorities(newExpanded);
+  const openPriorityModal = (insight: any) => {
+    setSelectedPriority(insight);
   };
 
   const searchAreaByName = async () => {
@@ -1273,141 +1267,46 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           <CardContent className="space-y-4">
             {generateInsights().slice(0, 4).map((insight, index) => {
               const detailedContent = getDetailedPlanningContent(insight);
-              const isExpanded = expandedPriorities.has(index);
               
               return (
-                <Collapsible key={index} open={isExpanded} onOpenChange={() => togglePriorityExpansion(index)}>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between h-auto p-4 text-left hover:bg-background/50 transition-all duration-200" type="button">
-                      <div className="space-y-2 w-full">
+                <Card key={index} className="cursor-pointer hover:bg-background/50 transition-all duration-200" onClick={() => openPriorityModal(insight)}>
+                  <CardContent className="p-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
+                        <Badge 
+                          variant={insight.interventionLevel as any}
+                          className="text-xs shrink-0 ml-2"
+                        >
+                          {insight.priority} Priority
+                        </Badge>
+                      </div>
+                      <div className="text-xs space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-foreground truncate">{insight.layer}</span>
-                          <Badge 
-                            variant={insight.interventionLevel as any}
-                            className="text-xs shrink-0 ml-2"
-                          >
-                            {insight.priority} Priority
-                          </Badge>
+                          <span className="text-muted-foreground">Status:</span>
+                          <span className="font-medium">{insight.status}</span>
                         </div>
-                        <div className="text-xs space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Status:</span>
-                            <span className="font-medium">{insight.status}</span>
-                          </div>
-                          <div className="text-muted-foreground text-wrap text-left">
-                            {insight.recommendation}
-                          </div>
-                          <div className="flex items-center justify-between pt-1">
-                            <span className="text-muted-foreground">Score: {insight.average}</span>
-                            <div className={cn(
-                              "flex items-center gap-1",
-                              insight.trend === 'improving' ? 'text-green-400' : 
-                              insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
-                            )}>
-                              <TrendingUp className={cn(
-                                "h-3 w-3",
-                                insight.trend === 'declining' && "rotate-180"
-                              )} />
-                              {insight.trend}
-                            </div>
+                        <div className="text-muted-foreground text-wrap text-left">
+                          {insight.recommendation}
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-muted-foreground">Score: {insight.average}</span>
+                          <div className={cn(
+                            "flex items-center gap-1",
+                            insight.trend === 'improving' ? 'text-green-400' : 
+                            insight.trend === 'declining' ? 'text-red-400' : 'text-gray-400'
+                          )}>
+                            <TrendingUp className={cn(
+                              "h-3 w-3",
+                              insight.trend === 'declining' && "rotate-180"
+                            )} />
+                            {insight.trend}
                           </div>
                         </div>
                       </div>
-                      <ChevronDown className={cn(
-                        "h-4 w-4 text-muted-foreground transition-transform duration-200 shrink-0 ml-2",
-                        isExpanded && "rotate-180"
-                      )} />
-                    </Button>
-                  </CollapsibleTrigger>
-                  
-                  <CollapsibleContent className="px-3 pb-3">
-                    <div className="mt-3 space-y-4 bg-background/20 rounded-lg p-4">
-                      
-                      {/* Planning Suggestions */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                          <Target className="h-4 w-4 text-primary" />
-                          Planning Suggestions
-                        </div>
-                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
-                          {detailedContent.suggestions.map((suggestion, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <div className="w-1 h-1 bg-primary rounded-full mt-2 flex-shrink-0" />
-                              {suggestion}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Urban Planning Tips */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                          <BookOpen className="h-4 w-4 text-blue-400" />
-                          Urban Planning Tips
-                        </div>
-                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
-                          {detailedContent.tips.map((tip, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <div className="w-1 h-1 bg-blue-400 rounded-full mt-2 flex-shrink-0" />
-                              {tip}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Implementation Roadmap */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                          <Clock className="h-4 w-4 text-orange-400" />
-                          Implementation Roadmap
-                        </div>
-                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
-                          {detailedContent.implementation.map((step, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <div className="w-1 h-1 bg-orange-400 rounded-full mt-2 flex-shrink-0" />
-                              {step}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Monitoring & Evaluation */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                          <CheckCircle className="h-4 w-4 text-green-400" />
-                          Monitoring & Evaluation
-                        </div>
-                        <ul className="space-y-1 text-xs text-muted-foreground ml-6">
-                          {detailedContent.monitoring.map((item, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <div className="w-1 h-1 bg-green-400 rounded-full mt-2 flex-shrink-0" />
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Quick Actions */}
-                      <div className="pt-2 border-t border-border/30">
-                        <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
-                          <AlertCircle className="h-4 w-4 text-yellow-400" />
-                          Quick Action Checklist
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                          <Button size="sm" variant="outline" className="justify-start h-8">
-                            <FileText className="h-3 w-3 mr-2" />
-                            Download Report
-                          </Button>
-                          <Button size="sm" variant="outline" className="justify-start h-8">
-                            <Users className="h-3 w-3 mr-2" />
-                            Schedule Meeting
-                          </Button>
-                        </div>
-                      </div>
-
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
+                  </CardContent>
+                </Card>
               );
             })}
             
@@ -1420,6 +1319,14 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
           </CardContent>
         </Card>
       </div>
+
+        {/* Planning Priority Detail Modal */}
+        <PlanningPriorityDetailModal
+          isOpen={!!selectedPriority}
+          onClose={() => setSelectedPriority(null)}
+          priority={selectedPriority}
+          detailedContent={selectedPriority ? getDetailedPlanningContent(selectedPriority) : null}
+        />
 
       {/* Summary Chart */}
       <Card className="glass-card card-glow hover-lift animate-slide-in-up" style={{ animationDelay: '0.7s' }}>
