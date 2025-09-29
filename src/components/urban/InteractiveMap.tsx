@@ -8,13 +8,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle } from 'lucide-react';
+import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle, ChevronDown, Users, AlertCircle, Target } from 'lucide-react';
 import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
 import { CommunityNeedsCalculator, CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 import { CommunityNeedsFlags } from './CommunityNeedsFlags';
-import { CommunityNeedsSidebar } from './CommunityNeedsSidebar';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -103,10 +103,8 @@ export function InteractiveMap({
   const [mapZoom, setMapZoom] = useState(12);
   const [showCommunityNeeds, setShowCommunityNeeds] = useState(false);
   const [communityNeeds, setCommunityNeeds] = useState<CommunityNeed[]>([]);
-  const [selectedNeedType, setSelectedNeedType] = useState<CommunityNeedType | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [filteredNeedType, setFilteredNeedType] = useState<CommunityNeedType | null>(null);
-  const [selectedNeedDetails, setSelectedNeedDetails] = useState<CommunityNeed[]>([]);
+  const [expandedNeedTypes, setExpandedNeedTypes] = useState<Set<CommunityNeedType>>(new Set());
   const [loadingCommunityNeeds, setLoadingCommunityNeeds] = useState(false);
   const [communityNeedsError, setCommunityNeedsError] = useState<string | null>(null);
 
@@ -246,16 +244,23 @@ export function InteractiveMap({
   };
 
   const handleViewNeedDetails = (need: CommunityNeed) => {
-    setSelectedNeedType(need.type);
-    setSelectedNeedDetails([need]);
-    setIsSidebarOpen(true);
+    const newExpanded = new Set(expandedNeedTypes);
+    if (newExpanded.has(need.type)) {
+      newExpanded.delete(need.type);
+    } else {
+      newExpanded.add(need.type);
+    }
+    setExpandedNeedTypes(newExpanded);
   };
 
   const handleLegendClick = (needType: CommunityNeedType) => {
-    const filteredNeeds = communityNeeds.filter(need => need.type === needType);
-    setSelectedNeedType(needType);
-    setSelectedNeedDetails(filteredNeeds);
-    setIsSidebarOpen(true);
+    const newExpanded = new Set(expandedNeedTypes);
+    if (newExpanded.has(needType)) {
+      newExpanded.delete(needType);
+    } else {
+      newExpanded.add(needType);
+    }
+    setExpandedNeedTypes(newExpanded);
   };
 
   const handleNeedLocationSelect = (need: CommunityNeed) => {
@@ -516,79 +521,271 @@ export function InteractiveMap({
         </CardContent>
       </Card>
 
-      {/* Map Container with Sidebar Layout */}
-      <div className="flex relative">
-        <Card className="bg-gradient-card shadow-card overflow-hidden flex-1">
-          <CardContent className="p-0">
-            <div className="h-[600px] w-full">
-              <MapContainer
-                center={mapCenter}
-                zoom={mapZoom}
-                style={{ height: '100%', width: '100%' }}
-                className="rounded-lg"
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      {/* Map Container */}
+      <Card className="bg-gradient-card shadow-card overflow-hidden">
+        <CardContent className="p-0">
+          <div className="h-[600px] w-full">
+            <MapContainer
+              center={mapCenter}
+              zoom={mapZoom}
+              style={{ height: '100%', width: '100%' }}
+              className="rounded-lg"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              
+              <MapEvents
+                onLocationSelect={onLocationSelect}
+                onAreaSelect={onAreaSelect}
+                setSelectedPosition={setSelectedPosition}
+                isAreaSelectionMode={isAreaSelectionMode}
+                setSelectionBounds={setSelectionBounds}
+              />
+
+              {selectedPosition && (
+                <Marker position={selectedPosition}>
+                  <Popup>
+                    <div className="text-center">
+                      <p className="font-medium">Selected Location</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedPosition.lat.toFixed(4)}, {selectedPosition.lng.toFixed(4)}
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              )}
+
+              {selectionBounds && (
+                <Rectangle
+                  bounds={[
+                    [selectionBounds.south, selectionBounds.west],
+                    [selectionBounds.north, selectionBounds.east]
+                  ]}
+                  color="hsl(var(--primary))"
+                  fillOpacity={0.2}
                 />
-                
-                <MapEvents
-                  onLocationSelect={onLocationSelect}
-                  onAreaSelect={onAreaSelect}
-                  setSelectedPosition={setSelectedPosition}
-                  isAreaSelectionMode={isAreaSelectionMode}
-                  setSelectionBounds={setSelectionBounds}
+              )}
+
+              {showCommunityNeeds && (
+                <CommunityNeedsFlags
+                  needs={communityNeeds}
+                  filteredType={filteredNeedType}
+                  onViewDetails={handleViewNeedDetails}
                 />
+              )}
+            </MapContainer>
+          </div>
+        </CardContent>
+      </Card>
 
-                {selectedPosition && (
-                  <Marker position={selectedPosition}>
-                    <Popup>
-                      <div className="text-center">
-                        <p className="font-medium">Selected Location</p>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedPosition.lat.toFixed(4)}, {selectedPosition.lng.toFixed(4)}
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                )}
+      {/* Community Needs Cards Section */}
+      {showCommunityNeeds && communityNeeds.length > 0 && (
+        <div className="space-y-6">
+          <div className="text-center">
+            <h3 className="text-2xl font-bold mb-2">Community Needs Analysis</h3>
+            <p className="text-muted-foreground">
+              {communityNeeds.length} priority need{communityNeeds.length !== 1 ? 's' : ''} identified for this area
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {(() => {
+              // Group needs by type for card display
+              const needTypes = Array.from(new Set(communityNeeds.map(need => need.type)));
+              const needTypeInfo: Record<CommunityNeedType, { 
+                title: string; 
+                icon: string; 
+                description: string; 
+                strategies: string[] 
+              }> = {
+                'food-access': {
+                  title: 'Food Access',
+                  icon: '🍎',
+                  description: 'Limited access to nutritious and affordable food sources',
+                  strategies: [
+                    'Establish community food markets',
+                    'Support urban farming initiatives',
+                    'Improve food distribution networks'
+                  ]
+                },
+                'housing': {
+                  title: 'Housing Quality',
+                  icon: '🏠',
+                  description: 'Housing affordability and quality concerns',
+                  strategies: [
+                    'Develop affordable housing programs',
+                    'Improve housing standards enforcement',
+                    'Create tenant protection policies'
+                  ]
+                },
+                'transportation': {
+                  title: 'Transportation Access',
+                  icon: '🚌',
+                  description: 'Limited access to reliable public transportation',
+                  strategies: [
+                    'Expand public transit coverage',
+                    'Improve accessibility infrastructure',
+                    'Develop sustainable transport options'
+                  ]
+                },
+                'pollution': {
+                  title: 'Environmental Quality',
+                  icon: '🏭',
+                  description: 'Air, water, or noise pollution concerns',
+                  strategies: [
+                    'Implement stricter emission controls',
+                    'Enhance environmental monitoring',
+                    'Promote clean technology adoption'
+                  ]
+                },
+                'healthcare': {
+                  title: 'Healthcare Access',
+                  icon: '🏥',
+                  description: 'Limited access to healthcare services',
+                  strategies: [
+                    'Establish community health centers',
+                    'Improve preventive care programs',
+                    'Enhance healthcare accessibility'
+                  ]
+                },
+                'parks': {
+                  title: 'Green Space Access',
+                  icon: '🌳',
+                  description: 'Insufficient access to parks and recreational areas',
+                  strategies: [
+                    'Create new neighborhood parks',
+                    'Improve existing green spaces',
+                    'Develop community gardens'
+                  ]
+                },
+                'growth': {
+                  title: 'Sustainable Development',
+                  icon: '🏗️',
+                  description: 'Need for balanced and sustainable urban growth',
+                  strategies: [
+                    'Implement smart growth policies',
+                    'Improve infrastructure planning',
+                    'Promote sustainable development practices'
+                  ]
+                },
+                'energy': {
+                  title: 'Energy Access',
+                  icon: '⚡',
+                  description: 'Reliable and affordable energy access concerns',
+                  strategies: [
+                    'Improve energy infrastructure',
+                    'Promote renewable energy adoption',
+                    'Enhance energy efficiency programs'
+                  ]
+                }
+              };
 
-                {selectionBounds && (
-                  <Rectangle
-                    bounds={[
-                      [selectionBounds.south, selectionBounds.west],
-                      [selectionBounds.north, selectionBounds.east]
-                    ]}
-                    color="hsl(var(--primary))"
-                    fillOpacity={0.2}
-                  />
-                )}
+              return needTypes.map(needType => {
+                const typeNeeds = communityNeeds.filter(need => need.type === needType);
+                const info = needTypeInfo[needType];
+                const isExpanded = expandedNeedTypes.has(needType);
+                const criticalCount = typeNeeds.filter(need => need.severity === 'critical').length;
+                const moderateCount = typeNeeds.filter(need => need.severity === 'moderate').length;
 
-                {showCommunityNeeds && (
-                  <CommunityNeedsFlags
-                    needs={communityNeeds}
-                    filteredType={filteredNeedType}
-                    onViewDetails={handleViewNeedDetails}
-                  />
-                )}
-              </MapContainer>
-            </div>
-          </CardContent>
-        </Card>
+                return (
+                  <Card
+                    key={needType}
+                    className="bg-gradient-card shadow-card hover:shadow-interactive transition-all duration-300 hover:scale-105 cursor-pointer"
+                  >
+                    <Collapsible open={isExpanded} onOpenChange={() => handleLegendClick(needType)}>
+                      <CollapsibleTrigger asChild>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl">{info.icon}</span>
+                              <div>
+                                <CardTitle className="text-lg leading-tight">{info.title}</CardTitle>
+                                <p className="text-sm text-muted-foreground">
+                                  {typeNeeds.length} location{typeNeeds.length !== 1 ? 's' : ''} affected
+                                </p>
+                              </div>
+                            </div>
+                            <ChevronDown className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </div>
+                          
+                          <div className="flex gap-2 mt-3">
+                            {criticalCount > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {criticalCount} Critical
+                              </Badge>
+                            )}
+                            {moderateCount > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {moderateCount} Moderate
+                              </Badge>
+                            )}
+                          </div>
+                        </CardHeader>
+                      </CollapsibleTrigger>
 
-        {/* Community Needs Sidebar */}
-        <CommunityNeedsSidebar
-          selectedNeedType={selectedNeedType}
-          needs={selectedNeedDetails}
-          isOpen={isSidebarOpen}
-          onClose={() => {
-            setIsSidebarOpen(false);
-            setSelectedNeedType(null);
-            setSelectedNeedDetails([]);
-          }}
-          onLocationSelect={handleNeedLocationSelect}
-        />
-      </div>
+                      <CollapsibleContent>
+                        <CardContent className="space-y-4 pt-0">
+                          <p className="text-sm text-muted-foreground">
+                            {info.description}
+                          </p>
+
+                          {/* Affected Locations */}
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium flex items-center gap-2">
+                              <MapPin className="h-4 w-4" />
+                              Affected Locations
+                            </h4>
+                            <div className="space-y-2">
+                              {typeNeeds.map((need, index) => (
+                                <div
+                                  key={need.id}
+                                  className="flex items-center justify-between p-2 rounded-md bg-background/50 border cursor-pointer hover:bg-background/80 transition-colors"
+                                  onClick={() => handleNeedLocationSelect(need)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Badge 
+                                      variant={need.severity === 'critical' ? 'destructive' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {need.severity}
+                                    </Badge>
+                                    <span className="text-sm font-medium">Location {index + 1}</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Score: {need.score.toFixed(1)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Strategies */}
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium flex items-center gap-2">
+                              <Target className="h-4 w-4" />
+                              Suggested Strategies
+                            </h4>
+                            <ul className="space-y-1">
+                              {info.strategies.map((strategy, index) => (
+                                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
+                                  <span className="text-primary">•</span>
+                                  {strategy}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </CardContent>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </Card>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
 
       {isAreaSelectionMode && (
         <Alert>
