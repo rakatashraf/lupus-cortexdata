@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Thermometer, Droplets, Wind, Shield, TreePine, Users, Scale, Car, AlertTriangle, Heart } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Thermometer, Droplets, Wind, Shield, TreePine, Users, Scale, Car, AlertTriangle, Heart, HelpCircle, ChevronDown } from 'lucide-react';
 import { CityHealthData, UrbanIndex } from '@/types/urban-indices';
 import { n8nService } from '@/services/n8n-service';
 import { cn } from '@/lib/utils';
@@ -194,6 +195,53 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
 
       {/* Recommendations Banner */}
       <RecommendationsBanner healthData={healthData} />
+
+      {/* Action Status Guide */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between" type="button">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4" />
+              Action Status Guide
+            </div>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Card className="mt-2 bg-gradient-card shadow-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Implementation Readiness Levels</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Understanding what each action status means for urban planning priorities
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="excellent" className="shrink-0">Implementation Ready</Badge>
+                    <p className="text-sm text-muted-foreground">80-100% progress - Ready for immediate implementation</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="good" className="shrink-0">Policy Development Needed</Badge>
+                    <p className="text-sm text-muted-foreground">60-79% progress - Requires policy framework development</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="moderate" className="shrink-0">Immediate Planning Required</Badge>
+                    <p className="text-sm text-muted-foreground">40-59% progress - Needs urgent planning intervention</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="critical" className="shrink-0">Critical Action Zone</Badge>
+                    <p className="text-sm text-muted-foreground">0-39% progress - Critical priority requiring immediate action</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Remaining Indices Grid - 9 indices (excluding HWI) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
