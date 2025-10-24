@@ -100,10 +100,6 @@ export interface APIConfig {
   nasa: {
     apiKey: string;
   };
-  n8n: {
-    endpoint: string;
-    enabled: boolean;
-  };
 }
 
 // Index measurement definitions

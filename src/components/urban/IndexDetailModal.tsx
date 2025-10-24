@@ -528,24 +528,32 @@ export function IndexDetailModal({ index, indexKey, isOpen, onClose, iconClass }
                   <CardTitle>Component Breakdown</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4">
-                    {Object.entries(index.components).map(([component, score], idx) => (
-                      <div key={component} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <div>
-                          <div className="font-medium">
-                            {component.replace(/([A-Z])/g, ' $1').trim()}
+                  {index.components && Object.keys(index.components).length > 0 ? (
+                    <div className="grid gap-4">
+                      {Object.entries(index.components).map(([component, score], idx) => (
+                        <div key={component} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                          <div>
+                            <div className="font-medium">
+                              {component.replace(/([A-Z])/g, ' $1').trim()}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Component {idx + 1}
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            Component {idx + 1}
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-primary">{score}</div>
+                            <div className="text-xs text-muted-foreground">points</div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-primary">{score}</div>
-                          <div className="text-xs text-muted-foreground">points</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p className="font-medium">No component data available</p>
+                      <p className="text-sm mt-2">Component breakdown will be displayed when data is loaded</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

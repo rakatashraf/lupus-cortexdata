@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { PlanningPriorityDetailModal } from '@/components/urban/PlanningPriorityDetailModal';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Download, RefreshCw, Calendar, Layers, BarChart3, Activity, Zap, MapPin, ChevronDown, ChevronUp, Thermometer, Leaf, Droplets, Building2, Car, Cloud, Home, HelpCircle, FileText, Users, Clock, AlertCircle, CheckCircle, Target, BookOpen } from 'lucide-react';
-import { n8nService } from '@/services/n8n-service';
+import { urbanDataService } from '@/services/urban-data-service';
 import { ChartDataPoint } from '@/types/urban-indices';
 import { cn } from '@/lib/utils';
 import { searchLocationByName } from '@/services/geolocation-service';
@@ -223,7 +223,7 @@ export function DataVisualization({ latitude = 23.8103, longitude = 90.4125 }: D
         bounds = areaBounds;
       }
 
-      const data = await n8nService.getAreaChartData(bounds, enabledLayers, dateRange.start, dateRange.end);
+      const data = await urbanDataService.getAreaChartData(bounds, dateRange.start, dateRange.end);
       
       if (data && data.success !== false) {
         setChartData(processChartData(data));

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { MapPin, Search, Download, Layers, Flag, HelpCircle, AlertTriangle, ChevronDown, Users, AlertCircle, Target, Building } from 'lucide-react';
 import { LatLngBounds, LatLng } from 'leaflet';
 import { MapSelectionBounds } from '@/types/urban-indices';
-import { n8nService } from '@/services/n8n-service';
+import { urbanDataService } from '@/services/urban-data-service';
 import { CommunityNeedsCalculator, CommunityNeed, CommunityNeedType } from '@/utils/community-needs-calculator';
 import { CommunityNeedsFlags } from './CommunityNeedsFlags';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -188,14 +188,13 @@ export function InteractiveMap({
     setLoading(true);
     try {
       const data = selectionBounds 
-        ? await n8nService.getChartData(
+        ? await urbanDataService.getChartData(
             (selectionBounds.north + selectionBounds.south) / 2,
             (selectionBounds.east + selectionBounds.west) / 2,
-            ['all'],
             new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             new Date().toISOString().split('T')[0]
           )
-        : await n8nService.getDashboardData(
+        : await urbanDataService.getDashboardData(
             selectedPosition!.lat,
             selectedPosition!.lng
           );
@@ -227,7 +226,7 @@ export function InteractiveMap({
     
     try {
       console.log('🔍 Fetching community needs for:', { lat, lng });
-      const healthData = await n8nService.getDashboardData(lat, lng);
+      const healthData = await urbanDataService.getDashboardData(lat, lng);
       console.log('📊 Health data received:', healthData);
       
       const needs = CommunityNeedsCalculator.analyzeLocation(lat, lng, healthData);

@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Bot, User, Send, Loader2, Camera, BarChart3, Info, Lightbulb } from 'lucide-react';
 import { AIMessage } from '@/types/urban-indices';
-import { n8nService } from '@/services/n8n-service';
+import { urbanDataService } from '@/services/urban-data-service';
 import { API_CONFIG, FALLBACK_MESSAGES } from '@/config/api';
 import { cn } from '@/lib/utils';
 
@@ -86,8 +86,8 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
     setIsLoading(true);
 
     try {
-      // Send to n8n chatbot endpoint
-      const response = await n8nService.getChatbotResponse(
+      // Send to urban data service for chat processing
+      const response = await urbanDataService.processChatMessage(
         userMessage.content,
         latitude,
         longitude
@@ -96,22 +96,19 @@ export function AIChatbot({ latitude = 23.8103, longitude = 90.4125 }: AIChatbot
       let assistantContent = '';
       let metadata = {};
 
-      if (response && response.success !== false) {
-          if (response.data && response.data.message) {
-            assistantContent = response.data.message;
-            metadata = {
-              model: response.data.ai_model || 'Gemini 2.5 Flash',
-              timestamp: response.data.timestamp
-            };
-        } else if (response.message) {
-          assistantContent = response.message;
-        } else {
-          assistantContent = JSON.stringify(response, null, 2);
+      if (response && response.response) {
+        assistantContent = response.response;
+        metadata = {
+          model: 'Urban Intelligence AI',
+          timestamp: new Date().toISOString()
+        };
+        
+        // Add environmental data context if available
+        if (response.data) {
+          assistantContent += `\n\nEnvironmental Context:\n${JSON.stringify(response.data, null, 2)}`;
         }
       } else {
-        // Fallback to local AI processing
-        assistantContent = await processMessageLocally(userMessage.content);
-        metadata = { model: 'Local Processing' };
+        assistantContent = 'I can help you analyze urban data and environmental metrics for your selected location.';
       }
 
       const assistantMessage: AIMessage = {

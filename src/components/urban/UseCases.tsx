@@ -29,7 +29,7 @@ import {
   Eye,
   MousePointer2
 } from 'lucide-react';
-import { n8nService } from '@/services/n8n-service';
+import { urbanDataService } from '@/services/urban-data-service';
 import jsPDF from 'jspdf';
 import lupusLogo from '@/assets/lupus-cortex-logo.png';
 import lupusLogoPdf from '@/assets/lupus-cortex-logo-pdf.png';
@@ -239,7 +239,7 @@ export const UseCases: React.FC<UseCasesProps> = ({
       const [lat, lng] = location.split(',').map(coord => parseFloat(coord.trim()));
       
       // Get health data for the area
-      const healthData = await n8nService.getDashboardData(lat, lng);
+      const healthData = await urbanDataService.getDashboardData(lat, lng);
       
       // Use ALL indices from the dashboard for comprehensive evaluation
       const indicesArray = Object.values(healthData.indices);

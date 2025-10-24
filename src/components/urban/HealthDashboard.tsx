@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Thermometer, Droplets, Wind, Shield, TreePine, Users, Scale, Car, AlertTriangle, Heart, HelpCircle, ChevronDown } from 'lucide-react';
 import { CityHealthData, UrbanIndex } from '@/types/urban-indices';
-import { n8nService } from '@/services/n8n-service';
+import { urbanDataService } from '@/services/urban-data-service';
 import { cn } from '@/lib/utils';
 import { IndexDetailModal } from './IndexDetailModal';
 import { IndexMeasurementsList } from './IndexMeasurementsList';
@@ -64,7 +64,7 @@ export function HealthDashboard({ latitude = 23.8103, longitude = 90.4125, onLoc
       setLoading(true);
       setError(null);
       
-      const data = await n8nService.getDashboardData(latitude, longitude);
+      const data = await urbanDataService.getDashboardData(latitude, longitude);
       setHealthData(data);
       
       if (onLocationUpdate) {
