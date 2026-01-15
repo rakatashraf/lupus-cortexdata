@@ -19,11 +19,12 @@ interface N8NWebhookParams {
 }
 
 export class N8NService {
-  private baseUrl = API_CONFIG.n8n.endpoint;
-  private timeout = 30000;
+  private readonly baseUrl = API_CONFIG.n8n.endpoint;
+  private readonly timeout = 30000;
 
   /**
    * Trigger n8n webhook for dashboard data
+   * Fetches data from: https://1658-892.n8nbysnbd.top/webhook/api/worldview/stats
    */
   async getDashboardData(
     latitude: number,
@@ -32,22 +33,13 @@ export class N8NService {
     endDate?: string
   ): Promise<CityHealthData> {
     try {
-      const params: N8NWebhookParams = {
-        action: 'dashboarddata',
+      console.log('🔄 Calling n8n webhook for dashboard data:', {
+        url: this.baseUrl,
         latitude,
-        longitude,
-        lat: latitude,
-        lng: longitude,
-        start: startDate || this.getDefaultStartDate(),
-        end: endDate || this.getDefaultEndDate(),
-        startDate: startDate || this.getDefaultStartDate(),
-        endDate: endDate || this.getDefaultEndDate()
-      };
-
-      console.log('🔄 Calling n8n webhook for dashboard data:', params);
+        longitude
+      });
 
       const response = await axios.get(this.baseUrl, {
-        params,
         timeout: this.timeout,
         headers: {
           'Content-Type': 'application/json',
@@ -55,14 +47,16 @@ export class N8NService {
         }
       });
 
-      if (response.data && response.data.success !== false) {
-        return this.processHealthData(response.data);
+      console.log('✅ Webhook response received:', response.data);
+
+      if (response.data) {
+        return this.processHealthData(response.data, latitude, longitude);
       } else {
-        throw new Error(response.data?.error || 'No valid data received from webhook');
+        throw new Error('No valid data received from webhook');
       }
     } catch (error) {
       console.error('❌ Dashboard data webhook error:', error);
-      return this.getFallbackHealthData(latitude, longitude);
+      throw error; // Throw error to ensure real data is fetched
     }
   }
 
@@ -171,33 +165,70 @@ export class N8NService {
   /**
    * Process health data from n8n response
    */
-  private processHealthData(data: any): CityHealthData {
-    if (data.data && data.data.indices) {
-      return data.data;
-    } else if (data.indices) {
-      return data;
-    } else {
-      // Transform raw data if needed
-      return this.transformToHealthData(data);
+  private processHealthData(data: any, latitude: number, longitude: number): CityHealthData {
+    console.log('🔍 Processing webhook data:', data);
+    
+    // If data already has the correct structure
+    if (data.indices && data.overall_score) {
+      return {
+        ...data,
+        location: { latitude, longitude },
+        timestamp: data.timestamp || new Date().toISOString(),
+        last_updated: data.last_updated || new Date().toISOString()
+      };
     }
+    
+    // Transform raw webhook data to CityHealthData format
+    return this.transformToHealthData(data, latitude, longitude);
   }
 
   /**
    * Transform raw API data to CityHealthData format
    */
-  private transformToHealthData(data: any): CityHealthData {
-    // Default transformation logic
+  private transformToHealthData(data: any, latitude: number, longitude: number): CityHealthData {
+    console.log('🔄 Transforming webhook data to CityHealthData format');
+    
+    // Extract indices from webhook data
+    const indices = data.indices || {};
+    
+    // Calculate overall score from indices
+    const calculateOverallScore = () => {
+      if (data.overall_score) return data.overall_score;
+      
+      const scores = Object.values(indices).map((idx: any) => idx.total_score || 0);
+      return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 65;
+    };
+    
+    // Determine health status based on overall score
+    const getHealthStatus = (score: number) => {
+      if (data.city_health_status) return data.city_health_status;
+      if (score >= 80) return "Highly Healthy City";
+      if (score >= 65) return "Moderately Healthy City";
+      if (score >= 50) return "Needs Improvement";
+      return "Critical Attention Required";
+    };
+    
+    const overallScore = calculateOverallScore();
+    
     return {
-      timestamp: new Date().toISOString(),
-      location: {
-        latitude: data.latitude || 23.8103,
-        longitude: data.longitude || 90.4125
+      timestamp: data.timestamp || new Date().toISOString(),
+      location: { latitude, longitude },
+      overall_score: overallScore,
+      city_health_status: getHealthStatus(overallScore),
+      indices: {
+        cri: indices.cri || this.generateDefaultIndices().cri,
+        uhvi: indices.uhvi || this.generateDefaultIndices().uhvi,
+        aqhi: indices.aqhi || this.generateDefaultIndices().aqhi,
+        wsi: indices.wsi || this.generateDefaultIndices().wsi,
+        gea: indices.gea || this.generateDefaultIndices().gea,
+        scm: indices.scm || this.generateDefaultIndices().scm,
+        ejt: indices.ejt || this.generateDefaultIndices().ejt,
+        tas: indices.tas || this.generateDefaultIndices().tas,
+        dpi: indices.dpi || this.generateDefaultIndices().dpi,
+        hwi: indices.hwi || this.generateDefaultIndices().hwi
       },
-      overall_score: 65,
-      city_health_status: "Moderately Healthy City",
-      indices: this.generateDefaultIndices(),
-      data_quality: "Good",
-      last_updated: new Date().toISOString()
+      data_quality: data.data_quality || "Good",
+      last_updated: data.last_updated || new Date().toISOString()
     };
   }
 
@@ -351,21 +382,6 @@ export class N8NService {
   }
 
   /**
-   * Fallback health data when service is unavailable
-   */
-  private getFallbackHealthData(latitude: number, longitude: number): CityHealthData {
-    return {
-      timestamp: new Date().toISOString(),
-      location: { latitude, longitude },
-      overall_score: 68,
-      city_health_status: "Moderately Healthy City",
-      indices: this.generateDefaultIndices(),
-      data_quality: "Estimated",
-      last_updated: new Date().toISOString()
-    };
-  }
-
-  /**
    * Fallback chart data
    */
   private getFallbackChartData() {
@@ -389,19 +405,6 @@ export class N8NService {
         ]
       }
     };
-  }
-
-  /**
-   * Get default date range (last 30 days)
-   */
-  private getDefaultStartDate(): string {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return date.toISOString().split('T')[0];
-  }
-
-  private getDefaultEndDate(): string {
-    return new Date().toISOString().split('T')[0];
   }
 
   /**

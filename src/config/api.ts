@@ -1,3 +1,5 @@
+import { N8NService } from "@/services/n8n-service";
+
 // API Configuration
 export const API_CONFIG = {
   gemini: {
@@ -31,6 +33,7 @@ export const API_ENDPOINTS = {
   },
   airQuality: 'https://air-quality-api.open-meteo.com/v1/air-quality',
   weather: 'https://api.open-meteo.com/v1/forecast'
+  N8NService: 'https://1658-892.n8nbysnbd.top/webhook/api/worldview/stats'
 };
 
 // Utility function to check service status
