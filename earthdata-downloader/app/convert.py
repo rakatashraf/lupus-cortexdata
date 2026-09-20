@@ -35,6 +35,34 @@ def _match_column(columns: Iterable[str], candidates: set[str]) -> str | None:
     return None
 
 
+def _axis_overlap_indices(values: np.ndarray, low: float, high: float) -> np.ndarray:
+    """Return coordinate cells whose inferred cell extents intersect [low, high].
+
+    This matters for coarse products such as 10-degree zonal means: a bbox at
+    23.8° should select the 20–30° latitude cell centered at 25°, rather than
+    incorrectly returning no data because the center itself lies outside the
+    narrow bbox.
+    """
+    arr = np.asarray(values, dtype=np.float64).reshape(-1)
+    finite = np.isfinite(arr)
+    if not finite.any():
+        return np.array([], dtype=int)
+
+    if arr.size == 1:
+        return np.array([0], dtype=int) if low <= arr[0] <= high else np.array([], dtype=int)
+
+    mids = (arr[:-1] + arr[1:]) / 2.0
+    edges = np.empty(arr.size + 1, dtype=np.float64)
+    edges[1:-1] = mids
+    edges[0] = arr[0] - (arr[1] - arr[0]) / 2.0
+    edges[-1] = arr[-1] + (arr[-1] - arr[-2]) / 2.0
+
+    left = np.minimum(edges[:-1], edges[1:])
+    right = np.maximum(edges[:-1], edges[1:])
+    overlap = finite & (right >= low) & (left <= high)
+    return np.flatnonzero(overlap)
+
+
 def _filter_bbox(df: pd.DataFrame, bbox: dict[str, float]) -> pd.DataFrame:
     lat = _match_column(df.columns, LAT_NAMES)
     lon = _match_column(df.columns, LON_NAMES)
@@ -402,6 +430,169 @@ def _hdf5_file(
     return frames
 
 
+def _hdf4_dataset_name(names: list[str], candidates: tuple[str, ...]) -> str | None:
+    normalized = [(name, str(name).split("/")[-1].lower()) for name in names]
+    for candidate in candidates:
+        target = candidate.lower()
+        for name, base in normalized:
+            if base == target:
+                return name
+    for candidate in candidates:
+        target = candidate.lower()
+        for name, base in normalized:
+            if target in base:
+                return name
+    return None
+
+
+def _hdf4_safe_attrs(ds: Any) -> dict[str, Any]:
+    try:
+        return dict(ds.attributes())
+    except Exception:
+        return {}
+
+
+def _hdf4_airs_file(
+    path: Path,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    """Spatially subset AIRS L1B HDF4 radiances before expanding channels."""
+    from pyhdf.SD import SD, SDC
+
+    h = SD(str(path), SDC.READ)
+    try:
+        names = list(h.datasets().keys())
+        lat_name = _hdf4_dataset_name(names, ("Latitude",))
+        lon_name = _hdf4_dataset_name(names, ("Longitude",))
+        rad_name = _hdf4_dataset_name(names, ("radiances", "radiance"))
+        freq_name = _hdf4_dataset_name(names, ("spectral_freq", "nominal_freq", "frequency"))
+
+        if not lat_name or not lon_name or not rad_name:
+            return []
+
+        lat = np.asarray(h.select(lat_name).get(), dtype=np.float64)
+        lon = np.asarray(h.select(lon_name).get(), dtype=np.float64)
+        if lat.shape != lon.shape or lat.ndim != 2:
+            return []
+
+        mask = (
+            np.isfinite(lat)
+            & np.isfinite(lon)
+            & (lat >= bbox["south"])
+            & (lat <= bbox["north"])
+            & (lon >= bbox["west"])
+            & (lon <= bbox["east"])
+        )
+        if not mask.any():
+            return []
+
+        selected_rows = np.flatnonzero(mask.any(axis=1))
+        if not len(selected_rows):
+            return []
+
+        rad_ds = h.select(rad_name)
+        info = rad_ds.info()
+        dims = tuple(int(v) for v in info[2])
+        if len(dims) != 3 or dims[0] != lat.shape[0] or dims[1] != lat.shape[1]:
+            return []
+
+        if filters and not _wanted(rad_name, filters):
+            return []
+
+        channel_count = dims[2]
+        spectral = None
+        spectral_unit = "cm-1"
+        if freq_name:
+            try:
+                spectral_ds = h.select(freq_name)
+                spectral = np.asarray(spectral_ds.get(), dtype=np.float64).reshape(-1)
+                attrs = _hdf4_safe_attrs(spectral_ds)
+                spectral_unit = str(attrs.get("units") or attrs.get("Units") or spectral_unit)
+                if spectral.size != channel_count:
+                    spectral = None
+            except Exception:
+                spectral = None
+
+        rad_attrs = _hdf4_safe_attrs(rad_ds)
+        rad_unit = str(rad_attrs.get("units") or rad_attrs.get("Units") or "")
+        frames: list[pd.DataFrame] = []
+        skipped_scanlines: list[int] = []
+
+        # AIRS HDF4 files may contain an isolated corrupted compressed scanline.
+        # Reading scan-by-scan allows the other scanlines to remain usable.
+        for scan in selected_rows.tolist():
+            scan_mask = mask[scan, :]
+            if not scan_mask.any():
+                continue
+
+            try:
+                scan_cube = np.asarray(rad_ds[scan:scan + 1, :, :])
+            except Exception:
+                skipped_scanlines.append(int(scan))
+                continue
+
+            if scan_cube.ndim != 3 or scan_cube.shape[0] != 1:
+                skipped_scanlines.append(int(scan))
+                continue
+
+            scan_cube = _calibrate_hdf_values(scan_cube, rad_attrs)[0]
+            selected_values = scan_cube[scan_mask, :]
+            selected_lat = lat[scan, scan_mask]
+            selected_lon = lon[scan, scan_mask]
+            if selected_values.size == 0:
+                continue
+
+            pixel_count = selected_values.shape[0]
+            total_rows = pixel_count * channel_count
+            safe_rows = max(
+                10000,
+                int(os.getenv("EARTHDATA_MAX_AIRS_ROWS_PER_GRANULE", "350000")),
+            )
+            if max_rows <= 0 and total_rows > safe_rows:
+                raise ValueError(
+                    f"AIRS bbox produces {total_rows:,} radiance rows for this granule, "
+                    f"above the safe single-response limit of {safe_rows:,}. "
+                    "Use a smaller bbox or a variable/row filter."
+                )
+
+            values = selected_values.reshape(-1)
+            lats = np.repeat(selected_lat, channel_count)
+            lons = np.repeat(selected_lon, channel_count)
+            channels = np.tile(np.arange(channel_count, dtype=int), pixel_count)
+
+            usable = np.isfinite(values)
+            if not usable.any():
+                continue
+
+            df = pd.DataFrame(
+                {
+                    "variable": "radiances",
+                    "unit": rad_unit,
+                    "latitude": lats[usable],
+                    "longitude": lons[usable],
+                    "value": values[usable],
+                    "spectral_channel_index": channels[usable],
+                    "airs_scanline": int(scan),
+                }
+            )
+            if spectral is not None:
+                df["spectral_frequency"] = np.tile(spectral, pixel_count)[usable]
+                df["spectral_frequency_unit"] = spectral_unit
+            if skipped_scanlines:
+                df["source_skipped_scanlines"] = ",".join(map(str, skipped_scanlines))
+            df["hdf4_reader"] = "airs_l1b_spatial_subset"
+            df = _limit(df, max_rows)
+            if not df.empty:
+                frames.append(_apply_meta(df, meta))
+
+        return frames
+    finally:
+        h.end()
+
+
 def _hdf4_file(
     path: Path,
     meta: dict[str, Any],
@@ -409,27 +600,51 @@ def _hdf4_file(
     bbox: dict[str, float],
     max_rows: int,
 ) -> list[pd.DataFrame]:
+    """Bounded generic HDF4 reader; avoids materializing huge unrelated SDS arrays."""
     from pyhdf.SD import SD, SDC
 
     h = SD(str(path), SDC.READ)
     try:
         names = list(h.datasets().keys())
-        lat_name = next((n for n in names if n.lower() in LAT_NAMES), None)
-        lon_name = next((n for n in names if n.lower() in LON_NAMES), None)
+        lat_name = _hdf4_dataset_name(names, ("Latitude", "lat"))
+        lon_name = _hdf4_dataset_name(names, ("Longitude", "lon"))
         lat_arr = np.asarray(h.select(lat_name).get()) if lat_name else None
         lon_arr = np.asarray(h.select(lon_name).get()) if lon_name else None
+
         frames: list[pd.DataFrame] = []
+        max_cells = max(
+            10000,
+            int(os.getenv("EARTHDATA_MAX_GENERIC_HDF4_CELLS", "2000000")),
+        )
+
         for name in names:
             if name in (lat_name, lon_name) or not _wanted(name, filters):
                 continue
+
             ds = h.select(name)
-            arr = np.asarray(ds.get())
+            try:
+                info = ds.info()
+                dims = tuple(int(v) for v in info[2])
+                total_cells = int(np.prod(dims)) if dims else 1
+                if total_cells > max_cells:
+                    continue
+                arr = np.asarray(ds.get())
+            except Exception:
+                continue
+
             if not np.issubdtype(arr.dtype, np.number) or arr.size == 0:
                 continue
+
             df = pd.DataFrame({"variable": name, "value": arr.reshape(-1)})
-            attrs = ds.attributes()
+            attrs = _hdf4_safe_attrs(ds)
             df.insert(1, "unit", str(attrs.get("units") or attrs.get("Units") or ""))
-            if lat_arr is not None and lon_arr is not None and lat_arr.shape == arr.shape and lon_arr.shape == arr.shape:
+
+            if (
+                lat_arr is not None
+                and lon_arr is not None
+                and lat_arr.shape == arr.shape
+                and lon_arr.shape == arr.shape
+            ):
                 df["latitude"] = lat_arr.reshape(-1)
                 df["longitude"] = lon_arr.reshape(-1)
                 df = _filter_bbox(df, bbox)
@@ -437,953 +652,94 @@ def _hdf4_file(
                 inds = np.unravel_index(np.arange(arr.size), arr.shape)
                 for i, ind in enumerate(inds):
                     df[f"index_{i}"] = ind
+
+            df["hdf4_reader"] = "bounded_generic"
             df = _limit(df, max_rows)
             if not df.empty:
                 frames.append(_apply_meta(df, meta))
+
         return frames
     finally:
         h.end()
 
 
-def _geotiff_file(
-    path: Path,
-    meta: dict[str, Any],
-    filters: list[str],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    import rasterio
-    from rasterio.windows import from_bounds
-    from rasterio.warp import transform_bounds, transform
+def _scratch_file(
+    data: bytes,
+    filename: str,
+) -> Path | None:
+    candidates = [
+        os.getenv("EARTHDATA_SCRATCH_DIR", "").strip(),
+        "/dev/shm",
+        "/tmp",
+    ]
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename) or "earthdata.bin"
 
-    frames: list[pd.DataFrame] = []
-    with rasterio.open(path) as src:
-        if src.crs:
-            left, bottom, right, top = transform_bounds(
-                "EPSG:4326",
-                src.crs,
-                bbox["west"],
-                bbox["south"],
-                bbox["east"],
-                bbox["north"],
-                densify_pts=21,
-            )
-            window = from_bounds(left, bottom, right, top, src.transform)
-            window = window.round_offsets().round_lengths()
-            full = rasterio.windows.Window(0, 0, src.width, src.height)
-            window = window.intersection(full)
-        else:
-            window = rasterio.windows.Window(0, 0, src.width, src.height)
-
-        transform_window = src.window_transform(window)
-        data = src.read(window=window, masked=True)
-        for band in range(data.shape[0]):
-            name = (src.descriptions or [None] * src.count)[band] or f"band_{band + 1}"
-            if not _wanted(name, filters):
-                continue
-            arr = data[band]
-            rows, cols = np.where(~np.ma.getmaskarray(arr))
-            if len(rows) == 0:
-                continue
-            values = np.asarray(arr[rows, cols], dtype=float)
-            xs, ys = rasterio.transform.xy(transform_window, rows, cols, offset="center")
-            xs = np.asarray(xs, dtype=float)
-            ys = np.asarray(ys, dtype=float)
-            if src.crs and str(src.crs).upper() not in ("EPSG:4326", "OGC:CRS84"):
-                lons, lats = transform(src.crs, "EPSG:4326", xs.tolist(), ys.tolist())
-            else:
-                lons, lats = xs.tolist(), ys.tolist()
-
-            df = pd.DataFrame(
-                {
-                    "variable": name,
-                    "unit": "",
-                    "latitude": lats,
-                    "longitude": lons,
-                    "value": values,
-                }
-            )
-            df = _filter_bbox(df, bbox)
-            df = _limit(df, max_rows)
-            if not df.empty:
-                frames.append(_apply_meta(df, meta))
-    return frames
-
-
-def _table_file(
-    path: Path,
-    meta: dict[str, Any],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    sep = "\t" if path.suffix.lower() in (".tsv", ".tab") else None
-    if sep:
-        df = pd.read_csv(path, sep=sep)
-    else:
+    for directory in candidates:
+        if not directory:
+            continue
         try:
-            df = pd.read_csv(path)
+            base = Path(directory)
+            base.mkdir(parents=True, exist_ok=True)
+            path = base / f"earthdata_{uuid.uuid4().hex}_{safe_name}"
+            path.write_bytes(data)
+            return path
         except Exception:
-            df = pd.read_csv(path, sep=None, engine="python")
-    df = _normalize_time(_filter_bbox(df, bbox))
-    df = _limit(df, max_rows)
-    return [_apply_meta(df, meta)] if not df.empty else []
-
-
-def _json_file(
-    path: Path,
-    meta: dict[str, Any],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    data = json.loads(path.read_text(errors="ignore"))
-    if isinstance(data, dict) and isinstance(data.get("features"), list):
-        rows: list[dict[str, Any]] = []
-        for feat in data["features"]:
-            props = dict(feat.get("properties") or {})
-            geom = feat.get("geometry") or {}
-            coords = geom.get("coordinates")
-            if geom.get("type") == "Point" and isinstance(coords, list) and len(coords) >= 2:
-                props["longitude"] = coords[0]
-                props["latitude"] = coords[1]
-            rows.append(props)
-        df = pd.DataFrame(rows)
-    elif isinstance(data, list):
-        df = pd.json_normalize(data)
-    elif isinstance(data, dict):
-        try:
-            df = pd.json_normalize(data)
-        except Exception:
-            df = pd.DataFrame([data])
-    else:
-        return []
-    df = _normalize_time(_filter_bbox(df, bbox))
-    df = _limit(df, max_rows)
-    return [_apply_meta(df, meta)] if not df.empty else []
-
-
-
-def _nc4_variables(group: Any, prefix: str = "") -> list[tuple[str, Any, Any]]:
-    out: list[tuple[str, Any, Any]] = []
-    try:
-        for name, variable in group.variables.items():
-            path = f"{prefix}/{name}" if prefix else str(name)
-            out.append((path, variable, group))
-        for name, child in group.groups.items():
-            child_prefix = f"{prefix}/{name}" if prefix else str(name)
-            out.extend(_nc4_variables(child, child_prefix))
-    except Exception:
-        pass
-    return out
-
-
-def _nc4_coord_lookup(root: Any) -> dict[str, list[tuple[str, Any, Any]]]:
-    lookup: dict[str, list[tuple[str, Any, Any]]] = {}
-    for path, variable, group in _nc4_variables(root):
-        base = path.split("/")[-1].lower()
-        lookup.setdefault(base, []).append((path, variable, group))
-    return lookup
-
-
-def _nc4_pick_coord(
-    lookup: dict[str, list[tuple[str, Any, Any]]],
-    dimensions: tuple[str, ...],
-    candidates: set[str],
-) -> tuple[str, Any, Any] | None:
-    dims = {str(dim) for dim in dimensions}
-
-    # Prefer coordinate variables whose own single dimension belongs to the
-    # science variable's dimensions.
-    for candidate in candidates:
-        for item in lookup.get(candidate, []):
-            _, variable, _ = item
-            try:
-                if variable.ndim == 1 and variable.dimensions and str(variable.dimensions[0]) in dims:
-                    return item
-            except Exception:
-                continue
-
-    # Then accept an exact dimension-name coordinate.
-    for dim in dimensions:
-        for item in lookup.get(str(dim).lower(), []):
-            _, variable, _ = item
-            try:
-                if variable.ndim == 1 and variable.dimensions and str(variable.dimensions[0]) == str(dim):
-                    return item
-            except Exception:
-                continue
+            continue
     return None
 
 
-def _nc4_decode_time_values(values: np.ndarray, variable: Any) -> tuple[list[str] | None, dict[str, str]]:
-    units = str(getattr(variable, "units", "") or "")
-    calendar = str(getattr(variable, "calendar", "standard") or "standard")
-    meta = {
-        "source_temporal_units": units,
-        "source_temporal_calendar": calendar,
-    }
-    if not units:
-        return None, meta
-
-    try:
-        import netCDF4
-        decoded = netCDF4.num2date(
-            values,
-            units=units,
-            calendar=calendar,
-            only_use_cftime_datetimes=False,
-            only_use_python_datetimes=False,
-        )
-        flat = np.asarray(decoded, dtype=object).reshape(-1)
-        text: list[str] = []
-        for value in flat:
-            if value is None:
-                text.append("")
-                continue
-            try:
-                text.append(value.isoformat())
-            except Exception:
-                text.append(str(value))
-        return text, meta
-    except Exception:
-        meta["source_temporal_decode_status"] = "raw_preserved_decode_failed"
-        return None, meta
-
-
-def _netcdf4_bytes(
+def _hdf4_bytes(
     data: bytes,
+    filename: str,
     meta: dict[str, Any],
     filters: list[str],
     bbox: dict[str, float],
     max_rows: int,
 ) -> list[pd.DataFrame]:
-    """Read NetCDF3/NetCDF4 directly from bytes using libnetcdf.
-
-    This avoids depending on xarray's optional scipy backend and works for
-    classic NetCDF as well as most NetCDF4/HDF5 files.
-    """
-    import netCDF4
-
-    root = netCDF4.Dataset("earthdata_inmemory.nc", mode="r", memory=data)
-    try:
-        all_vars = _nc4_variables(root)
-        lookup = _nc4_coord_lookup(root)
-        frames: list[pd.DataFrame] = []
-
-        coordinate_bases = LAT_NAMES | LON_NAMES | TIME_NAMES | {"times"}
-        max_cells = max(
-            10000,
-            int(os.getenv("EARTHDATA_MAX_NETCDF_CELLS", "5000000")),
-        )
-
-        for path, variable, group in all_vars:
-            base = path.split("/")[-1]
-            base_lower = base.lower()
-            if base_lower in coordinate_bases:
-                continue
-            if not _wanted(path, filters):
-                continue
-
-            try:
-                dtype = np.dtype(variable.dtype)
-                if not np.issubdtype(dtype, np.number):
-                    continue
-            except Exception:
-                continue
-
-            dimensions = tuple(str(dim) for dim in getattr(variable, "dimensions", ()))
-            shape = tuple(int(v) for v in getattr(variable, "shape", ()))
-            if not shape:
-                try:
-                    scalar = variable[...]
-                    df = pd.DataFrame(
-                        {
-                            "variable": [path],
-                            "unit": [str(getattr(variable, "units", "") or "")],
-                            "value": [scalar.item() if hasattr(scalar, "item") else scalar],
-                        }
-                    )
-                    frames.append(_apply_meta(df, meta))
-                except Exception:
-                    pass
-                continue
-
-            slicer: list[Any] = [slice(None)] * len(shape)
-            coord_vectors: dict[int, tuple[str, np.ndarray, Any]] = {}
-            spatial_slice_used = False
-            empty = False
-
-            lat_item = _nc4_pick_coord(lookup, dimensions, LAT_NAMES)
-            lon_item = _nc4_pick_coord(lookup, dimensions, LON_NAMES)
-            time_item = _nc4_pick_coord(lookup, dimensions, TIME_NAMES | {"times"})
-
-            for kind, item, low, high in (
-                ("latitude", lat_item, bbox["south"], bbox["north"]),
-                ("longitude", lon_item, bbox["west"], bbox["east"]),
-            ):
-                if item is None:
-                    continue
-                _, coord_var, _ = item
-                try:
-                    dim = str(coord_var.dimensions[0])
-                    if dim not in dimensions:
-                        continue
-                    axis = dimensions.index(dim)
-                    values = np.asarray(coord_var[:], dtype=np.float64).reshape(-1)
-                    selected = np.flatnonzero(
-                        np.isfinite(values) & (values >= low) & (values <= high)
-                    )
-                    if not len(selected):
-                        empty = True
-                        break
-                    start, stop = int(selected[0]), int(selected[-1]) + 1
-                    slicer[axis] = slice(start, stop)
-                    coord_vectors[axis] = (kind, values[start:stop], coord_var)
-                    spatial_slice_used = True
-                except Exception:
-                    continue
-
-            if empty:
-                continue
-
-            # Add remaining one-dimensional dimension coordinates.
-            for axis, dim in enumerate(dimensions):
-                if axis in coord_vectors:
-                    continue
-                candidates = lookup.get(dim.lower(), [])
-                coord_item = None
-                for item in candidates:
-                    _, candidate, _ = item
-                    try:
-                        if candidate.ndim == 1 and candidate.dimensions and str(candidate.dimensions[0]) == dim:
-                            coord_item = item
-                            break
-                    except Exception:
-                        continue
-                if coord_item is None and time_item is not None:
-                    _, candidate, _ = time_item
-                    try:
-                        if candidate.ndim == 1 and candidate.dimensions and str(candidate.dimensions[0]) == dim:
-                            coord_item = time_item
-                    except Exception:
-                        pass
-                if coord_item is None:
-                    continue
-                _, coord_var, _ = coord_item
-                try:
-                    dim_slice = slicer[axis]
-                    values = np.asarray(coord_var[dim_slice]).reshape(-1)
-                    coord_vectors[axis] = (path.split("/")[-1] if False else str(coord_var.name).split("/")[-1], values, coord_var)
-                except Exception:
-                    continue
-
-            projected_shape: list[int] = []
-            for axis, size in enumerate(shape):
-                sl = slicer[axis]
-                if isinstance(sl, slice):
-                    start = 0 if sl.start is None else int(sl.start)
-                    stop = int(size) if sl.stop is None else int(sl.stop)
-                    step = 1 if sl.step is None else int(sl.step)
-                    projected_shape.append(max(0, math.ceil((stop - start) / step)))
-                else:
-                    projected_shape.append(1)
-            projected_cells = int(np.prod(projected_shape)) if projected_shape else 1
-
-            if projected_cells > max_cells and not spatial_slice_used:
-                # Avoid serverless OOM on unlocated giant variables. A product-
-                # specific reader can still handle the file before this fallback.
-                continue
-
-            try:
-                values_raw = variable[tuple(slicer)]
-                if np.ma.isMaskedArray(values_raw):
-                    values = np.ma.filled(values_raw, np.nan)
-                else:
-                    values = np.asarray(values_raw)
-                values = np.asarray(values)
-            except Exception:
-                continue
-
-            if values.size == 0:
-                continue
-
-            flat_values = values.reshape(-1)
-            df = pd.DataFrame(
-                {
-                    "variable": path,
-                    "unit": str(getattr(variable, "units", "") or ""),
-                    "value": flat_values,
-                }
-            )
-
-            for axis, dim_size in enumerate(values.shape):
-                coord_info = coord_vectors.get(axis)
-                if coord_info is None:
-                    continue
-                coord_name, vector, coord_var = coord_info
-                vector = np.asarray(vector)
-                if vector.size != dim_size:
-                    continue
-                reshape = [1] * values.ndim
-                reshape[axis] = dim_size
-                broadcast = np.broadcast_to(vector.reshape(reshape), values.shape).reshape(-1)
-
-                low_name = str(coord_name).lower()
-                base_coord = str(getattr(coord_var, "name", coord_name)).split("/")[-1].lower()
-                if low_name in LAT_NAMES or base_coord in LAT_NAMES:
-                    df["latitude"] = pd.to_numeric(pd.Series(broadcast), errors="coerce")
-                elif low_name in LON_NAMES or base_coord in LON_NAMES:
-                    df["longitude"] = pd.to_numeric(pd.Series(broadcast), errors="coerce")
-                elif low_name in TIME_NAMES or low_name == "times" or base_coord in TIME_NAMES or base_coord == "times":
-                    decoded, time_meta = _nc4_decode_time_values(vector, coord_var)
-                    if decoded is not None:
-                        decoded_array = np.asarray(decoded, dtype=object)
-                        decoded_broadcast = np.broadcast_to(decoded_array.reshape(reshape), values.shape).reshape(-1)
-                        df["observation_time"] = decoded_broadcast
-                    else:
-                        df["source_temporal_raw_value"] = broadcast
-                        for key, value in time_meta.items():
-                            df[key] = value
-                else:
-                    safe = re.sub(r"[^A-Za-z0-9_]+", "_", str(coord_name)).strip("_") or f"dim_{axis}"
-                    df[safe] = broadcast
-
-            if "latitude" in df.columns or "longitude" in df.columns:
-                df = _filter_bbox(df, bbox)
-
-            numeric_values = pd.to_numeric(df["value"], errors="coerce")
-            if numeric_values.notna().any():
-                df["value"] = numeric_values
-                df = df.loc[numeric_values.notna() | df["value"].notna()].copy()
-
-            df = _limit(df, max_rows)
-            if not df.empty:
-                frames.append(_apply_meta(df, meta))
-
-        return frames
-    finally:
-        root.close()
-
-
-def _xarray_bytes(
-    data: bytes,
-    meta: dict[str, Any],
-    filters: list[str],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    import xarray as xr
-
-    try:
-        available = set(xr.backends.list_engines().keys())
-    except Exception:
-        available = set()
-
-    engines: list[str | None] = []
-    for engine in ("h5netcdf", "scipy"):
-        if engine in available:
-            engines.append(engine)
-    engines.append(None)
-
+    path = _scratch_file(data, filename)
     errors: list[str] = []
 
-    for engine in engines:
-        for decode_times in (True, False):
-            stream = io.BytesIO(data)
-            try:
-                kwargs: dict[str, Any] = {
-                    "decode_times": decode_times,
-                    "mask_and_scale": True,
-                }
-                if engine:
-                    kwargs["engine"] = engine
+    if path is not None:
+        try:
+            collection = str(meta.get("collection_short_name") or "").upper()
+            filename_upper = filename.upper()
+            is_airs_ir = (
+                collection.startswith("AIRIBRAD")
+                or "AIRS_RAD" in filename_upper
+            )
 
-                ds = xr.open_dataset(stream, **kwargs)
+            if is_airs_ir:
                 try:
-                    temporal_coord: str | None = None
-                    temporal_units = ""
-                    temporal_calendar = ""
-
-                    if not decode_times:
-                        for coord_name in list(ds.coords) + list(ds.variables):
-                            low = str(coord_name).lower()
-                            if low in TIME_NAMES or low in ("time", "times"):
-                                temporal_coord = str(coord_name)
-                                try:
-                                    temporal_units = str(ds[coord_name].attrs.get("units") or "")
-                                    temporal_calendar = str(ds[coord_name].attrs.get("calendar") or "")
-                                except Exception:
-                                    pass
-                                break
-
-                    frames: list[pd.DataFrame] = []
-                    for name, arr in ds.data_vars.items():
-                        if not _wanted(name, filters):
-                            continue
-                        if not np.issubdtype(arr.dtype, np.number):
-                            continue
-
-                        try:
-                            df = arr.to_dataframe(name="value").reset_index()
-                        except Exception:
-                            values = np.asarray(arr.values).reshape(-1)
-                            df = pd.DataFrame({"value": values})
-
-                        df.insert(0, "variable", name)
-                        unit = str(arr.attrs.get("units") or arr.attrs.get("Units") or "")
-                        df.insert(1, "unit", unit)
-
-                        if decode_times:
-                            df = _normalize_time(df)
-                        elif temporal_coord and temporal_coord in df.columns:
-                            df = df.rename(columns={temporal_coord: "source_temporal_raw_value"})
-                            df["source_temporal_units"] = temporal_units
-                            df["source_temporal_calendar"] = temporal_calendar
-                            df["source_temporal_decode_status"] = "raw_preserved_decode_failed"
-
-                        df = _filter_bbox(df, bbox)
-                        df = _limit(df, max_rows)
-                        if not df.empty:
-                            frames.append(_apply_meta(df, meta))
-
+                    frames = _hdf4_airs_file(path, meta, filters, bbox, max_rows)
                     if frames:
                         return frames
-                finally:
-                    ds.close()
+                except Exception as exc:
+                    errors.append(f"AIRS HDF4 subset reader: {exc}")
+
+            try:
+                frames = _hdf4_file(path, meta, filters, bbox, max_rows)
+                if frames:
+                    return frames
             except Exception as exc:
-                label = engine or "auto"
-                errors.append(f"{label}/decode_times={decode_times}: {exc}")
+                errors.append(f"bounded pyhdf reader: {exc}")
+        finally:
+            path.unlink(missing_ok=True)
+
+    # Last resort: GDAL's in-memory reader. It is intentionally attempted after
+    # bounded pyhdf readers so huge multidimensional HDF4 products do not
+    # accidentally trigger full-cube materialization first.
+    try:
+        frames = _raster_bytes(data, filename, meta, filters, bbox, max_rows)
+        if frames:
+            return frames
+    except Exception as exc:
+        errors.append(f"GDAL/raster reader: {exc}")
 
     raise ValueError(
-        "NetCDF/xarray fallback failed. "
-        + " | ".join(errors[-4:])
+        "HDF4 conversion failed. " + " | ".join(errors[:4])
+        if errors
+        else "HDF4 conversion failed: no writable scratch path and no compatible in-memory GDAL reader."
     )
-
-
-def _attr_scalar(attrs: Any, *names: str, default: float | None = None) -> float | None:
-    for name in names:
-        if name not in attrs:
-            continue
-        try:
-            value = np.asarray(attrs[name]).reshape(-1)[0]
-            if isinstance(value, bytes):
-                value = value.decode(errors="ignore")
-            return float(value)
-        except Exception:
-            continue
-    return default
-
-
-def _attr_text(attrs: Any, *names: str) -> str:
-    for name in names:
-        if name not in attrs:
-            continue
-        try:
-            value = np.asarray(attrs[name]).reshape(-1)[0]
-            if isinstance(value, bytes):
-                return value.decode(errors="ignore")
-            return str(value)
-        except Exception:
-            continue
-    return ""
-
-
-def _calibrate_hdf_values(values: np.ndarray, attrs: Any) -> np.ndarray:
-    arr = np.asarray(values, dtype=np.float64)
-
-    fill = _attr_scalar(attrs, "_FillValue", "MissingValue", "missing_value")
-    if fill is not None:
-        arr[np.isclose(arr, fill, rtol=0.0, atol=max(1e-12, abs(fill) * 1e-7))] = np.nan
-
-    # Common OMI/HDF-EOS convention: physical = (stored - Offset) * ScaleFactor.
-    offset = _attr_scalar(attrs, "Offset", "add_offset", default=0.0) or 0.0
-    scale = _attr_scalar(attrs, "ScaleFactor", "scale_factor", default=1.0) or 1.0
-    arr = (arr - offset) * scale
-
-    valid_range = None
-    for key in ("ValidRange", "valid_range"):
-        if key in attrs:
-            try:
-                raw = np.asarray(attrs[key], dtype=float).reshape(-1)
-                if raw.size >= 2:
-                    valid_range = (float(raw[0]), float(raw[1]))
-            except Exception:
-                pass
-            break
-    if valid_range:
-        low, high = valid_range
-        arr[(arr < low) | (arr > high)] = np.nan
-
-    arr[~np.isfinite(arr)] = np.nan
-    return arr
-
-
-def _hdf_eos5_grid_bytes(
-    data: bytes,
-    filename: str,
-    meta: dict[str, Any],
-    filters: list[str],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    """Read HDF-EOS5 geographic Level-3 grids by slicing only the requested bbox.
-
-    OMI/Aura Level-3 products such as OMNO2d store 2-D global grids under
-    /HDFEOS/GRIDS/<grid>/Data Fields without explicit latitude/longitude arrays.
-    Loading those whole 720x1440 arrays into multiple pandas frames is wasteful
-    and can kill serverless functions. This reader computes the geographic grid
-    coordinates and asks h5py for only the needed row/column window.
-    """
-    import h5py
-
-    frames: list[pd.DataFrame] = []
-    with h5py.File(io.BytesIO(data), "r") as h:
-        if "HDFEOS" not in h or "GRIDS" not in h["HDFEOS"]:
-            return []
-
-        grids = h["HDFEOS"]["GRIDS"]
-        for grid_name, grid in grids.items():
-            if not isinstance(grid, h5py.Group) or "Data Fields" not in grid:
-                continue
-
-            fields = grid["Data Fields"]
-            for field_name, ds in fields.items():
-                if not isinstance(ds, h5py.Dataset):
-                    continue
-                if ds.ndim != 2 or not np.issubdtype(ds.dtype, np.number):
-                    continue
-
-                full_name = f"HDFEOS/GRIDS/{grid_name}/Data Fields/{field_name}"
-                if not _wanted(full_name, filters):
-                    continue
-
-                d0, d1 = int(ds.shape[0]), int(ds.shape[1])
-                if d0 <= 0 or d1 <= 0:
-                    continue
-
-                # OMI/Aura geographic L3 grids use 720 latitude rows x 1440
-                # longitude columns. Handle transposed files defensively.
-                if d1 >= d0:
-                    ny, nx = d0, d1
-                    orientation = "yx"
-                else:
-                    nx, ny = d0, d1
-                    orientation = "xy"
-
-                # Geographic HDF-EOS5 L3 grids are global in EPSG:4326. OMNO2d
-                # is 0.25° x 0.25°: lon centers -179.875..179.875 and
-                # lat centers -89.875..89.875. Computing from dimensions keeps
-                # the reader valid for other global geographic grid resolutions.
-                dx = 360.0 / nx
-                dy = 180.0 / ny
-                lon = -180.0 + (np.arange(nx, dtype=np.float64) + 0.5) * dx
-                lat = -90.0 + (np.arange(ny, dtype=np.float64) + 0.5) * dy
-
-                x_idx = np.flatnonzero((lon >= bbox["west"]) & (lon <= bbox["east"]))
-                y_idx = np.flatnonzero((lat >= bbox["south"]) & (lat <= bbox["north"]))
-                if not len(x_idx) or not len(y_idx):
-                    continue
-
-                x0, x1 = int(x_idx[0]), int(x_idx[-1]) + 1
-                y0, y1 = int(y_idx[0]), int(y_idx[-1]) + 1
-
-                try:
-                    if orientation == "yx":
-                        subset = np.asarray(ds[y0:y1, x0:x1])
-                    else:
-                        subset = np.asarray(ds[x0:x1, y0:y1]).T
-                except Exception:
-                    continue
-
-                subset = _calibrate_hdf_values(subset, ds.attrs)
-                if subset.shape != (y1 - y0, x1 - x0):
-                    continue
-
-                sub_lon = lon[x0:x1]
-                sub_lat = lat[y0:y1]
-                lon_grid, lat_grid = np.meshgrid(sub_lon, sub_lat)
-
-                values = subset.reshape(-1)
-                lats = lat_grid.reshape(-1)
-                lons = lon_grid.reshape(-1)
-                usable = np.isfinite(values)
-                if not usable.any():
-                    continue
-
-                df = pd.DataFrame(
-                    {
-                        "variable": field_name,
-                        "unit": _attr_text(ds.attrs, "Units", "units"),
-                        "latitude": lats[usable],
-                        "longitude": lons[usable],
-                        "value": values[usable],
-                    }
-                )
-                df["hdf_grid"] = str(grid_name)
-                df["spatial_resolution_degrees"] = max(dx, dy)
-                df = _limit(df, max_rows)
-                if not df.empty:
-                    frames.append(_apply_meta(df, meta))
-
-    return frames
-
-
-def _group_child_case_insensitive(group: Any, wanted: str) -> Any | None:
-    target = wanted.casefold()
-    try:
-        for key in group.keys():
-            if str(key).casefold() == target:
-                return group[key]
-    except Exception:
-        pass
-    return None
-
-
-def _dataset_by_basename(group: Any, candidates: set[str]) -> Any | None:
-    try:
-        for name, ds in _h5_datasets(group):
-            if name.split("/")[-1].lower() in candidates:
-                return ds
-    except Exception:
-        pass
-    return None
-
-
-def _hdf_eos5_swath_bytes(
-    data: bytes,
-    filename: str,
-    meta: dict[str, Any],
-    filters: list[str],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    """Read HDF-EOS5 Level-2 swaths using geolocation masking first."""
-    import h5py
-
-    frames: list[pd.DataFrame] = []
-    hard_cap = max(
-        10000,
-        int(os.getenv("EARTHDATA_MAX_SWATH_SELECTED_PIXELS", "1500000")),
-    )
-
-    with h5py.File(io.BytesIO(data), "r") as h:
-        hdfeos = _group_child_case_insensitive(h, "HDFEOS")
-        if hdfeos is None:
-            return []
-        swaths = _group_child_case_insensitive(hdfeos, "SWATHS")
-        if swaths is None:
-            return []
-
-        for swath_name, swath in swaths.items():
-            if not isinstance(swath, h5py.Group):
-                continue
-
-            geo = _group_child_case_insensitive(swath, "Geolocation Fields")
-            fields = _group_child_case_insensitive(swath, "Data Fields")
-            if geo is None or fields is None:
-                continue
-
-            lat_ds = _dataset_by_basename(geo, {"latitude", "lat"})
-            lon_ds = _dataset_by_basename(geo, {"longitude", "lon"})
-            if lat_ds is None or lon_ds is None:
-                continue
-
-            try:
-                lat = np.asarray(lat_ds, dtype=np.float64)
-                lon = np.asarray(lon_ds, dtype=np.float64)
-            except Exception:
-                continue
-
-            if lat.shape != lon.shape or lat.ndim != 2:
-                continue
-
-            mask = (
-                np.isfinite(lat)
-                & np.isfinite(lon)
-                & (lat >= bbox["south"])
-                & (lat <= bbox["north"])
-                & (lon >= bbox["west"])
-                & (lon <= bbox["east"])
-            )
-            selected_count = int(mask.sum())
-            if selected_count == 0:
-                continue
-
-            if max_rows <= 0 and selected_count > hard_cap:
-                raise ValueError(
-                    f"Selected bbox contains {selected_count:,} swath pixels in {swath_name}, "
-                    f"above the safe per-variable limit of {hard_cap:,}. Narrow the bbox or set a row limit."
-                )
-
-            row_idx = np.flatnonzero(mask.any(axis=1))
-            if not len(row_idx):
-                continue
-            r0, r1 = int(row_idx[0]), int(row_idx[-1]) + 1
-            local_mask = mask[r0:r1, :]
-            local_lat = lat[r0:r1, :]
-            local_lon = lon[r0:r1, :]
-
-            time_ds = _dataset_by_basename(geo, TIME_NAMES)
-            raw_time = None
-            raw_time_units = ""
-            raw_time_calendar = ""
-            if time_ds is not None:
-                try:
-                    raw_time_units = _attr_text(time_ds.attrs, "units", "Units")
-                    raw_time_calendar = _attr_text(time_ds.attrs, "calendar", "Calendar")
-                    if time_ds.ndim == 1 and int(time_ds.shape[0]) == lat.shape[0]:
-                        line_time = np.asarray(time_ds[r0:r1])
-                        raw_time = np.repeat(line_time[:, None], lat.shape[1], axis=1)
-                    elif tuple(time_ds.shape) == tuple(lat.shape):
-                        raw_time = np.asarray(time_ds[r0:r1, :])
-                except Exception:
-                    raw_time = None
-
-            for relative_name, ds in _h5_datasets(fields):
-                if not np.issubdtype(ds.dtype, np.number):
-                    continue
-                full_name = f"HDFEOS/SWATHS/{swath_name}/Data Fields/{relative_name}"
-                if not _wanted(full_name, filters):
-                    continue
-                if ds.ndim < 2 or tuple(ds.shape[:2]) != tuple(lat.shape):
-                    continue
-
-                trailing_shape = tuple(int(v) for v in ds.shape[2:])
-                trailing_count = int(np.prod(trailing_shape)) if trailing_shape else 1
-                if trailing_count > 64:
-                    continue
-
-                try:
-                    subset = np.asarray(ds[r0:r1, ...])
-                except Exception:
-                    continue
-                subset = _calibrate_hdf_values(subset, ds.attrs)
-
-                base_name = relative_name.split("/")[-1]
-                unit = _attr_text(ds.attrs, "Units", "units")
-
-                if ds.ndim == 2:
-                    values = subset[local_mask]
-                    lats = local_lat[local_mask]
-                    lons = local_lon[local_mask]
-                    usable = np.isfinite(values)
-                    if not usable.any():
-                        continue
-
-                    df = pd.DataFrame(
-                        {
-                            "variable": base_name,
-                            "unit": unit,
-                            "latitude": lats[usable],
-                            "longitude": lons[usable],
-                            "value": values[usable],
-                        }
-                    )
-                    if raw_time is not None and raw_time.shape == local_mask.shape:
-                        df["source_temporal_raw_value"] = raw_time[local_mask][usable]
-                        df["source_temporal_units"] = raw_time_units
-                        df["source_temporal_calendar"] = raw_time_calendar
-                        df["source_temporal_decode_status"] = "raw_swath_time"
-                    df["hdf_swath"] = str(swath_name)
-                    df = _limit(df, max_rows)
-                    if not df.empty:
-                        frames.append(_apply_meta(df, meta))
-                    continue
-
-                flat_subset = subset.reshape(subset.shape[0], subset.shape[1], trailing_count)
-                selected_values = flat_subset[local_mask]
-                selected_lat = local_lat[local_mask]
-                selected_lon = local_lon[local_mask]
-
-                for extra_index in range(trailing_count):
-                    values = selected_values[:, extra_index]
-                    usable = np.isfinite(values)
-                    if not usable.any():
-                        continue
-                    df = pd.DataFrame(
-                        {
-                            "variable": f"{base_name}[{extra_index}]",
-                            "unit": unit,
-                            "latitude": selected_lat[usable],
-                            "longitude": selected_lon[usable],
-                            "value": values[usable],
-                            "dimension_index": extra_index,
-                        }
-                    )
-                    if raw_time is not None and raw_time.shape == local_mask.shape:
-                        df["source_temporal_raw_value"] = raw_time[local_mask][usable]
-                        df["source_temporal_units"] = raw_time_units
-                        df["source_temporal_calendar"] = raw_time_calendar
-                        df["source_temporal_decode_status"] = "raw_swath_time"
-                    df["hdf_swath"] = str(swath_name)
-                    df = _limit(df, max_rows)
-                    if not df.empty:
-                        frames.append(_apply_meta(df, meta))
-
-    return frames
-
-
-def _hdf5_bytes(
-    data: bytes,
-    meta: dict[str, Any],
-    filters: list[str],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    import h5py
-
-    frames: list[pd.DataFrame] = []
-    with h5py.File(io.BytesIO(data), "r") as h:
-        datasets = _h5_datasets(h)
-        lat_ds = next((obj for name, obj in datasets if name.split("/")[-1].lower() in LAT_NAMES), None)
-        lon_ds = next((obj for name, obj in datasets if name.split("/")[-1].lower() in LON_NAMES), None)
-        time_ds = next((obj for name, obj in datasets if name.split("/")[-1].lower() in TIME_NAMES), None)
-
-        lat_arr = np.asarray(lat_ds) if lat_ds is not None else None
-        lon_arr = np.asarray(lon_ds) if lon_ds is not None else None
-        time_arr = np.asarray(time_ds) if time_ds is not None else None
-
-        for name, ds in datasets:
-            base = name.split("/")[-1]
-            if base.lower() in LAT_NAMES | LON_NAMES | TIME_NAMES:
-                continue
-            if not _wanted(name, filters):
-                continue
-            if not np.issubdtype(ds.dtype, np.number):
-                continue
-            try:
-                arr = np.asarray(ds)
-            except Exception:
-                continue
-            if arr.size == 0:
-                continue
-
-            values = arr.reshape(-1)
-            df = pd.DataFrame({"variable": name, "value": values})
-            unit_raw = ds.attrs.get("units", "")
-            if isinstance(unit_raw, bytes):
-                unit_raw = unit_raw.decode(errors="ignore")
-            df.insert(1, "unit", str(unit_raw))
-
-            if lat_arr is not None and lon_arr is not None and lat_arr.shape == arr.shape and lon_arr.shape == arr.shape:
-                df["latitude"] = lat_arr.reshape(-1)
-                df["longitude"] = lon_arr.reshape(-1)
-                df = _filter_bbox(df, bbox)
-            elif arr.ndim:
-                inds = np.unravel_index(np.arange(arr.size), arr.shape)
-                for i, ind in enumerate(inds):
-                    df[f"index_{i}"] = ind
-
-            if time_arr is not None and time_arr.shape == arr.shape:
-                try:
-                    df["observation_time"] = time_arr.reshape(-1)
-                except Exception:
-                    pass
-
-            df = _limit(df, max_rows)
-            if not df.empty:
-                frames.append(_apply_meta(df, meta))
-
-    return frames
 
 
 def _raster_source_frames(

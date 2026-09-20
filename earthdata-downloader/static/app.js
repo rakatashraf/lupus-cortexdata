@@ -98,6 +98,94 @@ async function apiResponse(path,body){
   return response;
 }
 
+const FIXED_EXPORT_COLUMNS=[
+  "component_segment","component_primary","component_names","component_count",
+  "collection_segment_key","collection_id","collection_short_name","collection_title",
+  "collection_version","collection_provider","collection_processing_level",
+  "granule_id","granule_ur","granule_production_date_utc","granule_size_mb",
+  "conversion_status","conversion_error","raw_download_url",
+  "source","source_agency","source_provider","source_satellite","source_instrument",
+  "satellite_platform","instrument","data_timestamp_utc","data_date_utc","data_time_utc",
+  "timestamp_status","timestamp_source","timestamp_timezone","granule_start_utc",
+  "granule_end_utc","retrieved_at_utc","data_cycle","data_cycle_interval_seconds",
+  "data_cycle_detail","data_cycle_basis","latitude","longitude","coordinate_status",
+  "coordinate_crs","variable","value","unit","weight","weight_unit","weight_variable",
+  "hdf_grid","spatial_resolution_degrees","observation_time","granule_begin","granule_end",
+  "component_query","collection_search_name","original_file","download_url",
+  "extra_attributes_json"
+];
+
+function csvEscape(value){
+  const text=String(value==null?"":value);
+  return /[",\n\r]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;
+}
+
+function localFailureCsv(granule,errorText){
+  const components=(granule._matched_components&&granule._matched_components.length)
+    ?granule._matched_components:componentValues();
+  const begin=granule.begin||"";
+  const date=begin?String(begin).slice(0,10):"";
+  const time=begin&&String(begin).length>=19?String(begin).slice(11,19):"";
+  const firstUrl=(granule.download_urls&&granule.download_urls.length)
+    ?granule.download_urls[0]:(granule.primary_url||"");
+
+  const row={
+    component_segment:components[0]||"",
+    component_primary:components[0]||"",
+    component_names:components.join(";"),
+    component_count:components.length,
+    collection_segment_key:[
+      granule._collection_short_name||"",
+      granule._collection_version||"",
+      granule._collection_id||""
+    ].filter(Boolean).join("|"),
+    collection_id:granule._collection_id||"",
+    collection_short_name:granule._collection_short_name||"",
+    collection_title:granule._collection_title||"",
+    collection_version:granule._collection_version||"",
+    collection_provider:granule._collection_provider||"",
+    collection_processing_level:granule._collection_processing_level||"",
+    granule_id:granule.concept_id||"",
+    granule_ur:granule.granule_ur||"",
+    granule_production_date_utc:granule.production_date||"",
+    granule_size_mb:granule.size_mb==null?"":granule.size_mb,
+    conversion_status:"request_failed",
+    conversion_error:errorText,
+    raw_download_url:firstUrl,
+    source:"NASA Earthdata",
+    source_agency:"NASA",
+    source_provider:granule._collection_provider||"",
+    source_satellite:(granule.platforms||[]).join(";"),
+    source_instrument:(granule.instruments||[]).join(";"),
+    satellite_platform:(granule.platforms||[]).join(";"),
+    instrument:(granule.instruments||[]).join(";"),
+    data_timestamp_utc:begin,
+    data_date_utc:date,
+    data_time_utc:time,
+    timestamp_status:begin?"available":"not_available_in_source_row",
+    timestamp_source:begin?"granule_begin":"unavailable",
+    timestamp_timezone:"UTC",
+    granule_start_utc:begin,
+    granule_end_utc:granule.end||"",
+    data_cycle:granule._granule_cycle&&granule._granule_cycle.label?granule._granule_cycle.label:"",
+    data_cycle_interval_seconds:granule._granule_cycle&&granule._granule_cycle.interval_seconds!=null?granule._granule_cycle.interval_seconds:"",
+    data_cycle_detail:granule._granule_cycle&&granule._granule_cycle.detail?granule._granule_cycle.detail:"",
+    data_cycle_basis:granule._granule_cycle&&granule._granule_cycle.basis?granule._granule_cycle.basis:"",
+    coordinate_status:"not_available_due_to_request_failure",
+    variable:"__conversion_status__",
+    value:"",
+    unit:"",
+    granule_begin:begin,
+    granule_end:granule.end||"",
+    component_query:components.join("; "),
+    download_url:firstUrl,
+    extra_attributes_json:""
+  };
+  const header=FIXED_EXPORT_COLUMNS.join(",");
+  const body=FIXED_EXPORT_COLUMNS.map(function(column){return csvEscape(row[column]||"");}).join(",");
+  return header+"\n"+body+"\n";
+}
+
 function splitCsvHeader(text){
   const clean=String(text||"").replace(/^\uFEFF/,"");
   const newline=clean.indexOf("\n");
@@ -590,7 +678,12 @@ $("downloadCsv").onclick=async function(){
           convertedGranules++;
         }
       }catch(e){
-        failures.push(label+": "+(e&&e.message?e.message:String(e)));
+        const errorText=e&&e.message?e.message:String(e);
+        failures.push(label+": "+errorText);
+        try{
+          queueCsv(localFailureCsv(granule,errorText));
+          representedGranules++;
+        }catch(_){}
       }finally{
         completed++;
         updateProgress();
