@@ -116,25 +116,58 @@ class CMRClient:
 
     async def collections(
         self,
-        component: str,
+        component: Optional[str] = None,
+        collection_name: Optional[str] = None,
         bbox: Optional[str] = None,
         platforms: Optional[list[str]] = None,
         instruments: Optional[list[str]] = None,
     ) -> dict[str, Any]:
-        params: list[tuple[str, str]] = [
-            ("keyword", component.strip()),
-            ("has_granules", "true"),
-        ]
+        component = (component or "").strip()
+        collection_name = (collection_name or "").strip()
+
+        if not component and not collection_name:
+            raise ValueError("Provide a component/variable or a collection name.")
+
+        common: list[tuple[str, str]] = [("has_granules", "true")]
+        if component:
+            common.append(("keyword", component))
         if bbox:
-            params.append(("bounding_box", bbox))
+            common.append(("bounding_box", bbox))
         for p in platforms or []:
             if p.strip():
-                params.append(("platform[]", p.strip()))
+                common.append(("platform[]", p.strip()))
         for i in instruments or []:
             if i.strip():
-                params.append(("instrument[]", i.strip()))
+                common.append(("instrument[]", i.strip()))
 
-        hits, raw_items = await self._all_pages("collections.umm_json", params)
+        searches: list[list[tuple[str, str]]] = []
+        if collection_name:
+            pattern = collection_name if "*" in collection_name or "?" in collection_name else f"*{collection_name}*"
+            searches.append(
+                common
+                + [
+                    ("entry_title[]", pattern),
+                    ("options[entry_title][pattern]", "true"),
+                    ("options[entry_title][ignore_case]", "true"),
+                ]
+            )
+            searches.append(
+                common
+                + [
+                    ("short_name[]", pattern),
+                    ("options[short_name][pattern]", "true"),
+                    ("options[short_name][ignore_case]", "true"),
+                ]
+            )
+        else:
+            searches.append(common)
+
+        raw_items: list[dict[str, Any]] = []
+        reported_hits = 0
+        for params in searches:
+            hits, batch = await self._all_pages("collections.umm_json", params)
+            reported_hits += hits
+            raw_items.extend(batch)
 
         items: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -149,13 +182,15 @@ class CMRClient:
                 seen.add(concept_id)
 
             begin, end = self._collection_time(umm)
+            title = umm.get("EntryTitle") or umm.get("ShortName")
+            short_name = umm.get("ShortName")
             items.append(
                 {
                     "concept_id": meta.get("concept-id"),
                     "provider": meta.get("provider-id"),
-                    "short_name": umm.get("ShortName"),
+                    "short_name": short_name,
                     "version": umm.get("Version"),
-                    "title": umm.get("EntryTitle") or umm.get("ShortName"),
+                    "title": title,
                     "abstract": umm.get("Abstract") or umm.get("Purpose") or "",
                     "platforms": self._platforms(umm),
                     "instruments": self._instruments(umm),
@@ -166,6 +201,34 @@ class CMRClient:
                 }
             )
 
+        if collection_name:
+            target = collection_name.casefold()
+
+            def collection_rank(item: dict[str, Any]) -> tuple[int, str, str]:
+                short_name = str(item.get("short_name") or "")
+                title = str(item.get("title") or "")
+                short_cf = short_name.casefold()
+                title_cf = title.casefold()
+
+                if short_cf == target:
+                    priority = 0
+                elif title_cf == target:
+                    priority = 1
+                elif short_cf.startswith(target):
+                    priority = 2
+                elif title_cf.startswith(target):
+                    priority = 3
+                elif target in short_cf:
+                    priority = 4
+                elif target in title_cf:
+                    priority = 5
+                else:
+                    priority = 6
+
+                return (priority, short_cf, title_cf)
+
+            items.sort(key=collection_rank)
+
         satellite_groups: dict[str, int] = {}
         for item in items:
             platforms_for_item = item.get("platforms") or ["Unspecified platform"]
@@ -173,10 +236,14 @@ class CMRClient:
                 satellite_groups[platform] = satellite_groups.get(platform, 0) + 1
 
         return {
-            "hits": hits,
+            "hits": len(items),
+            "reported_hits_before_deduplication": reported_hits,
             "retrieved": len(items),
             "items": items,
             "satellite_groups": dict(sorted(satellite_groups.items(), key=lambda x: x[0].lower())),
+            "search_mode": "collection_name" if collection_name and not component else ("component_and_collection_name" if collection_name else "component"),
+            "collection_name_query": collection_name or None,
+            "component_query": component or None,
         }
 
     @staticmethod
