@@ -29,7 +29,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.7.0",
+    version="1.8.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -88,7 +88,11 @@ class GranuleRequest(BaseModel):
 class DownloadRequest(GranuleRequest):
     component: str = ""
     collection_search_name: Optional[str] = None
+    collection_short_name: Optional[str] = None
     collection_title: Optional[str] = None
+    collection_version: Optional[str] = None
+    collection_provider: Optional[str] = None
+    collection_processing_level: Optional[str] = None
     variable_filters: list[str] = []
     output_name: Optional[str] = None
     max_rows_per_variable: int = 0
@@ -272,16 +276,44 @@ def _download_convert(
             try:
                 data, filename, final_url = _download_granule_bytes(session, url, idx)
 
+                component_names = [
+                    value.strip()
+                    for value in re.split(r"[;,\n\r]+", req.component or "")
+                    if value.strip()
+                ]
+                satellite_names = granule.get("platforms") or []
+                instrument_names = granule.get("instruments") or []
+
                 meta = {
                     "source": "NASA Earthdata",
+                    "source_agency": "NASA",
+                    "source_provider": req.collection_provider or "",
+                    "source_satellite": ";".join(satellite_names),
+                    "source_instrument": ";".join(instrument_names),
+                    "component_primary": component_names[0] if component_names else "",
+                    "component_names": ";".join(component_names),
+                    "component_count": len(component_names),
                     "component_query": req.component,
                     "collection_search_name": req.collection_search_name or "",
                     "collection_id": req.collection_id,
+                    "collection_short_name": req.collection_short_name or "",
                     "collection_title": req.collection_title or "",
+                    "collection_version": req.collection_version or "",
+                    "collection_provider": req.collection_provider or "",
+                    "collection_processing_level": req.collection_processing_level or "",
+                    "collection_segment_key": "|".join(
+                        value for value in [
+                            req.collection_short_name or "",
+                            req.collection_version or "",
+                            req.collection_id or "",
+                        ] if value
+                    ),
                     "granule_id": granule.get("concept_id") or "",
                     "granule_ur": granule.get("granule_ur") or "",
-                    "satellite_platform": ";".join(granule.get("platforms") or []),
-                    "instrument": ";".join(granule.get("instruments") or []),
+                    "granule_production_date_utc": granule.get("production_date") or "",
+                    "granule_size_mb": granule.get("size_mb") or "",
+                    "satellite_platform": ";".join(satellite_names),
+                    "instrument": ";".join(instrument_names),
                     "granule_begin": granule.get("begin") or "",
                     "granule_end": granule.get("end") or "",
                     "original_file": filename,
@@ -409,7 +441,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.7.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.8.0"}
 
 
 @app.post("/api/token/validate")

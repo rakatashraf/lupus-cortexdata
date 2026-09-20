@@ -145,5 +145,62 @@ jobs:
           assert "custom_b" not in mixed.columns
           assert list(mixed.columns) == list(combine_frames([mixed_b]).columns)
 
+          required = {
+              "component_segment",
+              "collection_segment_key",
+              "collection_short_name",
+              "collection_version",
+              "source_satellite",
+              "data_timestamp_utc",
+              "data_date_utc",
+              "data_time_utc",
+              "data_cycle",
+              "latitude",
+              "longitude",
+              "coordinate_status",
+              "variable",
+              "value",
+              "unit",
+              "weight",
+              "weight_unit",
+              "weight_variable",
+          }
+          assert required.issubset(set(mixed.columns))
+
+          weighted = pd.DataFrame([
+              {
+                  "component_names":"NO2",
+                  "component_primary":"NO2",
+                  "collection_id":"C1",
+                  "collection_short_name":"OMNO2d",
+                  "collection_version":"004",
+                  "granule_id":"G1",
+                  "data_timestamp_utc":"2025-01-01T00:00:00Z",
+                  "latitude":23.75,
+                  "longitude":90.375,
+                  "variable":"ColumnAmountNO2Trop",
+                  "value":2.0,
+                  "unit":"molec/cm2",
+              },
+              {
+                  "component_names":"NO2",
+                  "component_primary":"NO2",
+                  "collection_id":"C1",
+                  "collection_short_name":"OMNO2d",
+                  "collection_version":"004",
+                  "granule_id":"G1",
+                  "data_timestamp_utc":"2025-01-01T00:00:00Z",
+                  "latitude":23.75,
+                  "longitude":90.375,
+                  "variable":"Weight",
+                  "value":0.75,
+                  "unit":"1",
+              },
+          ])
+          weighted_out = combine_frames([weighted])
+          science = weighted_out[weighted_out["variable"] == "ColumnAmountNO2Trop"].iloc[0]
+          assert np.isclose(float(science["weight"]), 0.75)
+          assert science["weight_variable"] == "Weight"
+
           print("IN_MEMORY_CONVERSION_TESTS_OK")
           PY

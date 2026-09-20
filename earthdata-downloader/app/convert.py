@@ -1208,26 +1208,136 @@ def convert_bytes(
     )
 
 
+def _attach_weight_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["weight"] = np.nan
+    out["weight_unit"] = ""
+    out["weight_variable"] = ""
+
+    if "variable" not in out.columns or "value" not in out.columns:
+        return out
+
+    variable_text = out["variable"].astype(str)
+    normalized = (
+        variable_text.str.lower()
+        .str.replace("\\", "/", regex=False)
+        .str.replace(":", "/", regex=False)
+    )
+    base = normalized.str.split("/").str[-1].str.strip()
+
+    exact = base.isin({"weight", "weights"})
+    broad = base.str.contains("weight", na=False)
+    weight_mask = exact | broad
+    if not weight_mask.any():
+        return out
+
+    out.loc[weight_mask, "weight"] = pd.to_numeric(
+        out.loc[weight_mask, "value"], errors="coerce"
+    )
+    if "unit" in out.columns:
+        out.loc[weight_mask, "weight_unit"] = out.loc[weight_mask, "unit"].astype(str)
+    out.loc[weight_mask, "weight_variable"] = variable_text.loc[weight_mask]
+
+    keys = [
+        key for key in (
+            "collection_id",
+            "granule_id",
+            "data_timestamp_utc",
+            "latitude",
+            "longitude",
+        )
+        if key in out.columns
+    ]
+
+    if "latitude" in keys and "longitude" in keys:
+        weights = out.loc[
+            weight_mask,
+            keys + ["weight", "weight_unit", "weight_variable"],
+        ].copy()
+        weights["_priority"] = np.where(
+            base.loc[weight_mask].isin({"weight", "weights"}), 0, 1
+        )
+        weights = (
+            weights.sort_values("_priority")
+            .drop_duplicates(keys, keep="first")
+            .drop(columns=["_priority"])
+        )
+
+        non_weight = out.loc[~weight_mask].copy()
+        if not non_weight.empty:
+            non_weight = non_weight.drop(
+                columns=["weight", "weight_unit", "weight_variable"],
+                errors="ignore",
+            ).merge(weights, on=keys, how="left")
+            weight_rows = out.loc[weight_mask].copy()
+            out = pd.concat([non_weight, weight_rows], ignore_index=True, sort=False)
+
+    return out
+
+
 def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
 
     df = pd.concat(frames, ignore_index=True, sort=False)
     df = annotate_temporal_metadata(df)
+    df = _attach_weight_columns(df)
+
+    component_names = (
+        df["component_names"].astype(str)
+        if "component_names" in df.columns
+        else df.get("component_query", pd.Series("", index=df.index)).astype(str)
+    )
+    if "component_primary" not in df.columns:
+        df["component_primary"] = component_names.str.split(";").str[0].str.strip()
+    if "component_names" not in df.columns:
+        df["component_names"] = component_names
+
+    df["component_segment"] = df["component_primary"].fillna("").astype(str)
+    if "collection_segment_key" not in df.columns:
+        short_name = df.get("collection_short_name", pd.Series("", index=df.index)).fillna("").astype(str)
+        version = df.get("collection_version", pd.Series("", index=df.index)).fillna("").astype(str)
+        concept = df.get("collection_id", pd.Series("", index=df.index)).fillna("").astype(str)
+        df["collection_segment_key"] = (
+            short_name + "|" + version + "|" + concept
+        ).str.strip("|")
+
+    lat = pd.to_numeric(df.get("latitude", pd.Series(np.nan, index=df.index)), errors="coerce")
+    lon = pd.to_numeric(df.get("longitude", pd.Series(np.nan, index=df.index)), errors="coerce")
+    geolocated = lat.notna() & lon.notna()
+    df["coordinate_status"] = np.where(geolocated, "geolocated", "not_available_in_source_row")
+    df["coordinate_crs"] = np.where(geolocated, "EPSG:4326", "")
+
+    timestamp = df.get("data_timestamp_utc", pd.Series("", index=df.index)).fillna("").astype(str)
+    df["timestamp_status"] = np.where(timestamp.str.len() > 0, "available", "not_available_in_source_row")
 
     preferred = [
-        "source",
-        "component_query",
-        "collection_search_name",
+        "component_segment",
+        "component_primary",
+        "component_names",
+        "component_count",
+        "collection_segment_key",
         "collection_id",
+        "collection_short_name",
         "collection_title",
+        "collection_version",
+        "collection_provider",
+        "collection_processing_level",
         "granule_id",
         "granule_ur",
+        "granule_production_date_utc",
+        "granule_size_mb",
+        "source",
+        "source_agency",
+        "source_provider",
+        "source_satellite",
+        "source_instrument",
         "satellite_platform",
         "instrument",
         "data_timestamp_utc",
         "data_date_utc",
         "data_time_utc",
+        "timestamp_status",
         "timestamp_source",
         "timestamp_timezone",
         "granule_start_utc",
@@ -1237,16 +1347,23 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "data_cycle_interval_seconds",
         "data_cycle_detail",
         "data_cycle_basis",
-        "observation_time",
-        "granule_begin",
-        "granule_end",
         "latitude",
         "longitude",
+        "coordinate_status",
+        "coordinate_crs",
         "variable",
         "value",
         "unit",
+        "weight",
+        "weight_unit",
+        "weight_variable",
         "hdf_grid",
         "spatial_resolution_degrees",
+        "observation_time",
+        "granule_begin",
+        "granule_end",
+        "component_query",
+        "collection_search_name",
         "original_file",
         "download_url",
     ]
@@ -1272,10 +1389,26 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     else:
         df["extra_attributes_json"] = ""
 
-    # A fixed export schema lets rows from completely different NASA
-    # collections/components be merged into one CSV safely.
     for column in preferred:
         if column not in df.columns:
             df[column] = ""
 
-    return df[preferred + ["extra_attributes_json"]]
+    # Stable segmentation makes the file directly usable for grouping/model work.
+    sort_cols = [
+        column for column in (
+            "component_segment",
+            "collection_segment_key",
+            "data_timestamp_utc",
+            "latitude",
+            "longitude",
+            "variable",
+        )
+        if column in df.columns
+    ]
+    if sort_cols:
+        try:
+            df = df.sort_values(sort_cols, kind="stable", na_position="last")
+        except Exception:
+            pass
+
+    return df[preferred + ["extra_attributes_json"]].reset_index(drop=True)

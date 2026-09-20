@@ -113,8 +113,8 @@
           <span>Granule discovery runs across all selected collections, and CSV creation launches every selected granule conversion independently before merging the normalized rows into one CSV.</span>
         </div>
         <div class="info-box">
-          <strong>CSV time metadata is explicit</strong>
-          <span>Every output includes UTC data timestamp, timestamp source, granule start/end, retrieval time, data cycle, cycle interval in seconds, and a readable cycle detail such as “Hourly · this row: 14:00:00 UTC”.</span>
+          <strong>CSV schema is model-ready and explicitly segmented</strong>
+          <span>Rows include component segment, collection ID/short name/title/version/provider, granule identity, satellite/instrument, UTC timestamp + date + time, data cycle, latitude/longitude, variable, value, unit, weight fields when supplied by the product, and preserved extra product attributes.</span>
         </div>
         <div class="grid two">
           <label>CSV file name<input id="outputName" placeholder="optional-output-name.csv"></label>

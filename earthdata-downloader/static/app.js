@@ -377,6 +377,9 @@ $("findGranules").onclick=async function(){
         item._collection_id=collection.concept_id;
         item._collection_title=collection.title||collection.short_name||collection.concept_id;
         item._collection_short_name=collection.short_name||"";
+        item._collection_version=collection.version||"";
+        item._collection_provider=collection.provider||"";
+        item._collection_processing_level=collection.processing_level||"";
         item._matched_components=(collection.matched_components&&collection.matched_components.length)
           ?collection.matched_components.slice():componentValues().slice();
         item._granule_cycle=cycle;
@@ -545,7 +548,11 @@ $("downloadCsv").onclick=async function(){
           component:(granule._matched_components&&granule._matched_components.length)
             ?granule._matched_components.join("; "):componentValues().join("; "),
           collection_id:granule._collection_id||"",
+          collection_short_name:granule._collection_short_name||"",
           collection_title:granule._collection_title||granule._collection_short_name||"",
+          collection_version:granule._collection_version||"",
+          collection_provider:granule._collection_provider||"",
+          collection_processing_level:granule._collection_processing_level||"",
           granule_id:granule.concept_id,
           granule_ur:granule.granule_ur||null,
           begin:granule.begin||null,
