@@ -101,10 +101,14 @@
           <strong>All matching granules are collected</strong>
           <span>The downloader reads every CMR result page for the selected collection, boundary box, and date range.</span>
         </div>
+        <div class="info-box">
+          <strong>CSV time metadata is explicit</strong>
+          <span>Every output includes UTC data timestamp, timestamp source, granule start/end, retrieval time, data cycle, cycle interval in seconds, and a readable cycle detail such as “Hourly · this row: 14:00:00 UTC”.</span>
+        </div>
         <div class="grid two">
           <label>CSV file name<input id="outputName" placeholder="optional-output-name.csv"></label>
           <div class="action-box">
-            <button id="findGranules" class="secondary">Find granules</button>
+            <button id="findGranules" class="secondary">Find all granules</button>
             <button id="downloadCsv" class="primary" disabled>Download combined CSV</button>
           </div>
         </div>
