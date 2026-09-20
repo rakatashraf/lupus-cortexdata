@@ -94,6 +94,10 @@ class DownloadRequest(GranuleRequest):
 
 class SingleGranuleDownloadRequest(DownloadRequest):
     granule_id: str
+    cycle_label: Optional[str] = None
+    cycle_interval_seconds: Optional[float] = None
+    cycle_detail: Optional[str] = None
+    cycle_basis: Optional[str] = None
 
 
 class ExternalRequest(BaseModel):
@@ -209,7 +213,11 @@ def _download_granule_bytes(
     return data, filename, str(final_url)
 
 
-def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes, dict]:
+def _download_convert(
+    req: DownloadRequest,
+    granules: list[dict],
+    cycle_override: Optional[dict] = None,
+) -> tuple[bytes, dict]:
     frames = []
     errors: list[dict[str, str]] = []
     session = _session(req.token)
@@ -277,6 +285,36 @@ def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes
             })
 
     combined = combine_frames(frames)
+
+    if cycle_override and not combined.empty:
+        label = str(cycle_override.get("label") or "").strip()
+        detail = str(cycle_override.get("detail") or "").strip()
+        basis = str(cycle_override.get("basis") or "Granule start timestamps").strip()
+        interval = cycle_override.get("interval_seconds")
+
+        if label:
+            combined["data_cycle"] = label
+        if interval is not None:
+            try:
+                combined["data_cycle_interval_seconds"] = float(interval)
+            except Exception:
+                pass
+        if basis:
+            combined["data_cycle_basis"] = basis
+        if detail:
+            if "data_time_utc" in combined.columns and (
+                label == "Hourly"
+                or label.endswith("-hourly")
+                or label.endswith("-minute")
+                or label == "Sub-minute"
+            ):
+                combined["data_cycle_detail"] = [
+                    f"{detail} · this row: {value} UTC" if value else detail
+                    for value in combined["data_time_utc"].astype(str)
+                ]
+            else:
+                combined["data_cycle_detail"] = detail
+
     if combined.empty:
         details = "; ".join(
             f"{item['granule']}: {item['error']}" for item in errors[:3]
@@ -445,7 +483,18 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "The selected granule could not be found in NASA CMR or is not marked downloadable.",
             )
 
-        content, report = await asyncio.to_thread(_download_convert, req, [granule])
+        cycle_override = {
+            "label": req.cycle_label,
+            "interval_seconds": req.cycle_interval_seconds,
+            "detail": req.cycle_detail,
+            "basis": req.cycle_basis,
+        }
+        content, report = await asyncio.to_thread(
+            _download_convert,
+            req,
+            [granule],
+            cycle_override,
+        )
         granule_label = granule.get("granule_ur") or req.granule_id
         name = _safe_csv(
             None,
