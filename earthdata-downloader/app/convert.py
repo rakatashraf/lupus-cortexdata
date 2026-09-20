@@ -6,6 +6,7 @@ import math
 import shutil
 import tempfile
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -57,6 +58,199 @@ def _normalize_time(df: pd.DataFrame) -> pd.DataFrame:
     if time_col and time_col != "observation_time":
         df = df.rename(columns={time_col: "observation_time"})
     return df
+
+
+def _utc_series(values: pd.Series) -> pd.Series:
+    return pd.to_datetime(values, errors="coerce", utc=True)
+
+
+def _iso_utc(series: pd.Series) -> pd.Series:
+    parsed = _utc_series(series)
+    return parsed.dt.strftime("%Y-%m-%dT%H:%M:%SZ").where(parsed.notna(), "")
+
+
+def _cycle_from_seconds(seconds: float | None) -> tuple[str, str]:
+    if seconds is None or not np.isfinite(seconds) or seconds <= 0:
+        return "Single/unknown", "Cadence cannot be inferred from a single usable timestamp."
+
+    s = float(seconds)
+    if s < 60:
+        rounded = max(1, int(round(s)))
+        return "Sub-minute", f"Every {rounded} second(s)"
+    if s < 45 * 60:
+        minutes = max(1, int(round(s / 60)))
+        return f"{minutes}-minute", f"Every {minutes} minute(s)"
+    if 45 * 60 <= s <= 90 * 60:
+        return "Hourly", "Every 1 hour"
+    if s < 18 * 3600:
+        hours = max(2, int(round(s / 3600)))
+        return f"{hours}-hourly", f"Every {hours} hours"
+    if 18 * 3600 <= s <= 36 * 3600:
+        return "Daily", "Every 1 day"
+    if s < 25 * 86400:
+        days = max(2, int(round(s / 86400)))
+        return f"{days}-day", f"Every {days} days"
+    if 25 * 86400 <= s <= 35 * 86400:
+        return "Monthly", "Approximately every 1 month"
+    if 35 * 86400 < s < 330 * 86400:
+        days = max(1, int(round(s / 86400)))
+        return f"{days}-day", f"Approximately every {days} days"
+    if 330 * 86400 <= s <= 400 * 86400:
+        return "Yearly", "Approximately every 1 year"
+
+    days = max(1, int(round(s / 86400)))
+    return "Irregular/long-cycle", f"Median interval is about {days} days"
+
+
+def _infer_cycle_for_group(timestamps: pd.Series) -> tuple[str, float | None, str]:
+    parsed = _utc_series(timestamps).dropna().drop_duplicates().sort_values()
+    if len(parsed) < 2:
+        return "Single/unknown", None, "Single usable timestamp; cadence unavailable"
+
+    diffs = parsed.diff().dropna().dt.total_seconds()
+    diffs = diffs[diffs > 0]
+    if diffs.empty:
+        return "Single/unknown", None, "No positive timestamp interval available"
+
+    median_seconds = float(diffs.median())
+    label, description = _cycle_from_seconds(median_seconds)
+
+    if len(diffs) >= 3:
+        spread = float((diffs.max() - diffs.min()) / median_seconds) if median_seconds else 0.0
+        if spread > 0.35 and label not in ("Monthly", "Yearly"):
+            return "Irregular", median_seconds, f"Irregular cadence; median interval {description.lower()}"
+
+    return label, median_seconds, description
+
+
+def _row_cycle_detail(timestamp: pd.Timestamp | None, cycle: str, base_detail: str) -> str:
+    if timestamp is None or pd.isna(timestamp):
+        return base_detail
+    ts = timestamp.tz_convert("UTC") if timestamp.tzinfo else timestamp.tz_localize("UTC")
+    time_text = ts.strftime("%H:%M:%S UTC")
+
+    if cycle == "Hourly" or cycle.endswith("-hourly"):
+        return f"{base_detail} · this row: {time_text}"
+    if cycle == "Daily" or cycle.endswith("-day"):
+        return f"{base_detail} · observation time: {time_text}"
+    if cycle == "Monthly":
+        return f"{base_detail} · observation position: day {ts.day}, {time_text}"
+    if cycle == "Yearly":
+        return f"{base_detail} · observation position: {ts.strftime('%m-%d')} {time_text}"
+    if cycle.endswith("-minute") or cycle == "Sub-minute":
+        return f"{base_detail} · this row: {time_text}"
+    return base_detail
+
+
+def annotate_temporal_metadata(
+    df: pd.DataFrame,
+    explicit_cycle: str | None = None,
+    explicit_cycle_detail: str | None = None,
+    timestamp_source_override: str | None = None,
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    out = df.copy()
+    retrieved_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if "granule_begin" in out.columns:
+        out["granule_start_utc"] = _iso_utc(out["granule_begin"])
+    elif "granule_start_utc" not in out.columns:
+        out["granule_start_utc"] = ""
+
+    if "granule_end" in out.columns:
+        out["granule_end_utc"] = _iso_utc(out["granule_end"])
+    elif "granule_end_utc" not in out.columns:
+        out["granule_end_utc"] = ""
+
+    observation = _utc_series(out["observation_time"]) if "observation_time" in out.columns else pd.Series(pd.NaT, index=out.index, dtype="datetime64[ns, UTC]")
+    granule_start = _utc_series(out["granule_start_utc"]) if "granule_start_utc" in out.columns else pd.Series(pd.NaT, index=out.index, dtype="datetime64[ns, UTC]")
+    granule_end = _utc_series(out["granule_end_utc"]) if "granule_end_utc" in out.columns else pd.Series(pd.NaT, index=out.index, dtype="datetime64[ns, UTC]")
+
+    chosen = observation.copy()
+    source = pd.Series("observation_time", index=out.index, dtype="object")
+
+    missing = chosen.isna()
+    chosen.loc[missing] = granule_start.loc[missing]
+    source.loc[missing & granule_start.notna()] = "granule_begin"
+
+    still_missing = chosen.isna()
+    chosen.loc[still_missing] = granule_end.loc[still_missing]
+    source.loc[still_missing & granule_end.notna()] = "granule_end"
+
+    source.loc[chosen.isna()] = "unavailable"
+    if timestamp_source_override:
+        source.loc[chosen.notna()] = timestamp_source_override
+
+    out["data_timestamp_utc"] = chosen.dt.strftime("%Y-%m-%dT%H:%M:%SZ").where(chosen.notna(), "")
+    out["timestamp_source"] = source
+    out["timestamp_timezone"] = "UTC"
+    out["retrieved_at_utc"] = retrieved_at
+
+    group_cols = [col for col in ("collection_id", "source", "variable") if col in out.columns]
+    if not group_cols:
+        group_cols = ["variable"] if "variable" in out.columns else []
+
+    out["data_cycle"] = ""
+    out["data_cycle_interval_seconds"] = np.nan
+    out["data_cycle_detail"] = ""
+    out["data_cycle_basis"] = ""
+
+    if explicit_cycle:
+        cycle_label = explicit_cycle
+        detail = explicit_cycle_detail or explicit_cycle
+        interval_seconds = None
+        if explicit_cycle.lower() == "hourly":
+            interval_seconds = 3600.0
+        elif explicit_cycle.lower() == "daily":
+            interval_seconds = 86400.0
+        elif explicit_cycle.lower() == "monthly":
+            interval_seconds = 30 * 86400.0
+        elif explicit_cycle.lower() == "yearly":
+            interval_seconds = 365 * 86400.0
+
+        out["data_cycle"] = cycle_label
+        if interval_seconds is not None:
+            out["data_cycle_interval_seconds"] = interval_seconds
+        out["data_cycle_basis"] = "Explicit provider/product cadence"
+        out["data_cycle_detail"] = [
+            _row_cycle_detail(ts, cycle_label, detail)
+            for ts in chosen
+        ]
+        return out
+
+    if group_cols:
+        grouped = out.groupby(group_cols, dropna=False, sort=False)
+        for _, index_values in grouped.groups.items():
+            indexes = list(index_values)
+            cycle, seconds, detail = _infer_cycle_for_group(out.loc[indexes, "data_timestamp_utc"])
+            out.loc[indexes, "data_cycle"] = cycle
+            if seconds is not None:
+                out.loc[indexes, "data_cycle_interval_seconds"] = seconds
+            out.loc[indexes, "data_cycle_basis"] = "Inferred from unique data timestamps"
+            parsed = _utc_series(out.loc[indexes, "data_timestamp_utc"])
+            out.loc[indexes, "data_cycle_detail"] = [
+                _row_cycle_detail(ts, cycle, detail)
+                for ts in parsed
+            ]
+    else:
+        cycle, seconds, detail = _infer_cycle_for_group(out["data_timestamp_utc"])
+        out["data_cycle"] = cycle
+        if seconds is not None:
+            out["data_cycle_interval_seconds"] = seconds
+        out["data_cycle_basis"] = "Inferred from unique data timestamps"
+        out["data_cycle_detail"] = [
+            _row_cycle_detail(ts, cycle, detail)
+            for ts in chosen
+        ]
+
+    unavailable = out["data_timestamp_utc"].eq("")
+    out.loc[unavailable, "data_cycle"] = out.loc[unavailable, "data_cycle"].replace("", "Static/untimed")
+    out.loc[unavailable, "data_cycle_detail"] = out.loc[unavailable, "data_cycle_detail"].replace("", "No observation timestamp supplied by source")
+    out.loc[unavailable, "data_cycle_basis"] = out.loc[unavailable, "data_cycle_basis"].replace("", "Source contains no usable observation/granule timestamp")
+
+    return out
 
 
 def _apply_meta(df: pd.DataFrame, meta: dict[str, Any]) -> pd.DataFrame:
@@ -406,7 +600,10 @@ def convert_file(
 def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
+
     df = pd.concat(frames, ignore_index=True, sort=False)
+    df = annotate_temporal_metadata(df)
+
     preferred = [
         "source",
         "component_query",
@@ -416,9 +613,19 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "granule_ur",
         "satellite_platform",
         "instrument",
+        "data_timestamp_utc",
+        "timestamp_source",
+        "timestamp_timezone",
+        "granule_start_utc",
+        "granule_end_utc",
+        "retrieved_at_utc",
+        "data_cycle",
+        "data_cycle_interval_seconds",
+        "data_cycle_detail",
+        "data_cycle_basis",
+        "observation_time",
         "granule_begin",
         "granule_end",
-        "observation_time",
         "latitude",
         "longitude",
         "variable",
