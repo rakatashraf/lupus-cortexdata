@@ -265,6 +265,86 @@ class CMRClient:
 
         return hits, items
 
+    @staticmethod
+    def _granule_cycle_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+        timestamps: list[datetime] = []
+        for item in items:
+            value = item.get("begin")
+            if not value:
+                continue
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                timestamps.append(parsed.astimezone(timezone.utc))
+            except Exception:
+                continue
+
+        unique = sorted(set(timestamps))
+        if len(unique) < 2:
+            return {
+                "label": "Single/unknown",
+                "interval_seconds": None,
+                "detail": "Only one usable granule start timestamp is available, so granule cadence cannot be inferred.",
+                "basis": "Granule start timestamps",
+            }
+
+        diffs = [
+            (unique[i] - unique[i - 1]).total_seconds()
+            for i in range(1, len(unique))
+            if (unique[i] - unique[i - 1]).total_seconds() > 0
+        ]
+        if not diffs:
+            return {
+                "label": "Single/unknown",
+                "interval_seconds": None,
+                "detail": "No positive interval exists between granule start timestamps.",
+                "basis": "Granule start timestamps",
+            }
+
+        diffs.sort()
+        middle = len(diffs) // 2
+        median = diffs[middle] if len(diffs) % 2 else (diffs[middle - 1] + diffs[middle]) / 2
+
+        if median < 60:
+            label = "Sub-minute"
+            detail = f"About every {max(1, round(median))} second(s)"
+        elif median < 45 * 60:
+            minutes = max(1, round(median / 60))
+            label = f"{minutes}-minute"
+            detail = f"About every {minutes} minute(s)"
+        elif median <= 90 * 60:
+            label = "Hourly"
+            detail = "About every 1 hour"
+        elif median < 18 * 3600:
+            hours = max(2, round(median / 3600))
+            label = f"{hours}-hourly"
+            detail = f"About every {hours} hours"
+        elif median <= 36 * 3600:
+            label = "Daily"
+            detail = "About every 1 day"
+        elif median < 25 * 86400:
+            days = max(2, round(median / 86400))
+            label = f"{days}-day"
+            detail = f"About every {days} days"
+        elif median <= 35 * 86400:
+            label = "Monthly"
+            detail = "About every 1 month"
+        elif 330 * 86400 <= median <= 400 * 86400:
+            label = "Yearly"
+            detail = "About every 1 year"
+        else:
+            days = max(1, round(median / 86400))
+            label = "Irregular/long-cycle"
+            detail = f"Median granule interval is about {days} days"
+
+        return {
+            "label": label,
+            "interval_seconds": median,
+            "detail": detail,
+            "basis": "Granule start timestamps",
+        }
+
     async def granules(
         self,
         collection_id: str,
@@ -330,10 +410,13 @@ class CMRClient:
 
                 fallback_used = bool(items)
 
+        cycle_summary = self._granule_cycle_summary(items)
+
         return {
             "hits": hits,
             "retrieved": len(items),
             "items": items,
+            "granule_cycle": cycle_summary,
             "fallback_used": fallback_used,
             "fallback_date": fallback_date,
             "fallback_reason": (
