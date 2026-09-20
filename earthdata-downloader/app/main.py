@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
-import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -17,7 +17,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .cmr import CMRClient
-from .convert import combine_frames, convert_file
+from .convert import combine_frames, convert_bytes
 from .external import fetch as fetch_external
 from .external import resolve as resolve_external
 
@@ -27,7 +27,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.4.0",
+    version="1.5.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -151,79 +151,149 @@ def _filename(url: str, response: requests.Response, idx: int) -> str:
     return name[:180]
 
 
+def _download_granule_bytes(
+    session: requests.Session,
+    url: str,
+    idx: int,
+) -> tuple[bytes, str, str]:
+    max_mb = max(1, int(os.getenv("EARTHDATA_MAX_GRANULE_MB", "384")))
+    max_bytes = max_mb * 1024 * 1024
+
+    with session.get(url, stream=True, timeout=(25, 300), allow_redirects=True) as response:
+        response.raise_for_status()
+
+        final_url = response.url or url
+        filename = _filename(url, response, idx)
+        content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+
+        length = response.headers.get("content-length")
+        if length:
+            try:
+                if int(length) > max_bytes:
+                    raise ValueError(
+                        f"Granule {filename} is larger than the configured {max_mb} MB "
+                        "per-granule serverless memory limit."
+                    )
+            except ValueError as exc:
+                if "larger than" in str(exc):
+                    raise
+
+        body = bytearray()
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if not chunk:
+                continue
+            body.extend(chunk)
+            if len(body) > max_bytes:
+                raise ValueError(
+                    f"Granule {filename} exceeded the configured {max_mb} MB "
+                    "per-granule serverless memory limit while downloading."
+                )
+
+    data = bytes(body)
+    if not data:
+        raise ValueError(f"NASA returned an empty file for {filename}.")
+
+    sample = data[:2048].lstrip().lower()
+    if content_type in ("text/html", "application/xhtml+xml") or sample.startswith((b"<!doctype html", b"<html")):
+        raise ValueError(
+            "NASA download URL returned an HTML page instead of science data. "
+            "The Earthdata token may not be authorized for this DAAC/product, "
+            "or this URL is not a direct data link."
+        )
+
+    return data, filename, str(final_url)
+
+
 def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes, dict]:
     frames = []
     errors: list[dict[str, str]] = []
     session = _session(req.token)
 
-    with tempfile.TemporaryDirectory(prefix="earthdata_") as td:
-        work = Path(td)
-        for idx, granule in enumerate(granules, 1):
-            urls = granule.get("download_urls") or []
-            if not urls and granule.get("primary_url"):
-                urls = [granule["primary_url"]]
-            if not urls:
-                errors.append({"granule": str(granule.get("granule_ur")), "error": "No downloadable URL in CMR metadata."})
-                continue
+    for idx, granule in enumerate(granules, 1):
+        urls = granule.get("download_urls") or []
+        if not urls and granule.get("primary_url"):
+            urls = [granule["primary_url"]]
 
-            success = False
-            last_error = ""
-            for url in urls:
-                try:
-                    with session.get(url, stream=True, timeout=(25, 240), allow_redirects=True) as response:
-                        response.raise_for_status()
-                        path = work / _filename(url, response, idx)
-                        with path.open("wb") as handle:
-                            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                                if chunk:
-                                    handle.write(chunk)
+        if not urls:
+            errors.append({
+                "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
+                "error": "No downloadable URL is present in NASA CMR metadata.",
+            })
+            continue
 
-                    meta = {
-                        "source": "NASA Earthdata",
-                        "component_query": req.component,
-                        "collection_search_name": req.collection_search_name or "",
-                        "collection_id": req.collection_id,
-                        "collection_title": req.collection_title or "",
-                        "granule_id": granule.get("concept_id") or "",
-                        "granule_ur": granule.get("granule_ur") or "",
-                        "satellite_platform": ";".join(granule.get("platforms") or []),
-                        "instrument": ";".join(granule.get("instruments") or []),
-                        "granule_begin": granule.get("begin") or "",
-                        "granule_end": granule.get("end") or "",
-                        "original_file": path.name,
-                        "download_url": url,
-                    }
-                    converted = convert_file(
-                        path,
-                        meta=meta,
-                        filters=req.variable_filters,
-                        bbox=req.bbox.dict4(),
-                        max_rows=max(0, int(req.max_rows_per_variable)),
+        success = False
+        url_errors: list[str] = []
+
+        for url in urls:
+            try:
+                data, filename, final_url = _download_granule_bytes(session, url, idx)
+
+                meta = {
+                    "source": "NASA Earthdata",
+                    "component_query": req.component,
+                    "collection_search_name": req.collection_search_name or "",
+                    "collection_id": req.collection_id,
+                    "collection_title": req.collection_title or "",
+                    "granule_id": granule.get("concept_id") or "",
+                    "granule_ur": granule.get("granule_ur") or "",
+                    "satellite_platform": ";".join(granule.get("platforms") or []),
+                    "instrument": ";".join(granule.get("instruments") or []),
+                    "granule_begin": granule.get("begin") or "",
+                    "granule_end": granule.get("end") or "",
+                    "original_file": filename,
+                    "download_url": final_url,
+                }
+
+                converted = convert_bytes(
+                    data,
+                    filename=filename,
+                    meta=meta,
+                    filters=req.variable_filters,
+                    bbox=req.bbox.dict4(),
+                    max_rows=max(0, int(req.max_rows_per_variable)),
+                )
+
+                if not converted:
+                    raise ValueError(
+                        "The file was readable, but no matching data rows remained after "
+                        "variable/bounding-box filtering."
                     )
-                    frames.extend(converted)
-                    success = True
-                    break
-                except Exception as exc:
-                    last_error = str(exc)
 
-            if not success:
-                errors.append({"granule": str(granule.get("granule_ur")), "error": last_error or "Download/conversion failed."})
+                frames.extend(converted)
+                success = True
+                break
+            except Exception as exc:
+                url_errors.append(str(exc))
+
+        if not success:
+            errors.append({
+                "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
+                "error": " | ".join(url_errors[:3]) or "Download/conversion failed.",
+            })
 
     combined = combine_frames(frames)
     if combined.empty:
-        details = "; ".join(x["error"] for x in errors[:3])
-        raise ValueError("NASA returned granules, but none could be converted to CSV. " + details)
+        details = "; ".join(
+            f"{item['granule']}: {item['error']}" for item in errors[:3]
+        )
+        if len(errors) > 3:
+            details += f"; plus {len(errors) - 3} more failed granule(s)"
+        raise ValueError(
+            "NASA returned granules, but none could be converted to CSV. " + details
+        )
 
-    return combined.to_csv(index=False).encode("utf-8"), {
+    csv_bytes = combined.to_csv(index=False).encode("utf-8")
+    return csv_bytes, {
         "rows": len(combined),
         "converted_frames": len(frames),
         "errors": errors,
+        "csv_bytes": len(csv_bytes),
     }
 
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.4.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.5.0"}
 
 
 @app.post("/api/token/validate")
@@ -310,6 +380,7 @@ async def download_nasa(req: DownloadRequest):
                 "X-Earthdata-Rows": str(report["rows"]),
                 "X-Earthdata-Granules": str(len(granules)),
                 "X-Earthdata-Timezone": "UTC",
+                "X-Earthdata-Conversion-Errors": str(len(report["errors"])),
             },
         )
     except HTTPException:
