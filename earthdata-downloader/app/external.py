@@ -6,6 +6,8 @@ from typing import Any
 import pandas as pd
 import requests
 
+from .convert import annotate_temporal_metadata
+
 
 WEATHER_MAP = {
     "temperature": "temperature_2m",
@@ -253,9 +255,26 @@ def fetch(
     grid_points_per_axis: int = 3,
 ) -> pd.DataFrame:
     if provider_id == "open_meteo_weather":
-        return _weather(component, bbox, start, end, grid_points_per_axis)
+        df = _weather(component, bbox, start, end, grid_points_per_axis)
+        return annotate_temporal_metadata(
+            df,
+            explicit_cycle="Hourly",
+            explicit_cycle_detail="Every 1 hour (UTC)",
+            timestamp_source_override="provider_observation_time",
+        )
     if provider_id == "open_meteo_air":
-        return _air(component, bbox, start, end, grid_points_per_axis)
+        df = _air(component, bbox, start, end, grid_points_per_axis)
+        return annotate_temporal_metadata(
+            df,
+            explicit_cycle="Hourly",
+            explicit_cycle_detail="Every 1 hour (UTC)",
+            timestamp_source_override="provider_observation_time",
+        )
     if provider_id == "openstreetmap":
-        return _osm(component, bbox)
+        df = _osm(component, bbox)
+        return annotate_temporal_metadata(
+            df,
+            explicit_cycle="Static/snapshot",
+            explicit_cycle_detail="Static geospatial snapshot; no observation cycle supplied by source",
+        )
     raise ValueError(f"Unknown external provider: {provider_id}")
