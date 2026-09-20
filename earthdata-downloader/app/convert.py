@@ -184,6 +184,8 @@ def annotate_temporal_metadata(
         source.loc[chosen.notna()] = timestamp_source_override
 
     out["data_timestamp_utc"] = chosen.dt.strftime("%Y-%m-%dT%H:%M:%SZ").where(chosen.notna(), "")
+    out["data_date_utc"] = chosen.dt.strftime("%Y-%m-%d").where(chosen.notna(), "")
+    out["data_time_utc"] = chosen.dt.strftime("%H:%M:%S").where(chosen.notna(), "")
     out["timestamp_source"] = source
     out["timestamp_timezone"] = "UTC"
     out["retrieved_at_utc"] = retrieved_at
@@ -614,6 +616,8 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "satellite_platform",
         "instrument",
         "data_timestamp_utc",
+        "data_date_utc",
+        "data_time_utc",
         "timestamp_source",
         "timestamp_timezone",
         "granule_start_utc",
