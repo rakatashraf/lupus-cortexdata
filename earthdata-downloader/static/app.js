@@ -71,12 +71,11 @@ $("searchCollections").onclick=async function(){
     validateInputs(true);button.disabled=true;button.textContent="Searching NASA…";
     const body={
       token:$("token").value.trim(),component:$("component").value.trim(),bbox:bbox(),
-      platforms:csvList($("platformFilter").value),instruments:csvList($("instrumentFilter").value),
-      page_size:Number($("collectionLimit").value)||40
+      platforms:csvList($("platformFilter").value),instruments:csvList($("instrumentFilter").value)
     };
     const data=await api("/api/collections/search",body,false);
     const items=(data.nasa&&data.nasa.items)||[];
-    $("collectionCount").textContent=items.length+" shown · "+((data.nasa&&data.nasa.hits)!=null?data.nasa.hits:items.length)+" matches";
+    $("collectionCount").textContent=items.length+" collections loaded · "+((data.nasa&&data.nasa.hits)!=null?data.nasa.hits:items.length)+" CMR matches";
     renderCollections(items);$("collectionPanel").classList.remove("hidden");$("collectionPanel").scrollIntoView({behavior:"smooth",block:"start"});
     if(items.length){msg.className="message success";msg.textContent="NASA collections found. Select the product that matches your scientific use case.";}
     else{msg.className="message warn";msg.textContent="No NASA collection matched these filters. Public fallback sources are shown when a mapping exists.";}
@@ -87,20 +86,62 @@ $("searchCollections").onclick=async function(){
 
 function renderCollections(items){
   const root=$("collections");root.innerHTML="";
-  if(!items.length){root.innerHTML='<div class="card"><h3>No NASA collection matched</h3><p>Try a broader component term, remove the platform/instrument filter, or use a public fallback below.</p></div>';return;}
+  if(!items.length){
+    root.innerHTML='<div class="card"><h3>No NASA collection matched</h3><p>Try a broader component term, remove the platform/instrument filter, or use a public fallback below.</p></div>';
+    return;
+  }
+
+  const groups={};
   items.forEach(function(item){
-    const el=document.createElement("article");el.className="card";
-    const chips=(item.platforms||[]).concat(item.instruments||[]).map(function(x){return '<span class="chip">'+escapeHtml(x)+'</span>';}).join("");
-    const level=item.processing_level?'<span class="chip">Level '+escapeHtml(item.processing_level)+'</span>':"";
-    el.innerHTML='<h3>'+escapeHtml(item.title||item.short_name||item.concept_id)+'</h3><div class="meta">'+chips+level+'</div><p>'+escapeHtml(item.abstract||"No abstract supplied by CMR.")+'</p><p><strong>'+escapeHtml(item.short_name||"")+'</strong> '+(item.version?"· v"+escapeHtml(item.version):"")+'<br>'+escapeHtml(item.temporal_start||"")+(item.temporal_end?" → "+escapeHtml(item.temporal_end):"")+'</p><button class="secondary">Select collection</button>';
-    el.querySelector("button").onclick=function(){
-      selectedCollection=item;Array.from(root.children).forEach(function(x){x.classList.remove("selected");});el.classList.add("selected");
-      $("selectedCollection").innerHTML="<strong>"+escapeHtml(item.title||item.short_name||item.concept_id)+"</strong><br><span>"+escapeHtml(item.concept_id||"")+"</span>";
-      $("granulePanel").classList.remove("hidden");$("downloadCsv").disabled=true;currentGranules=[];$("granules").innerHTML="";
-      $("granuleMessage").textContent="Collection selected. Click Find granules.";$("granuleMessage").className="message success";
-      $("granulePanel").scrollIntoView({behavior:"smooth",block:"start"});
-    };
-    root.appendChild(el);
+    const platforms=(item.platforms&&item.platforms.length)?item.platforms:["Unspecified platform"];
+    platforms.forEach(function(platform){
+      if(!groups[platform]) groups[platform]=[];
+      if(!groups[platform].some(function(existing){return existing.concept_id===item.concept_id;})){
+        groups[platform].push(item);
+      }
+    });
+  });
+
+  Object.keys(groups).sort(function(a,b){return a.localeCompare(b);}).forEach(function(platform){
+    const section=document.createElement("section");
+    section.className="satellite-group";
+
+    const heading=document.createElement("div");
+    heading.className="satellite-heading";
+    heading.innerHTML="<div><span class='satellite-label'>SATELLITE / PLATFORM</span><h3>"+escapeHtml(platform)+"</h3></div><span class='badge'>"+groups[platform].length+" collection"+(groups[platform].length===1?"":"s")+"</span>";
+    section.appendChild(heading);
+
+    const cards=document.createElement("div");
+    cards.className="cards";
+
+    groups[platform].forEach(function(item){
+      const el=document.createElement("article");
+      el.className="card collection-card";
+      const chips=(item.instruments||[]).map(function(x){return '<span class="chip">'+escapeHtml(x)+'</span>';}).join("");
+      const otherPlatforms=(item.platforms||[]).filter(function(x){return x!==platform;}).map(function(x){return '<span class="chip">'+escapeHtml(x)+'</span>';}).join("");
+      const level=item.processing_level?'<span class="chip">Level '+escapeHtml(item.processing_level)+'</span>':"";
+
+      el.innerHTML='<h3>'+escapeHtml(item.title||item.short_name||item.concept_id)+'</h3><div class="meta"><span class="chip satellite-chip">'+escapeHtml(platform)+'</span>'+otherPlatforms+chips+level+'</div><p>'+escapeHtml(item.abstract||"No abstract supplied by CMR.")+'</p><p><strong>'+escapeHtml(item.short_name||"")+'</strong> '+(item.version?"· v"+escapeHtml(item.version):"")+'<br>'+escapeHtml(item.temporal_start||"")+(item.temporal_end?" → "+escapeHtml(item.temporal_end):"")+'</p><button class="secondary">Select collection</button>';
+
+      el.querySelector("button").onclick=function(){
+        selectedCollection=item;
+        root.querySelectorAll(".collection-card").forEach(function(x){x.classList.remove("selected");});
+        el.classList.add("selected");
+        $("selectedCollection").innerHTML="<strong>"+escapeHtml(item.title||item.short_name||item.concept_id)+"</strong><br><span>"+escapeHtml(item.concept_id||"")+"</span><br><span>Satellite group: "+escapeHtml(platform)+"</span>";
+        $("granulePanel").classList.remove("hidden");
+        $("downloadCsv").disabled=true;
+        currentGranules=[];
+        $("granules").innerHTML="";
+        $("granuleMessage").textContent="Collection selected. Click Find all granules.";
+        $("granuleMessage").className="message success";
+        $("granulePanel").scrollIntoView({behavior:"smooth",block:"start"});
+      };
+
+      cards.appendChild(el);
+    });
+
+    section.appendChild(cards);
+    root.appendChild(section);
   });
 }
 
@@ -111,15 +152,15 @@ $("findGranules").onclick=async function(){
     const body={
       token:$("token").value.trim(),collection_id:selectedCollection.concept_id,bbox:bbox(),date_range:dates(),
       platform:csvList($("platformFilter").value)[0]||null,instrument:csvList($("instrumentFilter").value)[0]||null,
-      max_granules:Number($("maxGranules").value)||5,fallback_latest:$("fallbackLatest").checked
+      fallback_latest:$("fallbackLatest").checked
     };
     const data=await api("/api/granules/search",body,false);currentGranules=data.items||[];renderGranules(currentGranules);
     if(data.fallback_used){msg.className="message warn";msg.textContent=data.fallback_reason||"Requested dates were empty, so the newest available granules were used.";}
-    else if(currentGranules.length){msg.className="message success";msg.textContent="Found "+currentGranules.length+" downloadable granule(s) in the requested period.";}
+    else if(currentGranules.length){msg.className="message success";msg.textContent="Loaded all "+currentGranules.length+" downloadable granule(s) available in the requested date range.";}
     else{msg.className="message error";msg.textContent="No downloadable granules were found.";}
     $("downloadCsv").disabled=!currentGranules.length;
   }catch(e){msg.className="message error";msg.textContent=e.message;}
-  finally{button.disabled=false;button.textContent="Find granules";}
+  finally{button.disabled=false;button.textContent="Find all granules";}
 };
 
 function renderGranules(items){
@@ -132,7 +173,7 @@ function renderGranules(items){
 }
 
 $("downloadCsv").onclick=async function(){
-  if(!selectedCollection||!currentGranules.length){toast("Find granules first.","error");return;}
+  if(!selectedCollection||!currentGranules.length){toast("Find all granules first.","error");return;}
   const button=$("downloadCsv");
   try{
     validateInputs(true);button.disabled=true;button.textContent="Downloading + converting…";
@@ -140,7 +181,7 @@ $("downloadCsv").onclick=async function(){
       token:$("token").value.trim(),component:$("component").value.trim(),collection_id:selectedCollection.concept_id,
       collection_title:selectedCollection.title||selectedCollection.short_name||null,bbox:bbox(),date_range:dates(),
       platform:csvList($("platformFilter").value)[0]||null,instrument:csvList($("instrumentFilter").value)[0]||null,
-      max_granules:Number($("maxGranules").value)||5,fallback_latest:$("fallbackLatest").checked,
+      fallback_latest:$("fallbackLatest").checked,
       variable_filters:csvList($("variableFilters").value),output_name:$("outputName").value.trim()||null,
       max_rows_per_variable:Number($("maxRows").value)||0
     };
