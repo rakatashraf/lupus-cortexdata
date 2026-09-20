@@ -82,3 +82,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .satellite-label{font-size:10px;letter-spacing:.14em;font-weight:900;color:#5f786b}
 .satellite-chip{background:#dff1e6;color:#155537}
 .collection-card{height:100%}
+
+.collection-search-box{margin:14px 0 18px;padding:14px;border:1px solid #dce9df;border-radius:12px;background:#f7faf8}
+.collection-search-box label{display:block;font-weight:700}
+.collection-search-box input{margin-top:7px;width:100%;font-size:15px}
+.collection-search-box .muted{margin:7px 0 0}
