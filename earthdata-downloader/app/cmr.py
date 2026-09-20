@@ -332,6 +332,25 @@ class CMRClient:
 
         return hits, items
 
+    async def granule_by_id(
+        self,
+        granule_id: str,
+        collection_id: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        params: list[tuple[str, str]] = [
+            ("concept_id[]", granule_id.strip()),
+            ("downloadable", "true"),
+            ("page_size", "1"),
+        ]
+        if collection_id:
+            params.append(("collection_concept_id", collection_id.strip()))
+
+        data = await self._get("granules.umm_json", params)
+        items = data.get("items") or []
+        if not items:
+            return None
+        return self._format_granule(items[0])
+
     @staticmethod
     def _granule_cycle_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         timestamps: list[datetime] = []
