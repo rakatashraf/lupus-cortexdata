@@ -27,7 +27,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.2.0",
+    version="1.3.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -220,7 +220,7 @@ def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.2.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.3.0"}
 
 
 @app.post("/api/token/validate")
@@ -299,6 +299,7 @@ async def download_nasa(req: DownloadRequest):
                 "X-Earthdata-Fallback-Used": str(bool(result.get("fallback_used"))).lower(),
                 "X-Earthdata-Rows": str(report["rows"]),
                 "X-Earthdata-Granules": str(len(granules)),
+                "X-Earthdata-Timezone": "UTC",
             },
         )
     except HTTPException:
@@ -328,6 +329,7 @@ async def download_external(provider_id: str, req: ExternalRequest):
             headers={
                 "Content-Disposition": f'attachment; filename="{name}"',
                 "X-Earthdata-Rows": str(len(df)),
+                "X-Earthdata-Timezone": "UTC",
             },
         )
     except HTTPException:
