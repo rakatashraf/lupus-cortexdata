@@ -78,6 +78,31 @@ jobs:
           frames = convert_bytes(zbuf.getvalue(), "sample.zip", meta, [], bbox, 0)
           assert frames and len(frames[0]) == 1
 
+          eosbuf = io.BytesIO()
+          with h5py.File(eosbuf, "w") as h:
+              fields = h.create_group("HDFEOS/GRIDS/ColumnAmountNO2/Data Fields")
+              d = fields.create_dataset(
+                  "ColumnAmountNO2Trop",
+                  data=np.ones((720, 1440), dtype="float32") * 2.5e15,
+              )
+              d.attrs["Units"] = np.array([b"molec/cm2"])
+              d.attrs["ScaleFactor"] = np.array([1.0], dtype="float32")
+              d.attrs["Offset"] = np.array([0.0], dtype="float32")
+              d.attrs["_FillValue"] = np.array([-1.2676506e30], dtype="float32")
+          eos_bbox = {"south": 23.5, "west": 90.0, "north": 24.0, "east": 90.5}
+          frames = convert_bytes(
+              eosbuf.getvalue(),
+              "OMI-Aura_L3-OMNO2d_2025m0101_v004-test.he5",
+              meta,
+              ["ColumnAmountNO2Trop"],
+              eos_bbox,
+              0,
+          )
+          assert frames and len(frames[0]) == 4
+          assert frames[0]["latitude"].between(23.5, 24.0).all()
+          assert frames[0]["longitude"].between(90.0, 90.5).all()
+          assert np.isclose(frames[0]["value"].iloc[0], 2.5e15)
+
           hbuf = io.BytesIO()
           with h5py.File(hbuf, "w") as h:
               h.create_dataset("latitude", data=np.array([[23.4, 23.6]]))

@@ -154,7 +154,7 @@ $("searchCollections").onclick=async function(){
       msg.className="message warn";
       msg.textContent="No NASA collection matched these filters. Public fallback sources are shown when a mapping exists.";
     }
-    renderExternal(data.external_candidates_always||data.external_candidates||[]);
+    renderExternal(data.external_candidates||[]);
   }catch(e){msg.className="message error";msg.textContent=e.message;}
   finally{button.disabled=false;button.textContent="Search Earthdata";}
 };

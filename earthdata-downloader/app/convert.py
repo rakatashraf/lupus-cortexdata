@@ -353,6 +353,23 @@ def _hdf5_file(
                 continue
             if not np.issubdtype(ds.dtype, np.number):
                 continue
+            if ds.size == 0:
+                continue
+
+            # If there is no matching geolocation array, do not flatten an
+            # arbitrarily huge scientific field into pandas. HDF-EOS grids are
+            # handled above; this cap protects other malformed/non-CF products.
+            has_matching_geo = (
+                lat_arr is not None and lon_arr is not None
+                and lat_arr.shape == ds.shape and lon_arr.shape == ds.shape
+            )
+            max_unlocated_cells = max(
+                1000,
+                int(os.getenv("EARTHDATA_MAX_UNLOCATED_CELLS", "2000000"))
+            )
+            if not has_matching_geo and int(ds.size) > max_unlocated_cells:
+                continue
+
             try:
                 arr = np.asarray(ds)
             except Exception:
@@ -586,6 +603,174 @@ def _xarray_bytes(
             last_error = exc
 
     raise ValueError(f"NetCDF/xarray in-memory reader failed: {last_error}")
+
+
+def _attr_scalar(attrs: Any, *names: str, default: float | None = None) -> float | None:
+    for name in names:
+        if name not in attrs:
+            continue
+        try:
+            value = np.asarray(attrs[name]).reshape(-1)[0]
+            if isinstance(value, bytes):
+                value = value.decode(errors="ignore")
+            return float(value)
+        except Exception:
+            continue
+    return default
+
+
+def _attr_text(attrs: Any, *names: str) -> str:
+    for name in names:
+        if name not in attrs:
+            continue
+        try:
+            value = np.asarray(attrs[name]).reshape(-1)[0]
+            if isinstance(value, bytes):
+                return value.decode(errors="ignore")
+            return str(value)
+        except Exception:
+            continue
+    return ""
+
+
+def _calibrate_hdf_values(values: np.ndarray, attrs: Any) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+
+    fill = _attr_scalar(attrs, "_FillValue", "MissingValue", "missing_value")
+    if fill is not None:
+        arr[np.isclose(arr, fill, rtol=0.0, atol=max(1e-12, abs(fill) * 1e-7))] = np.nan
+
+    # Common OMI/HDF-EOS convention: physical = (stored - Offset) * ScaleFactor.
+    offset = _attr_scalar(attrs, "Offset", "add_offset", default=0.0) or 0.0
+    scale = _attr_scalar(attrs, "ScaleFactor", "scale_factor", default=1.0) or 1.0
+    arr = (arr - offset) * scale
+
+    valid_range = None
+    for key in ("ValidRange", "valid_range"):
+        if key in attrs:
+            try:
+                raw = np.asarray(attrs[key], dtype=float).reshape(-1)
+                if raw.size >= 2:
+                    valid_range = (float(raw[0]), float(raw[1]))
+            except Exception:
+                pass
+            break
+    if valid_range:
+        low, high = valid_range
+        arr[(arr < low) | (arr > high)] = np.nan
+
+    arr[~np.isfinite(arr)] = np.nan
+    return arr
+
+
+def _hdf_eos5_grid_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    """Read HDF-EOS5 geographic Level-3 grids by slicing only the requested bbox.
+
+    OMI/Aura Level-3 products such as OMNO2d store 2-D global grids under
+    /HDFEOS/GRIDS/<grid>/Data Fields without explicit latitude/longitude arrays.
+    Loading those whole 720x1440 arrays into multiple pandas frames is wasteful
+    and can kill serverless functions. This reader computes the geographic grid
+    coordinates and asks h5py for only the needed row/column window.
+    """
+    import h5py
+
+    frames: list[pd.DataFrame] = []
+    with h5py.File(io.BytesIO(data), "r") as h:
+        if "HDFEOS" not in h or "GRIDS" not in h["HDFEOS"]:
+            return []
+
+        grids = h["HDFEOS"]["GRIDS"]
+        for grid_name, grid in grids.items():
+            if not isinstance(grid, h5py.Group) or "Data Fields" not in grid:
+                continue
+
+            fields = grid["Data Fields"]
+            for field_name, ds in fields.items():
+                if not isinstance(ds, h5py.Dataset):
+                    continue
+                if ds.ndim != 2 or not np.issubdtype(ds.dtype, np.number):
+                    continue
+
+                full_name = f"HDFEOS/GRIDS/{grid_name}/Data Fields/{field_name}"
+                if not _wanted(full_name, filters):
+                    continue
+
+                d0, d1 = int(ds.shape[0]), int(ds.shape[1])
+                if d0 <= 0 or d1 <= 0:
+                    continue
+
+                # OMI/Aura geographic L3 grids use 720 latitude rows x 1440
+                # longitude columns. Handle transposed files defensively.
+                if d1 >= d0:
+                    ny, nx = d0, d1
+                    orientation = "yx"
+                else:
+                    nx, ny = d0, d1
+                    orientation = "xy"
+
+                # Geographic HDF-EOS5 L3 grids are global in EPSG:4326. OMNO2d
+                # is 0.25° x 0.25°: lon centers -179.875..179.875 and
+                # lat centers -89.875..89.875. Computing from dimensions keeps
+                # the reader valid for other global geographic grid resolutions.
+                dx = 360.0 / nx
+                dy = 180.0 / ny
+                lon = -180.0 + (np.arange(nx, dtype=np.float64) + 0.5) * dx
+                lat = -90.0 + (np.arange(ny, dtype=np.float64) + 0.5) * dy
+
+                x_idx = np.flatnonzero((lon >= bbox["west"]) & (lon <= bbox["east"]))
+                y_idx = np.flatnonzero((lat >= bbox["south"]) & (lat <= bbox["north"]))
+                if not len(x_idx) or not len(y_idx):
+                    continue
+
+                x0, x1 = int(x_idx[0]), int(x_idx[-1]) + 1
+                y0, y1 = int(y_idx[0]), int(y_idx[-1]) + 1
+
+                try:
+                    if orientation == "yx":
+                        subset = np.asarray(ds[y0:y1, x0:x1])
+                    else:
+                        subset = np.asarray(ds[x0:x1, y0:y1]).T
+                except Exception:
+                    continue
+
+                subset = _calibrate_hdf_values(subset, ds.attrs)
+                if subset.shape != (y1 - y0, x1 - x0):
+                    continue
+
+                sub_lon = lon[x0:x1]
+                sub_lat = lat[y0:y1]
+                lon_grid, lat_grid = np.meshgrid(sub_lon, sub_lat)
+
+                values = subset.reshape(-1)
+                lats = lat_grid.reshape(-1)
+                lons = lon_grid.reshape(-1)
+                usable = np.isfinite(values)
+                if not usable.any():
+                    continue
+
+                df = pd.DataFrame(
+                    {
+                        "variable": field_name,
+                        "unit": _attr_text(ds.attrs, "Units", "units"),
+                        "latitude": lats[usable],
+                        "longitude": lons[usable],
+                        "value": values[usable],
+                    }
+                )
+                df["hdf_grid"] = str(grid_name)
+                df["spatial_resolution_degrees"] = max(dx, dy)
+                df = _limit(df, max_rows)
+                if not df.empty:
+                    frames.append(_apply_meta(df, meta))
+
+    return frames
 
 
 def _hdf5_bytes(
@@ -969,6 +1154,18 @@ def convert_bytes(
         return _xarray_bytes(data, meta, filters, bbox, max_rows)
 
     if suffix in (".h5", ".hdf5", ".he5"):
+        try:
+            frames = _hdf_eos5_grid_bytes(data, filename, meta, filters, bbox, max_rows)
+            if frames:
+                return frames
+        except Exception:
+            pass
+
+        # HE5 commonly means HDF-EOS5. Avoid xarray-first behavior because it can
+        # eagerly materialize non-CF global arrays. Generic HDF5 is safer here.
+        if suffix == ".he5":
+            return _hdf5_bytes(data, meta, filters, bbox, max_rows)
+
         try:
             frames = _xarray_bytes(data, meta, filters, bbox, max_rows)
             if frames:
