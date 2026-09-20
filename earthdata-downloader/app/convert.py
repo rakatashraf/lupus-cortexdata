@@ -66,22 +66,33 @@ def _axis_overlap_indices(values: np.ndarray, low: float, high: float) -> np.nda
 def _filter_bbox(df: pd.DataFrame, bbox: dict[str, float]) -> pd.DataFrame:
     lat = _match_column(df.columns, LAT_NAMES)
     lon = _match_column(df.columns, LON_NAMES)
-    if not lat or not lon:
+
+    if not lat and not lon:
         return df
-    latv = pd.to_numeric(df[lat], errors="coerce")
-    lonv = pd.to_numeric(df[lon], errors="coerce")
-    mask = (
-        latv.between(bbox["south"], bbox["north"])
-        & lonv.between(bbox["west"], bbox["east"])
-    )
-    out = df.loc[mask].copy()
+
+    out = df.copy()
     rename: dict[str, str] = {}
-    if lat != "latitude":
+    if lat and lat != "latitude":
         rename[lat] = "latitude"
-    if lon != "longitude":
+    if lon and lon != "longitude":
         rename[lon] = "longitude"
     if rename:
         out.rename(columns=rename, inplace=True)
+
+    # Only apply strict point-in-bbox filtering when the source exposes both
+    # spatial axes. Zonal means and other reduced products may legitimately
+    # contain latitude without longitude (or vice versa); dropping them because
+    # the missing axis cannot be tested would turn valid science data into an
+    # artificial "no rows" error.
+    if lat and lon:
+        latv = pd.to_numeric(out["latitude"], errors="coerce")
+        lonv = pd.to_numeric(out["longitude"], errors="coerce")
+        mask = (
+            latv.between(bbox["south"], bbox["north"])
+            & lonv.between(bbox["west"], bbox["east"])
+        )
+        out = out.loc[mask].copy()
+
     return out
 
 
