@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let selectedCollection = null;
 let currentGranules = [];
+let currentGranuleCycle = null;
 
 function toast(message, kind){
   const el=$("toast");
@@ -65,7 +66,7 @@ $("validateToken").onclick=async function(){
 
 $("searchCollections").onclick=async function(){
   const button=$("searchCollections"),msg=$("searchMessage");
-  msg.className="message";msg.textContent="";selectedCollection=null;currentGranules=[];
+  msg.className="message";msg.textContent="";selectedCollection=null;currentGranules=[];currentGranuleCycle=null;
   $("collectionPanel").classList.add("hidden");$("granulePanel").classList.add("hidden");$("externalArea").classList.add("hidden");
   try{
     validateInputs(true);button.disabled=true;button.textContent="Searching NASA…";
@@ -154,9 +155,17 @@ $("findGranules").onclick=async function(){
       platform:csvList($("platformFilter").value)[0]||null,instrument:csvList($("instrumentFilter").value)[0]||null,
       fallback_latest:$("fallbackLatest").checked
     };
-    const data=await api("/api/granules/search",body,false);currentGranules=data.items||[];renderGranules(currentGranules);
-    if(data.fallback_used){msg.className="message warn";msg.textContent=data.fallback_reason||"Requested dates were empty, so the newest available granules were used.";}
-    else if(currentGranules.length){msg.className="message success";msg.textContent="Loaded all "+currentGranules.length+" downloadable granule(s) available in the requested date range.";}
+    const data=await api("/api/granules/search",body,false);
+    currentGranules=data.items||[];
+    currentGranuleCycle=data.granule_cycle||null;
+    renderGranules(currentGranules);
+
+    const cycleText=currentGranuleCycle&&currentGranuleCycle.label
+      ?" Granule cadence estimate: "+currentGranuleCycle.label+" ("+(currentGranuleCycle.detail||currentGranuleCycle.basis||"based on granule start timestamps")+")."
+      :"";
+
+    if(data.fallback_used){msg.className="message warn";msg.textContent=(data.fallback_reason||"Requested dates were empty, so the newest available granules were used.")+cycleText;}
+    else if(currentGranules.length){msg.className="message success";msg.textContent="Loaded all "+currentGranules.length+" downloadable granule(s) available in the requested date range."+cycleText;}
     else{msg.className="message error";msg.textContent="No downloadable granules were found.";}
     $("downloadCsv").disabled=!currentGranules.length;
   }catch(e){msg.className="message error";msg.textContent=e.message;}
@@ -167,7 +176,9 @@ function renderGranules(items){
   const root=$("granules");root.innerHTML="";
   items.forEach(function(item){
     const el=document.createElement("div");el.className="granule";
-    el.innerHTML="<strong>"+escapeHtml(item.granule_ur||item.concept_id||"Granule")+"</strong><span>"+escapeHtml(item.begin||"time unknown")+"</span><span>"+escapeHtml((item.platforms||[]).join(", ")||"platform unknown")+"</span><span>"+(item.size_mb?escapeHtml(String(item.size_mb))+" MB":"")+"</span>";
+    const start=item.begin||"time unknown";
+    const end=item.end||"time unknown";
+    el.innerHTML="<strong>"+escapeHtml(item.granule_ur||item.concept_id||"Granule")+"</strong><span><b>Start UTC:</b> "+escapeHtml(start)+"<br><b>End UTC:</b> "+escapeHtml(end)+"</span><span>"+escapeHtml((item.platforms||[]).join(", ")||"platform unknown")+"</span><span>"+(item.size_mb?escapeHtml(String(item.size_mb))+" MB":"")+"</span>";
     root.appendChild(el);
   });
 }
@@ -187,7 +198,7 @@ $("downloadCsv").onclick=async function(){
     };
     const blob=await api("/api/download/nasa",body,true);
     let name=$("outputName").value.trim()||slug($("component").value)+"_earthdata.csv";if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
-    downloadBlob(blob,name);toast("CSV created and sent to your browser.");
+    downloadBlob(blob,name);toast("CSV created with explicit UTC timestamps and data-cycle metadata.");
   }catch(e){toast(e.message,"error");}
   finally{button.disabled=false;button.textContent="Download combined CSV";}
 };
@@ -207,7 +218,7 @@ async function downloadExternal(item,button){
     const body={component:$("component").value.trim(),bbox:bbox(),date_range:dates(),grid_points_per_axis:3,output_name:$("outputName").value.trim()||null};
     const blob=await api("/api/download/external/"+item.id,body,true);
     let name=$("outputName").value.trim()||slug($("component").value)+"_"+item.id+".csv";if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
-    downloadBlob(blob,name);toast("CSV created from "+item.provider+".");
+    downloadBlob(blob,name);toast("CSV created from "+item.provider+" with explicit UTC timestamps and data-cycle metadata.");
   }catch(e){toast(e.message,"error");}
   finally{button.disabled=false;button.textContent="Fetch external CSV";}
 }
