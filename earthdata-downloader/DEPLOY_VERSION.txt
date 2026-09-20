@@ -1,2 +1,2 @@
-1.3.0-temporal-metadata
-UTC timestamp + date/time split + data-cycle metadata + granule cadence summary
+1.4.0-collection-name-search
+Direct NASA collection title/short-name search + unlimited results/granules + timestamp/cycle metadata
