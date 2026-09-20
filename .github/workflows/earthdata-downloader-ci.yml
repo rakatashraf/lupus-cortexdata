@@ -127,9 +127,8 @@ jobs:
           # AIRS L1B HDF4 radiances must be spatially subset before channel expansion.
           from pyhdf.SD import SD, SDC
           import tempfile as _tmp
-          _airs = _tmp.NamedTemporaryFile(suffix=".hdf", delete=False)
-          _airs.close()
-          h4 = SD(_airs.name, SDC.WRITE | SDC.CREATE)
+          _airs_name = _tmp.mktemp(suffix=".hdf")
+          h4 = SD(_airs_name, SDC.WRITE | SDC.CREATE)
           try:
               lat_sds = h4.create("Latitude", SDC.FLOAT32, (2,3))
               lon_sds = h4.create("Longitude", SDC.FLOAT32, (2,3))
@@ -143,9 +142,9 @@ jobs:
               freq_sds.units = "cm-1"
           finally:
               h4.end()
-          with open(_airs.name,"rb") as _fh:
+          with open(_airs_name,"rb") as _fh:
               airs_bytes=_fh.read()
-          os.unlink(_airs.name)
+          os.unlink(_airs_name)
           airs_meta=dict(meta)
           airs_meta["collection_short_name"]="AIRIBRAD_NRT"
           airs_frames=convert_bytes(
