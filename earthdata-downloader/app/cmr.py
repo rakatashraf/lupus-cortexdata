@@ -57,7 +57,7 @@ class CMRClient:
 
             if hits and len(all_items) >= hits:
                 break
-            if len(batch) < page_size:
+            if not hits and len(batch) < page_size:
                 break
 
             page_num += 1
