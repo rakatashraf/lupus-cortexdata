@@ -291,6 +291,24 @@ function renderGranules(items){
   });
 }
 
+function chooseParallelism(total){
+  const cores=Math.max(4,Number(navigator.hardwareConcurrency)||8);
+  const browserCap=Math.min(24,Math.max(8,cores*2));
+  if(total<=8) return Math.min(total,4);
+  if(total<=40) return Math.min(total,8,browserCap);
+  if(total<=150) return Math.min(total,12,browserCap);
+  if(total<=400) return Math.min(total,16,browserCap);
+  return Math.min(total,24,browserCap);
+}
+
+function formatEta(seconds){
+  if(!Number.isFinite(seconds)||seconds<0) return "calculating…";
+  if(seconds<60) return Math.max(1,Math.round(seconds))+"s";
+  const m=Math.floor(seconds/60);
+  const s=Math.round(seconds%60);
+  return m+"m "+s+"s";
+}
+
 $("downloadCsv").onclick=async function(){
   if(!selectedCollection||!currentGranules.length){toast("Find all granules first.","error");return;}
   const button=$("downloadCsv");
@@ -338,59 +356,98 @@ $("downloadCsv").onclick=async function(){
       max_rows_per_variable:Number($("maxRows").value)||0
     };
 
-    let header=null;
-    const parts=[];
-    const failures=[];
-    let totalRows=0;
+    const total=currentGranules.length;
+    const parallelism=chooseParallelism(total);
+    const started=performance.now();
+    let nextIndex=0;
+    let completed=0;
     let convertedGranules=0;
+    let totalRows=0;
+    let header=null;
+    let writeQueue=Promise.resolve();
+    const failures=[];
+    const parts=[];
 
-    for(let i=0;i<currentGranules.length;i++){
-      const granule=currentGranules[i];
-      const label=granule.granule_ur||granule.concept_id||("granule "+(i+1));
-      button.textContent="Converting "+(i+1)+"/"+currentGranules.length+"…";
-      msg.className="message";
-      msg.textContent="Downloading and converting "+(i+1)+" of "+currentGranules.length+": "+label;
+    function queueCsv(text){
+      const chunk=splitCsvHeader(text);
+      if(!chunk.header) throw new Error("Converted granule returned an empty CSV.");
 
-      if(!granule.concept_id){
-        failures.push(label+": missing CMR granule ID");
-        continue;
+      if(header===null){
+        header=chunk.header;
+        if(usingFileWriter){
+          writeQueue=writeQueue.then(function(){return writer.write(header+"\n");});
+        }else{
+          parts.push(header+"\n");
+        }
+      }else if(chunk.header!==header){
+        throw new Error("CSV schema differs from earlier granules in this collection.");
       }
 
-      try{
-        const response=await apiResponseWithRetry("/api/download/nasa/granule",{
-          ...baseBody,
-          granule_id:granule.concept_id,
-          cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
-          cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
-          cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
-          cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
-        },3);
-
-        const text=await response.text();
-        const chunk=splitCsvHeader(text);
-        if(!chunk.header) throw new Error("Converted granule returned an empty CSV.");
-
-        if(header===null){
-          header=chunk.header;
-          if(usingFileWriter) await writer.write(header+"\n");
-          else parts.push(header+"\n");
-        }else if(chunk.header!==header){
-          throw new Error("CSV schema differs from earlier granules in this collection.");
+      if(chunk.body){
+        const bodyText=chunk.body+(chunk.body.endsWith("\n")?"":"\n");
+        if(usingFileWriter){
+          writeQueue=writeQueue.then(function(){return writer.write(bodyText);});
+        }else{
+          parts.push(bodyText);
         }
-
-        if(chunk.body){
-          const bodyText=chunk.body+(chunk.body.endsWith("\n")?"":"\n");
-          if(usingFileWriter) await writer.write(bodyText);
-          else parts.push(bodyText);
-        }
-
-        const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
-        if(Number.isFinite(rows)) totalRows+=rows;
-        convertedGranules++;
-      }catch(e){
-        failures.push(label+": "+(e&&e.message?e.message:String(e)));
       }
     }
+
+    function updateProgress(){
+      const elapsed=Math.max(0.001,(performance.now()-started)/1000);
+      const rate=completed/elapsed;
+      const remaining=total-completed;
+      const eta=rate>0?remaining/rate:Infinity;
+      button.textContent="Converting "+completed+"/"+total+"…";
+      msg.className="message";
+      msg.textContent="Turbo conversion: "+completed+"/"+total+
+        " processed · "+parallelism+" parallel workers · "+
+        rate.toFixed(rate>=10?1:2)+" granules/s · ETA "+formatEta(eta);
+    }
+
+    async function worker(){
+      while(true){
+        const i=nextIndex++;
+        if(i>=total) return;
+
+        const granule=currentGranules[i];
+        const label=granule.granule_ur||granule.concept_id||("granule "+(i+1));
+
+        if(!granule.concept_id){
+          failures.push(label+": missing CMR granule ID");
+          completed++;
+          updateProgress();
+          continue;
+        }
+
+        try{
+          const response=await apiResponseWithRetry("/api/download/nasa/granule",{
+            ...baseBody,
+            granule_id:granule.concept_id,
+            cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
+            cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
+            cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
+            cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
+          },2);
+
+          const text=await response.text();
+          queueCsv(text);
+
+          const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
+          if(Number.isFinite(rows)) totalRows+=rows;
+          convertedGranules++;
+        }catch(e){
+          failures.push(label+": "+(e&&e.message?e.message:String(e)));
+        }finally{
+          completed++;
+          updateProgress();
+        }
+      }
+    }
+
+    updateProgress();
+    await Promise.all(Array.from({length:parallelism},function(){return worker();}));
+    await writeQueue;
 
     if(!header || convertedGranules===0){
       if(writer&&typeof writer.abort==="function") await writer.abort();
@@ -407,11 +464,15 @@ $("downloadCsv").onclick=async function(){
       downloadBlob(blob,name);
     }
 
+    const elapsed=Math.max(0.001,(performance.now()-started)/1000);
+    const rate=convertedGranules/elapsed;
     const skipped=failures.length;
     msg.className=skipped?"message warn":"message success";
-    msg.textContent="Converted "+convertedGranules+" of "+currentGranules.length+
-      " granule(s) into one CSV"+(totalRows?" with "+totalRows+" rows.":".")+
-      (skipped?" "+skipped+" granule(s) were skipped after retries. "+failures.slice(0,2).join(" | "):"");
+    msg.textContent="Converted "+convertedGranules+" of "+total+
+      " granule(s) in "+elapsed.toFixed(1)+"s"+
+      " ("+rate.toFixed(rate>=10?1:2)+" granules/s)"+
+      (totalRows?" · "+totalRows+" CSV rows":"")+
+      (skipped?" · "+skipped+" skipped after retries. "+failures.slice(0,2).join(" | "):"");
     toast(skipped?"CSV created with some skipped granules.":"Combined CSV created successfully.",skipped?"warn":"");
   }catch(e){
     if(writer){

@@ -105,7 +105,7 @@
         </div>
         <div class="info-box">
           <strong>All matching granules are collected</strong>
-          <span>The downloader reads every CMR result page. During CSV creation, granules are converted one-by-one in serverless-safe chunks and merged into one CSV in your browser.</span>
+          <span>The downloader reads every CMR result page. CSV creation now uses adaptive Turbo mode with multiple granules converted in parallel across serverless workers, then merged into one CSV in your browser.</span>
         </div>
         <div class="info-box">
           <strong>CSV time metadata is explicit</strong>
@@ -120,7 +120,7 @@
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">The search has no artificial collection or granule limit. Large jobs are split into one-granule conversion requests automatically to reduce serverless timeout and response-size failures. A single exceptionally large granule may still require a variable filter, smaller boundary box, or row limit.</p>
+        <p class="footnote">The search has no artificial collection or granule limit. Large jobs automatically fan out across up to 24 parallel conversion workers. Actual speed still depends on NASA provider bandwidth, granule size, host concurrency, and your connection. A single exceptionally large granule may still require a variable filter, smaller boundary box, or row limit.</p>
       </div>
     </section>
 
