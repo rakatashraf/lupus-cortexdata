@@ -13,9 +13,10 @@ function toast(message, kind){
 function csvList(value){return (value||"").split(",").map(function(x){return x.trim();}).filter(Boolean);}
 function bbox(){return {south:Number($("south").value),west:Number($("west").value),north:Number($("north").value),east:Number($("east").value)};}
 function dates(){return {start:$("startDate").value,end:$("endDate").value};}
+function searchLabel(){return $("component").value.trim()||$("collectionName").value.trim()||"earthdata";}
 function validateInputs(requireToken){
   if(requireToken && !$("token").value.trim()) throw new Error("Paste your Earthdata token first.");
-  if(!$("component").value.trim()) throw new Error("Enter a component or variable.");
+  if(!$("component").value.trim() && !$("collectionName").value.trim()) throw new Error("Enter a component/variable or a collection name.");
   const b=bbox();
   if(Object.values(b).some(function(v){return !Number.isFinite(v);})) throw new Error("Enter a valid bounding box.");
   if(b.south>=b.north) throw new Error("South must be lower than north.");
@@ -71,15 +72,30 @@ $("searchCollections").onclick=async function(){
   try{
     validateInputs(true);button.disabled=true;button.textContent="Searching NASA…";
     const body={
-      token:$("token").value.trim(),component:$("component").value.trim(),bbox:bbox(),
-      platforms:csvList($("platformFilter").value),instruments:csvList($("instrumentFilter").value)
+      token:$("token").value.trim(),
+      component:$("component").value.trim(),
+      collection_name:$("collectionName").value.trim(),
+      bbox:bbox(),
+      platforms:csvList($("platformFilter").value),
+      instruments:csvList($("instrumentFilter").value)
     };
     const data=await api("/api/collections/search",body,false);
     const items=(data.nasa&&data.nasa.items)||[];
     $("collectionCount").textContent=items.length+" collections loaded · "+((data.nasa&&data.nasa.hits)!=null?data.nasa.hits:items.length)+" CMR matches";
     renderCollections(items);$("collectionPanel").classList.remove("hidden");$("collectionPanel").scrollIntoView({behavior:"smooth",block:"start"});
-    if(items.length){msg.className="message success";msg.textContent="NASA collections found. Select the product that matches your scientific use case.";}
-    else{msg.className="message warn";msg.textContent="No NASA collection matched these filters. Public fallback sources are shown when a mapping exists.";}
+    if(items.length){
+      msg.className="message success";
+      const mode=$("collectionName").value.trim()
+        ? "NASA collection-name search completed. Exact title/short-name matches are ranked first."
+        : "NASA collections found. Select the product that matches your scientific use case.";
+      msg.textContent=mode;
+    }
+    else{
+      msg.className="message warn";
+      msg.textContent=$("collectionName").value.trim()
+        ?"No NASA collection title or short name matched this search and the selected filters."
+        :"No NASA collection matched these filters. Public fallback sources are shown when a mapping exists.";
+    }
     renderExternal(data.external_candidates_always||data.external_candidates||[]);
   }catch(e){msg.className="message error";msg.textContent=e.message;}
   finally{button.disabled=false;button.textContent="Search Earthdata";}
@@ -189,15 +205,19 @@ $("downloadCsv").onclick=async function(){
   try{
     validateInputs(true);button.disabled=true;button.textContent="Downloading + converting…";
     const body={
-      token:$("token").value.trim(),component:$("component").value.trim(),collection_id:selectedCollection.concept_id,
-      collection_title:selectedCollection.title||selectedCollection.short_name||null,bbox:bbox(),date_range:dates(),
+      token:$("token").value.trim(),
+      component:$("component").value.trim(),
+      collection_search_name:$("collectionName").value.trim()||null,
+      collection_id:selectedCollection.concept_id,
+      collection_title:selectedCollection.title||selectedCollection.short_name||null,
+      bbox:bbox(),date_range:dates(),
       platform:csvList($("platformFilter").value)[0]||null,instrument:csvList($("instrumentFilter").value)[0]||null,
       fallback_latest:$("fallbackLatest").checked,
       variable_filters:csvList($("variableFilters").value),output_name:$("outputName").value.trim()||null,
       max_rows_per_variable:Number($("maxRows").value)||0
     };
     const blob=await api("/api/download/nasa",body,true);
-    let name=$("outputName").value.trim()||slug($("component").value)+"_earthdata.csv";if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
+    let name=$("outputName").value.trim()||slug(searchLabel())+"_earthdata.csv";if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
     downloadBlob(blob,name);toast("CSV created with explicit UTC timestamps and data-cycle metadata.");
   }catch(e){toast(e.message,"error");}
   finally{button.disabled=false;button.textContent="Download combined CSV";}
