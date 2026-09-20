@@ -27,7 +27,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.3.0",
+    version="1.4.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -65,7 +65,8 @@ class TokenRequest(BaseModel):
 
 class CollectionRequest(BaseModel):
     token: str
-    component: str
+    component: str = ""
+    collection_name: str = ""
     bbox: Optional[BBox] = None
     platforms: list[str] = []
     instruments: list[str] = []
@@ -82,7 +83,8 @@ class GranuleRequest(BaseModel):
 
 
 class DownloadRequest(GranuleRequest):
-    component: str
+    component: str = ""
+    collection_search_name: Optional[str] = None
     collection_title: Optional[str] = None
     variable_filters: list[str] = []
     output_name: Optional[str] = None
@@ -179,6 +181,7 @@ def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes
                     meta = {
                         "source": "NASA Earthdata",
                         "component_query": req.component,
+                        "collection_search_name": req.collection_search_name or "",
                         "collection_id": req.collection_id,
                         "collection_title": req.collection_title or "",
                         "granule_id": granule.get("concept_id") or "",
@@ -220,7 +223,7 @@ def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.3.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.4.0"}
 
 
 @app.post("/api/token/validate")
@@ -235,20 +238,26 @@ async def token_validate(req: TokenRequest):
 
 @app.post("/api/collections/search")
 async def collections_search(req: CollectionRequest):
-    if not req.component.strip():
-        raise HTTPException(400, "Component is required.")
+    component = req.component.strip()
+    collection_name = req.collection_name.strip()
+
+    if not component and not collection_name:
+        raise HTTPException(400, "Enter a component/variable or a collection name.")
+
     try:
         nasa = await CMRClient(req.token).collections(
-            component=req.component,
+            component=component or None,
+            collection_name=collection_name or None,
             bbox=req.bbox.cmr() if req.bbox else None,
             platforms=req.platforms,
             instruments=req.instruments,
         )
-        external = resolve_external(req.component)
+        external = resolve_external(component) if component else []
         return {
-            "component": req.component,
+            "component": component or None,
+            "collection_name": collection_name or None,
             "nasa": nasa,
-            "external_candidates": external if not nasa.get("items") else [],
+            "external_candidates": external if component and not nasa.get("items") else [],
             "external_candidates_always": external,
         }
     except Exception as exc:
@@ -290,7 +299,8 @@ async def download_nasa(req: DownloadRequest):
             raise HTTPException(404, "No downloadable granules were found for this collection and area.")
 
         content, report = await asyncio.to_thread(_download_convert, req, granules)
-        name = _safe_csv(req.output_name, f"{req.component}_{req.collection_id}.csv")
+        search_label = req.component.strip() or (req.collection_search_name or "").strip() or req.collection_id
+        name = _safe_csv(req.output_name, f"{search_label}_{req.collection_id}.csv")
         return Response(
             content=content,
             media_type="text/csv",
