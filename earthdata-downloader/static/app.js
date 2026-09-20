@@ -34,6 +34,31 @@ async function api(path,body,asBlob){
   }
   return asBlob?response.blob():response.json();
 }
+async function apiResponse(path,body){
+  const response=await fetch(path,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  });
+  if(!response.ok){
+    let detail="HTTP "+response.status;
+    try{const data=await response.json();detail=data.detail||detail;}
+    catch(e){try{detail=await response.text()||detail;}catch(_){}}
+    throw new Error(detail);
+  }
+  return response;
+}
+
+function splitCsvHeader(text){
+  const clean=String(text||"").replace(/^\uFEFF/,"");
+  const newline=clean.indexOf("\n");
+  if(newline<0) return {header:clean.replace(/\r$/,""),body:""};
+  return {
+    header:clean.slice(0,newline).replace(/\r$/,""),
+    body:clean.slice(newline+1)
+  };
+}
+
 function downloadBlob(blob,name){
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
@@ -236,26 +261,87 @@ function renderGranules(items){
 $("downloadCsv").onclick=async function(){
   if(!selectedCollection||!currentGranules.length){toast("Find all granules first.","error");return;}
   const button=$("downloadCsv");
+  const msg=$("granuleMessage");
+
   try{
-    validateInputs(true);button.disabled=true;button.textContent="Downloading + converting…";
-    const body={
+    validateInputs(true);
+    button.disabled=true;
+
+    const baseBody={
       token:$("token").value.trim(),
       component:$("component").value.trim(),
       collection_search_name:$("collectionResultSearch").value.trim()||null,
       collection_id:selectedCollection.concept_id,
       collection_title:selectedCollection.title||selectedCollection.short_name||null,
-      bbox:bbox(),date_range:dates(),
-      platform:csvList($("platformFilter").value)[0]||null,instrument:csvList($("instrumentFilter").value)[0]||null,
+      bbox:bbox(),
+      date_range:dates(),
+      platform:csvList($("platformFilter").value)[0]||null,
+      instrument:csvList($("instrumentFilter").value)[0]||null,
       fallback_latest:$("fallbackLatest").checked,
-      variable_filters:csvList($("variableFilters").value),output_name:$("outputName").value.trim()||null,
+      variable_filters:csvList($("variableFilters").value),
+      output_name:null,
       max_rows_per_variable:Number($("maxRows").value)||0
     };
-    const blob=await api("/api/download/nasa",body,true);
-    let name=$("outputName").value.trim()||slug(searchLabel())+"_earthdata.csv";if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
-    downloadBlob(blob,name);toast("CSV created with explicit UTC timestamps and data-cycle metadata.");
-  }catch(e){toast(e.message,"error");}
-  finally{button.disabled=false;button.textContent="Download combined CSV";}
+
+    let header=null;
+    const parts=[];
+    let totalRows=0;
+
+    for(let i=0;i<currentGranules.length;i++){
+      const granule=currentGranules[i];
+      const label=granule.granule_ur||granule.concept_id||("granule "+(i+1));
+      button.textContent="Converting "+(i+1)+"/"+currentGranules.length+"…";
+      msg.className="message";
+      msg.textContent="Downloading and converting "+(i+1)+" of "+currentGranules.length+": "+label;
+
+      const response=await apiResponse("/api/download/nasa/granule",{
+        ...baseBody,
+        granule_id:granule.concept_id
+      });
+
+      const text=await response.text();
+      const chunk=splitCsvHeader(text);
+      if(!chunk.header) throw new Error("A converted granule returned an empty CSV.");
+
+      if(header===null){
+        header=chunk.header;
+        parts.push(header+"\n");
+      }else if(chunk.header!==header){
+        throw new Error(
+          "NASA granules in this collection produced different CSV schemas. "+
+          "Use a variable-name filter to select a consistent variable set."
+        );
+      }
+
+      if(chunk.body){
+        parts.push(chunk.body);
+        if(!chunk.body.endsWith("\n")) parts.push("\n");
+      }
+
+      const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
+      if(Number.isFinite(rows)) totalRows+=rows;
+    }
+
+    if(!header) throw new Error("No CSV data was produced.");
+
+    const blob=new Blob(parts,{type:"text/csv;charset=utf-8"});
+    let name=$("outputName").value.trim()||slug(searchLabel())+"_earthdata.csv";
+    if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
+    downloadBlob(blob,name);
+
+    msg.className="message success";
+    msg.textContent="Converted all "+currentGranules.length+" granule(s) into one CSV"+(totalRows?" with "+totalRows+" rows.":".");
+    toast("Combined CSV created successfully.");
+  }catch(e){
+    msg.className="message error";
+    msg.textContent=e.message;
+    toast(e.message,"error");
+  }finally{
+    button.disabled=false;
+    button.textContent="Download combined CSV";
+  }
 };
+
 
 function renderExternal(items){
   if(!items.length) return;$("externalArea").classList.remove("hidden");const root=$("externalCards");root.innerHTML="";
