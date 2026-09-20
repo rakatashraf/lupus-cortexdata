@@ -42,6 +42,7 @@ jobs:
           import io
           import json
           import os
+          from pathlib import Path
           import zipfile
 
           import h5py
@@ -52,7 +53,7 @@ jobs:
           from rasterio.io import MemoryFile
           from rasterio.transform import from_origin
 
-          from app.convert import combine_frames, convert_bytes
+          from app.convert import combine_frames, convert_bytes, _hdf4_airs_file
 
           bbox = {"south": 23.0, "west": 90.0, "north": 24.0, "east": 91.0}
           meta = {
@@ -142,6 +143,16 @@ jobs:
               freq_sds.units = "cm-1"
           finally:
               h4.end()
+          airs_meta=dict(meta)
+          airs_meta["collection_short_name"]="AIRIBRAD_NRT"
+          direct_airs=_hdf4_airs_file(
+              Path(_airs_name),
+              airs_meta,
+              ["radiances"],
+              {"south":23.7,"west":90.3,"north":23.95,"east":90.55},
+              0,
+          )
+          print("AIRS_DIRECT_DEBUG", [(len(frame), list(frame.columns)) for frame in direct_airs])
           with open(_airs_name,"rb") as _fh:
               airs_bytes=_fh.read()
           os.unlink(_airs_name)
