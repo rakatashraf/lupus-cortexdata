@@ -105,7 +105,7 @@
         </div>
         <div class="info-box">
           <strong>All matching granules are collected</strong>
-          <span>The downloader reads every CMR result page for the selected collection, boundary box, and date range.</span>
+          <span>The downloader reads every CMR result page. During CSV creation, granules are converted one-by-one in serverless-safe chunks and merged into one CSV in your browser.</span>
         </div>
         <div class="info-box">
           <strong>CSV time metadata is explicit</strong>
@@ -120,7 +120,7 @@
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">The search itself has no artificial collection or granule limit. Very large multi-granule downloads can still encounter Vercel serverless execution or response-size limits, which are hosting constraints rather than NASA search limits.</p>
+        <p class="footnote">The search has no artificial collection or granule limit. Large jobs are split into one-granule conversion requests automatically to reduce serverless timeout and response-size failures. A single exceptionally large granule may still require a variable filter, smaller boundary box, or row limit.</p>
       </div>
     </section>
 
