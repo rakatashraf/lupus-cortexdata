@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import os
 import re
 from datetime import date
@@ -89,6 +90,10 @@ class DownloadRequest(GranuleRequest):
     variable_filters: list[str] = []
     output_name: Optional[str] = None
     max_rows_per_variable: int = 0
+
+
+class SingleGranuleDownloadRequest(DownloadRequest):
+    granule_id: str
 
 
 class ExternalRequest(BaseModel):
@@ -291,6 +296,45 @@ def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes
     }
 
 
+def _csv_http_response(
+    content: bytes,
+    filename: str,
+    headers: dict[str, str],
+) -> Response:
+    safe_limit = 4_200_000
+    response_content = content
+    response_headers = dict(headers)
+    response_headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response_headers["X-Earthdata-Uncompressed-Bytes"] = str(len(content))
+
+    if len(content) > 3_000_000:
+        compressed = gzip.compress(content, compresslevel=6)
+        if len(compressed) <= safe_limit:
+            response_content = compressed
+            response_headers["Content-Encoding"] = "gzip"
+            response_headers["X-Earthdata-Transport"] = "gzip"
+            response_headers["X-Earthdata-Compressed-Bytes"] = str(len(compressed))
+        else:
+            raise HTTPException(
+                413,
+                "This single converted granule is still too large for the current Vercel response limit "
+                "even after compression. Narrow the variable filter, boundary box, or use a row limit "
+                "for this granule.",
+            )
+    elif len(content) > safe_limit:
+        raise HTTPException(
+            413,
+            "Converted CSV is too large for the current Vercel response limit. "
+            "Narrow the variable filter, boundary box, or use a row limit.",
+        )
+
+    return Response(
+        content=response_content,
+        media_type="text/csv",
+        headers=response_headers,
+    )
+
+
 @app.get("/api/health")
 async def health():
     return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.5.0"}
@@ -371,11 +415,10 @@ async def download_nasa(req: DownloadRequest):
         content, report = await asyncio.to_thread(_download_convert, req, granules)
         search_label = req.component.strip() or (req.collection_search_name or "").strip() or req.collection_id
         name = _safe_csv(req.output_name, f"{search_label}_{req.collection_id}.csv")
-        return Response(
-            content=content,
-            media_type="text/csv",
-            headers={
-                "Content-Disposition": f'attachment; filename="{name}"',
+        return _csv_http_response(
+            content,
+            name,
+            {
                 "X-Earthdata-Fallback-Used": str(bool(result.get("fallback_used"))).lower(),
                 "X-Earthdata-Rows": str(report["rows"]),
                 "X-Earthdata-Granules": str(len(granules)),
@@ -387,6 +430,42 @@ async def download_nasa(req: DownloadRequest):
         raise
     except Exception as exc:
         raise HTTPException(500, f"Download/conversion failed: {exc}")
+
+
+@app.post("/api/download/nasa/granule")
+async def download_nasa_granule(req: SingleGranuleDownloadRequest):
+    try:
+        granule = await CMRClient(req.token).granule_by_id(
+            req.granule_id,
+            collection_id=req.collection_id,
+        )
+        if not granule:
+            raise HTTPException(
+                404,
+                "The selected granule could not be found in NASA CMR or is not marked downloadable.",
+            )
+
+        content, report = await asyncio.to_thread(_download_convert, req, [granule])
+        granule_label = granule.get("granule_ur") or req.granule_id
+        name = _safe_csv(
+            None,
+            f"{req.component or 'earthdata'}_{granule_label}.csv",
+        )
+        return _csv_http_response(
+            content,
+            name,
+            {
+                "X-Earthdata-Rows": str(report["rows"]),
+                "X-Earthdata-Granules": "1",
+                "X-Earthdata-Timezone": "UTC",
+                "X-Earthdata-Granule-Id": req.granule_id,
+                "X-Earthdata-Conversion-Errors": str(len(report["errors"])),
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Granule download/conversion failed: {exc}")
 
 
 @app.post("/api/download/external/{provider_id}")
