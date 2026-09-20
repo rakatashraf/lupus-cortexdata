@@ -40,19 +40,12 @@
           <label>Component / variable
             <input id="component" placeholder="e.g. NO2, PM2.5, NDVI, soil moisture, precipitation">
           </label>
-          <label>Collection name / short name
-            <input id="collectionName" placeholder="e.g. MOD13Q1 or part/full NASA collection title">
-          </label>
           <label>Satellite / platform filter
             <input id="platformFilter" placeholder="e.g. Terra, Aqua, Sentinel-5P">
           </label>
           <label>Instrument filter
             <input id="instrumentFilter" placeholder="e.g. MODIS, TROPOMI">
           </label>
-          <div class="info-box">
-            <strong>Search by component, collection name, or both</strong>
-            <span>Collection-name search checks NASA collection titles and short names directly. Exact matches are ranked first, followed by partial matches.</span>
-          </div>
           <div class="info-box">
             <strong>No collection limit</strong>
             <span>All matching NASA collections are loaded across every CMR result page.</span>
@@ -87,9 +80,15 @@
         <div class="title-row">
           <div>
             <h2>Select a NASA collection by satellite</h2>
-            <p class="muted">All matching collections are loaded and separated by satellite/platform. A collection associated with multiple platforms can appear in more than one satellite group.</p>
+            <p class="muted">All matching collections are loaded and separated by satellite/platform. Use the collection-name search below to filter only these fetched results.</p>
           </div>
           <span id="collectionCount" class="badge"></span>
+        </div>
+        <div class="collection-search-box">
+          <label>Search fetched collections by name / short name
+            <input id="collectionResultSearch" type="search" autocomplete="off" placeholder="e.g. MOD13Q1, MCD19A2, NO2 Standard Product">
+          </label>
+          <p class="muted">This does not run a new NASA search. It filters the full collection list already fetched above, while preserving satellite/platform groups.</p>
         </div>
         <div id="collections" class="cards"></div>
       </div>
