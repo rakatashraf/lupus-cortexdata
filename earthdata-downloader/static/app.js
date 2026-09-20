@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 let selectedCollection = null;
 let currentGranules = [];
 let currentGranuleCycle = null;
+let allCollections = [];
 
 function toast(message, kind){
   const el=$("toast");
@@ -13,10 +14,10 @@ function toast(message, kind){
 function csvList(value){return (value||"").split(",").map(function(x){return x.trim();}).filter(Boolean);}
 function bbox(){return {south:Number($("south").value),west:Number($("west").value),north:Number($("north").value),east:Number($("east").value)};}
 function dates(){return {start:$("startDate").value,end:$("endDate").value};}
-function searchLabel(){return $("component").value.trim()||$("collectionName").value.trim()||"earthdata";}
+function searchLabel(){return $("component").value.trim()||"earthdata";}
 function validateInputs(requireToken){
   if(requireToken && !$("token").value.trim()) throw new Error("Paste your Earthdata token first.");
-  if(!$("component").value.trim() && !$("collectionName").value.trim()) throw new Error("Enter a component/variable or a collection name.");
+  if(!$("component").value.trim()) throw new Error("Enter a component or variable.");
   const b=bbox();
   if(Object.values(b).some(function(v){return !Number.isFinite(v);})) throw new Error("Enter a valid bounding box.");
   if(b.south>=b.north) throw new Error("South must be lower than north.");
@@ -67,34 +68,33 @@ $("validateToken").onclick=async function(){
 
 $("searchCollections").onclick=async function(){
   const button=$("searchCollections"),msg=$("searchMessage");
-  msg.className="message";msg.textContent="";selectedCollection=null;currentGranules=[];currentGranuleCycle=null;
+  msg.className="message";msg.textContent="";selectedCollection=null;currentGranules=[];currentGranuleCycle=null;allCollections=[];
   $("collectionPanel").classList.add("hidden");$("granulePanel").classList.add("hidden");$("externalArea").classList.add("hidden");
   try{
     validateInputs(true);button.disabled=true;button.textContent="Searching NASA…";
     const body={
       token:$("token").value.trim(),
       component:$("component").value.trim(),
-      collection_name:$("collectionName").value.trim(),
+      collection_name:"",
       bbox:bbox(),
       platforms:csvList($("platformFilter").value),
       instruments:csvList($("instrumentFilter").value)
     };
     const data=await api("/api/collections/search",body,false);
     const items=(data.nasa&&data.nasa.items)||[];
-    $("collectionCount").textContent=items.length+" collections loaded · "+((data.nasa&&data.nasa.hits)!=null?data.nasa.hits:items.length)+" CMR matches";
-    renderCollections(items);$("collectionPanel").classList.remove("hidden");$("collectionPanel").scrollIntoView({behavior:"smooth",block:"start"});
+    allCollections=items.slice();
+    $("collectionResultSearch").value="";
+    updateCollectionCount(items.length);
+    renderCollections(items);
+    $("collectionPanel").classList.remove("hidden");
+    $("collectionPanel").scrollIntoView({behavior:"smooth",block:"start"});
     if(items.length){
       msg.className="message success";
-      const mode=$("collectionName").value.trim()
-        ? "NASA collection-name search completed. Exact title/short-name matches are ranked first."
-        : "NASA collections found. Select the product that matches your scientific use case.";
-      msg.textContent=mode;
+      msg.textContent="NASA collections found. Use the collection-name search inside the results panel to narrow the fetched list.";
     }
     else{
       msg.className="message warn";
-      msg.textContent=$("collectionName").value.trim()
-        ?"No NASA collection title or short name matched this search and the selected filters."
-        :"No NASA collection matched these filters. Public fallback sources are shown when a mapping exists.";
+      msg.textContent="No NASA collection matched these filters. Public fallback sources are shown when a mapping exists.";
     }
     renderExternal(data.external_candidates_always||data.external_candidates||[]);
   }catch(e){msg.className="message error";msg.textContent=e.message;}
@@ -162,6 +162,40 @@ function renderCollections(items){
   });
 }
 
+function updateCollectionCount(filteredCount){
+  const total=allCollections.length;
+  const query=$("collectionResultSearch") ? $("collectionResultSearch").value.trim() : "";
+  $("collectionCount").textContent=query
+    ? filteredCount+" shown · "+total+" fetched"
+    : total+" collections fetched";
+}
+
+function filterFetchedCollections(){
+  const query=$("collectionResultSearch").value.trim().toLowerCase();
+  if(!query){
+    renderCollections(allCollections);
+    updateCollectionCount(allCollections.length);
+    return;
+  }
+
+  const terms=query.split(/\s+/).filter(Boolean);
+  const filtered=allCollections.filter(function(item){
+    const haystack=[
+      item.title||"",
+      item.short_name||"",
+      item.concept_id||"",
+      (item.platforms||[]).join(" "),
+      (item.instruments||[]).join(" ")
+    ].join(" ").toLowerCase();
+    return terms.every(function(term){return haystack.indexOf(term)!==-1;});
+  });
+
+  renderCollections(filtered);
+  updateCollectionCount(filtered.length);
+}
+
+$("collectionResultSearch").addEventListener("input",filterFetchedCollections);
+
 $("findGranules").onclick=async function(){
   const button=$("findGranules"),msg=$("granuleMessage");if(!selectedCollection){toast("Select a NASA collection first.","error");return;}
   try{
@@ -207,7 +241,7 @@ $("downloadCsv").onclick=async function(){
     const body={
       token:$("token").value.trim(),
       component:$("component").value.trim(),
-      collection_search_name:$("collectionName").value.trim()||null,
+      collection_search_name:$("collectionResultSearch").value.trim()||null,
       collection_id:selectedCollection.concept_id,
       collection_title:selectedCollection.title||selectedCollection.short_name||null,
       bbox:bbox(),date_range:dates(),
