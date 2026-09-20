@@ -40,12 +40,19 @@
           <label>Component / variable
             <input id="component" placeholder="e.g. NO2, PM2.5, NDVI, soil moisture, precipitation">
           </label>
+          <label>Collection name / short name
+            <input id="collectionName" placeholder="e.g. MOD13Q1 or part/full NASA collection title">
+          </label>
           <label>Satellite / platform filter
             <input id="platformFilter" placeholder="e.g. Terra, Aqua, Sentinel-5P">
           </label>
           <label>Instrument filter
             <input id="instrumentFilter" placeholder="e.g. MODIS, TROPOMI">
           </label>
+          <div class="info-box">
+            <strong>Search by component, collection name, or both</strong>
+            <span>Collection-name search checks NASA collection titles and short names directly. Exact matches are ranked first, followed by partial matches.</span>
+          </div>
           <div class="info-box">
             <strong>No collection limit</strong>
             <span>All matching NASA collections are loaded across every CMR result page.</span>
