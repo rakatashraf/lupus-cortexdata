@@ -5,6 +5,7 @@ import io
 import json
 import math
 import os
+import shutil
 import tempfile
 import uuid
 import zipfile
