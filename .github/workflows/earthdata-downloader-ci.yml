@@ -25,7 +25,7 @@ jobs:
       - name: Install focused test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi httpx requests pandas numpy xarray scipy h5netcdf h5py rasterio cftime
+          pip install fastapi httpx requests pandas numpy xarray scipy netCDF4 h5netcdf h5py rasterio cftime
 
       - name: Compile downloader
         run: |
@@ -71,6 +71,47 @@ jobs:
           csv_data = b"latitude,longitude,time,value\n23.5,90.5,2025-01-01T00:00:00Z,10\n"
           frames = convert_bytes(csv_data, "sample.csv", meta, [], bbox, 0)
           assert frames and len(frames[0]) == 1
+
+          # Native netCDF4 in-memory reader must handle classic NetCDF even
+          # when xarray's scipy engine is not the production path.
+          classic = xr.Dataset(
+              data_vars={"O3": (("time", "latitude"), np.array([[1.0, 2.0]]))},
+              coords={
+                  "time": ("time", np.array([0.0])),
+                  "latitude": ("latitude", np.array([20.0, 23.75])),
+              },
+          )
+          classic["time"].attrs["units"] = "days since 2012-01-01 00:00:00"
+          classic_nc = classic.to_netcdf(engine="scipy")
+          classic_frames = convert_bytes(
+              classic_nc,
+              "GOZ-Merged-MLP_O3_ev1-01_2012.nc4",
+              meta,
+              ["O3"],
+              bbox,
+              0,
+          )
+          assert classic_frames
+          assert any("O3" in str(frame["variable"].iloc[0]) for frame in classic_frames)
+          assert any("observation_time" in frame.columns for frame in classic_frames)
+
+          ragged_text = (
+              "# MLS SO2 example metadata\n"
+              "1 2 3 4 5 6 7 8 9 10 11 12\n"
+              "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19\n"
+              "20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38\n"
+          ).encode("utf-8")
+          text_frames = convert_bytes(
+              ragged_text,
+              "MSVOLSO2L4_v04-00-test.txt",
+              meta,
+              [],
+              bbox,
+              0,
+          )
+          assert text_frames
+          assert sum(len(frame) for frame in text_frames) > 0
+          assert any("text_record_type" in frame.columns for frame in text_frames)
 
           gz_data = gzip.compress(csv_data)
           frames = convert_bytes(gz_data, "sample.csv.gz", meta, [], bbox, 0)

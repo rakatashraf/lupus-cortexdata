@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import csv
 import gzip
 import io
 import json
 import math
 import os
+import re
 import uuid
 import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -559,6 +562,308 @@ def _json_file(
 
 
 
+def _nc4_variables(group: Any, prefix: str = "") -> list[tuple[str, Any, Any]]:
+    out: list[tuple[str, Any, Any]] = []
+    try:
+        for name, variable in group.variables.items():
+            path = f"{prefix}/{name}" if prefix else str(name)
+            out.append((path, variable, group))
+        for name, child in group.groups.items():
+            child_prefix = f"{prefix}/{name}" if prefix else str(name)
+            out.extend(_nc4_variables(child, child_prefix))
+    except Exception:
+        pass
+    return out
+
+
+def _nc4_coord_lookup(root: Any) -> dict[str, list[tuple[str, Any, Any]]]:
+    lookup: dict[str, list[tuple[str, Any, Any]]] = {}
+    for path, variable, group in _nc4_variables(root):
+        base = path.split("/")[-1].lower()
+        lookup.setdefault(base, []).append((path, variable, group))
+    return lookup
+
+
+def _nc4_pick_coord(
+    lookup: dict[str, list[tuple[str, Any, Any]]],
+    dimensions: tuple[str, ...],
+    candidates: set[str],
+) -> tuple[str, Any, Any] | None:
+    dims = {str(dim) for dim in dimensions}
+
+    # Prefer coordinate variables whose own single dimension belongs to the
+    # science variable's dimensions.
+    for candidate in candidates:
+        for item in lookup.get(candidate, []):
+            _, variable, _ = item
+            try:
+                if variable.ndim == 1 and variable.dimensions and str(variable.dimensions[0]) in dims:
+                    return item
+            except Exception:
+                continue
+
+    # Then accept an exact dimension-name coordinate.
+    for dim in dimensions:
+        for item in lookup.get(str(dim).lower(), []):
+            _, variable, _ = item
+            try:
+                if variable.ndim == 1 and variable.dimensions and str(variable.dimensions[0]) == str(dim):
+                    return item
+            except Exception:
+                continue
+    return None
+
+
+def _nc4_decode_time_values(values: np.ndarray, variable: Any) -> tuple[list[str] | None, dict[str, str]]:
+    units = str(getattr(variable, "units", "") or "")
+    calendar = str(getattr(variable, "calendar", "standard") or "standard")
+    meta = {
+        "source_temporal_units": units,
+        "source_temporal_calendar": calendar,
+    }
+    if not units:
+        return None, meta
+
+    try:
+        import netCDF4
+        decoded = netCDF4.num2date(
+            values,
+            units=units,
+            calendar=calendar,
+            only_use_cftime_datetimes=False,
+            only_use_python_datetimes=False,
+        )
+        flat = np.asarray(decoded, dtype=object).reshape(-1)
+        text: list[str] = []
+        for value in flat:
+            if value is None:
+                text.append("")
+                continue
+            try:
+                text.append(value.isoformat())
+            except Exception:
+                text.append(str(value))
+        return text, meta
+    except Exception:
+        meta["source_temporal_decode_status"] = "raw_preserved_decode_failed"
+        return None, meta
+
+
+def _netcdf4_bytes(
+    data: bytes,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    """Read NetCDF3/NetCDF4 directly from bytes using libnetcdf.
+
+    This avoids depending on xarray's optional scipy backend and works for
+    classic NetCDF as well as most NetCDF4/HDF5 files.
+    """
+    import netCDF4
+
+    root = netCDF4.Dataset("earthdata_inmemory.nc", mode="r", memory=data)
+    try:
+        all_vars = _nc4_variables(root)
+        lookup = _nc4_coord_lookup(root)
+        frames: list[pd.DataFrame] = []
+
+        coordinate_bases = LAT_NAMES | LON_NAMES | TIME_NAMES | {"times"}
+        max_cells = max(
+            10000,
+            int(os.getenv("EARTHDATA_MAX_NETCDF_CELLS", "5000000")),
+        )
+
+        for path, variable, group in all_vars:
+            base = path.split("/")[-1]
+            base_lower = base.lower()
+            if base_lower in coordinate_bases:
+                continue
+            if not _wanted(path, filters):
+                continue
+
+            try:
+                dtype = np.dtype(variable.dtype)
+                if not np.issubdtype(dtype, np.number):
+                    continue
+            except Exception:
+                continue
+
+            dimensions = tuple(str(dim) for dim in getattr(variable, "dimensions", ()))
+            shape = tuple(int(v) for v in getattr(variable, "shape", ()))
+            if not shape:
+                try:
+                    scalar = variable[...]
+                    df = pd.DataFrame(
+                        {
+                            "variable": [path],
+                            "unit": [str(getattr(variable, "units", "") or "")],
+                            "value": [scalar.item() if hasattr(scalar, "item") else scalar],
+                        }
+                    )
+                    frames.append(_apply_meta(df, meta))
+                except Exception:
+                    pass
+                continue
+
+            slicer: list[Any] = [slice(None)] * len(shape)
+            coord_vectors: dict[int, tuple[str, np.ndarray, Any]] = {}
+            spatial_slice_used = False
+            empty = False
+
+            lat_item = _nc4_pick_coord(lookup, dimensions, LAT_NAMES)
+            lon_item = _nc4_pick_coord(lookup, dimensions, LON_NAMES)
+            time_item = _nc4_pick_coord(lookup, dimensions, TIME_NAMES | {"times"})
+
+            for kind, item, low, high in (
+                ("latitude", lat_item, bbox["south"], bbox["north"]),
+                ("longitude", lon_item, bbox["west"], bbox["east"]),
+            ):
+                if item is None:
+                    continue
+                _, coord_var, _ = item
+                try:
+                    dim = str(coord_var.dimensions[0])
+                    if dim not in dimensions:
+                        continue
+                    axis = dimensions.index(dim)
+                    values = np.asarray(coord_var[:], dtype=np.float64).reshape(-1)
+                    selected = np.flatnonzero(
+                        np.isfinite(values) & (values >= low) & (values <= high)
+                    )
+                    if not len(selected):
+                        empty = True
+                        break
+                    start, stop = int(selected[0]), int(selected[-1]) + 1
+                    slicer[axis] = slice(start, stop)
+                    coord_vectors[axis] = (kind, values[start:stop], coord_var)
+                    spatial_slice_used = True
+                except Exception:
+                    continue
+
+            if empty:
+                continue
+
+            # Add remaining one-dimensional dimension coordinates.
+            for axis, dim in enumerate(dimensions):
+                if axis in coord_vectors:
+                    continue
+                candidates = lookup.get(dim.lower(), [])
+                coord_item = None
+                for item in candidates:
+                    _, candidate, _ = item
+                    try:
+                        if candidate.ndim == 1 and candidate.dimensions and str(candidate.dimensions[0]) == dim:
+                            coord_item = item
+                            break
+                    except Exception:
+                        continue
+                if coord_item is None and time_item is not None:
+                    _, candidate, _ = time_item
+                    try:
+                        if candidate.ndim == 1 and candidate.dimensions and str(candidate.dimensions[0]) == dim:
+                            coord_item = time_item
+                    except Exception:
+                        pass
+                if coord_item is None:
+                    continue
+                _, coord_var, _ = coord_item
+                try:
+                    dim_slice = slicer[axis]
+                    values = np.asarray(coord_var[dim_slice]).reshape(-1)
+                    coord_vectors[axis] = (path.split("/")[-1] if False else str(coord_var.name).split("/")[-1], values, coord_var)
+                except Exception:
+                    continue
+
+            projected_shape: list[int] = []
+            for axis, size in enumerate(shape):
+                sl = slicer[axis]
+                if isinstance(sl, slice):
+                    start = 0 if sl.start is None else int(sl.start)
+                    stop = int(size) if sl.stop is None else int(sl.stop)
+                    step = 1 if sl.step is None else int(sl.step)
+                    projected_shape.append(max(0, math.ceil((stop - start) / step)))
+                else:
+                    projected_shape.append(1)
+            projected_cells = int(np.prod(projected_shape)) if projected_shape else 1
+
+            if projected_cells > max_cells and not spatial_slice_used:
+                # Avoid serverless OOM on unlocated giant variables. A product-
+                # specific reader can still handle the file before this fallback.
+                continue
+
+            try:
+                values_raw = variable[tuple(slicer)]
+                if np.ma.isMaskedArray(values_raw):
+                    values = np.ma.filled(values_raw, np.nan)
+                else:
+                    values = np.asarray(values_raw)
+                values = np.asarray(values)
+            except Exception:
+                continue
+
+            if values.size == 0:
+                continue
+
+            flat_values = values.reshape(-1)
+            df = pd.DataFrame(
+                {
+                    "variable": path,
+                    "unit": str(getattr(variable, "units", "") or ""),
+                    "value": flat_values,
+                }
+            )
+
+            for axis, dim_size in enumerate(values.shape):
+                coord_info = coord_vectors.get(axis)
+                if coord_info is None:
+                    continue
+                coord_name, vector, coord_var = coord_info
+                vector = np.asarray(vector)
+                if vector.size != dim_size:
+                    continue
+                reshape = [1] * values.ndim
+                reshape[axis] = dim_size
+                broadcast = np.broadcast_to(vector.reshape(reshape), values.shape).reshape(-1)
+
+                low_name = str(coord_name).lower()
+                base_coord = str(getattr(coord_var, "name", coord_name)).split("/")[-1].lower()
+                if low_name in LAT_NAMES or base_coord in LAT_NAMES:
+                    df["latitude"] = pd.to_numeric(pd.Series(broadcast), errors="coerce")
+                elif low_name in LON_NAMES or base_coord in LON_NAMES:
+                    df["longitude"] = pd.to_numeric(pd.Series(broadcast), errors="coerce")
+                elif low_name in TIME_NAMES or low_name == "times" or base_coord in TIME_NAMES or base_coord == "times":
+                    decoded, time_meta = _nc4_decode_time_values(vector, coord_var)
+                    if decoded is not None:
+                        decoded_array = np.asarray(decoded, dtype=object)
+                        decoded_broadcast = np.broadcast_to(decoded_array.reshape(reshape), values.shape).reshape(-1)
+                        df["observation_time"] = decoded_broadcast
+                    else:
+                        df["source_temporal_raw_value"] = broadcast
+                        for key, value in time_meta.items():
+                            df[key] = value
+                else:
+                    safe = re.sub(r"[^A-Za-z0-9_]+", "_", str(coord_name)).strip("_") or f"dim_{axis}"
+                    df[safe] = broadcast
+
+            if "latitude" in df.columns or "longitude" in df.columns:
+                df = _filter_bbox(df, bbox)
+
+            numeric_values = pd.to_numeric(df["value"], errors="coerce")
+            if numeric_values.notna().any():
+                df["value"] = numeric_values
+                df = df.loc[numeric_values.notna() | df["value"].notna()].copy()
+
+            df = _limit(df, max_rows)
+            if not df.empty:
+                frames.append(_apply_meta(df, meta))
+
+        return frames
+    finally:
+        root.close()
+
+
 def _xarray_bytes(
     data: bytes,
     meta: dict[str, Any],
@@ -568,78 +873,90 @@ def _xarray_bytes(
 ) -> list[pd.DataFrame]:
     import xarray as xr
 
-    last_error: Exception | None = None
-    attempts: list[tuple[str | None, bool]] = []
-    for engine in ("h5netcdf", "scipy", None):
-        attempts.append((engine, True))
-        attempts.append((engine, False))
+    try:
+        available = set(xr.backends.list_engines().keys())
+    except Exception:
+        available = set()
 
-    for engine, decode_times in attempts:
-        stream = io.BytesIO(data)
-        try:
-            kwargs: dict[str, Any] = {
-                "decode_times": decode_times,
-                "mask_and_scale": True,
-            }
-            if engine:
-                kwargs["engine"] = engine
+    engines: list[str | None] = []
+    for engine in ("h5netcdf", "scipy"):
+        if engine in available:
+            engines.append(engine)
+    engines.append(None)
 
-            ds = xr.open_dataset(stream, **kwargs)
+    errors: list[str] = []
+
+    for engine in engines:
+        for decode_times in (True, False):
+            stream = io.BytesIO(data)
             try:
-                temporal_coord: str | None = None
-                temporal_units = ""
-                temporal_calendar = ""
+                kwargs: dict[str, Any] = {
+                    "decode_times": decode_times,
+                    "mask_and_scale": True,
+                }
+                if engine:
+                    kwargs["engine"] = engine
 
-                if not decode_times:
-                    for coord_name in list(ds.coords) + list(ds.variables):
-                        low = str(coord_name).lower()
-                        if low in TIME_NAMES or low in ("time", "times"):
-                            temporal_coord = str(coord_name)
-                            try:
-                                temporal_units = str(ds[coord_name].attrs.get("units") or "")
-                                temporal_calendar = str(ds[coord_name].attrs.get("calendar") or "")
-                            except Exception:
-                                pass
-                            break
+                ds = xr.open_dataset(stream, **kwargs)
+                try:
+                    temporal_coord: str | None = None
+                    temporal_units = ""
+                    temporal_calendar = ""
 
-                frames: list[pd.DataFrame] = []
-                for name, arr in ds.data_vars.items():
-                    if not _wanted(name, filters):
-                        continue
-                    if not np.issubdtype(arr.dtype, np.number):
-                        continue
+                    if not decode_times:
+                        for coord_name in list(ds.coords) + list(ds.variables):
+                            low = str(coord_name).lower()
+                            if low in TIME_NAMES or low in ("time", "times"):
+                                temporal_coord = str(coord_name)
+                                try:
+                                    temporal_units = str(ds[coord_name].attrs.get("units") or "")
+                                    temporal_calendar = str(ds[coord_name].attrs.get("calendar") or "")
+                                except Exception:
+                                    pass
+                                break
 
-                    try:
-                        df = arr.to_dataframe(name="value").reset_index()
-                    except Exception:
-                        values = np.asarray(arr.values).reshape(-1)
-                        df = pd.DataFrame({"value": values})
+                    frames: list[pd.DataFrame] = []
+                    for name, arr in ds.data_vars.items():
+                        if not _wanted(name, filters):
+                            continue
+                        if not np.issubdtype(arr.dtype, np.number):
+                            continue
 
-                    df.insert(0, "variable", name)
-                    unit = str(arr.attrs.get("units") or arr.attrs.get("Units") or "")
-                    df.insert(1, "unit", unit)
+                        try:
+                            df = arr.to_dataframe(name="value").reset_index()
+                        except Exception:
+                            values = np.asarray(arr.values).reshape(-1)
+                            df = pd.DataFrame({"value": values})
 
-                    if decode_times:
-                        df = _normalize_time(df)
-                    elif temporal_coord and temporal_coord in df.columns:
-                        df = df.rename(columns={temporal_coord: "source_temporal_raw_value"})
-                        df["source_temporal_units"] = temporal_units
-                        df["source_temporal_calendar"] = temporal_calendar
-                        df["source_temporal_decode_status"] = "raw_preserved_decode_failed"
+                        df.insert(0, "variable", name)
+                        unit = str(arr.attrs.get("units") or arr.attrs.get("Units") or "")
+                        df.insert(1, "unit", unit)
 
-                    df = _filter_bbox(df, bbox)
-                    df = _limit(df, max_rows)
-                    if not df.empty:
-                        frames.append(_apply_meta(df, meta))
+                        if decode_times:
+                            df = _normalize_time(df)
+                        elif temporal_coord and temporal_coord in df.columns:
+                            df = df.rename(columns={temporal_coord: "source_temporal_raw_value"})
+                            df["source_temporal_units"] = temporal_units
+                            df["source_temporal_calendar"] = temporal_calendar
+                            df["source_temporal_decode_status"] = "raw_preserved_decode_failed"
 
-                if frames:
-                    return frames
-            finally:
-                ds.close()
-        except Exception as exc:
-            last_error = exc
+                        df = _filter_bbox(df, bbox)
+                        df = _limit(df, max_rows)
+                        if not df.empty:
+                            frames.append(_apply_meta(df, meta))
 
-    raise ValueError(f"NetCDF/xarray in-memory reader failed: {last_error}")
+                    if frames:
+                        return frames
+                finally:
+                    ds.close()
+            except Exception as exc:
+                label = engine or "auto"
+                errors.append(f"{label}/decode_times={decode_times}: {exc}")
+
+    raise ValueError(
+        "NetCDF/xarray fallback failed. "
+        + " | ".join(errors[-4:])
+    )
 
 
 def _attr_scalar(attrs: Any, *names: str, default: float | None = None) -> float | None:
@@ -1195,6 +1512,214 @@ def _raster_bytes(
     raise ValueError("Raster/GDAL in-memory reader could not open this dataset.")
 
 
+def _text_is_number(value: str) -> bool:
+    text = str(value).strip()
+    if not text:
+        return False
+    try:
+        float(text.replace("D", "E").replace("d", "e"))
+        return True
+    except Exception:
+        return False
+
+
+def _text_tokens(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped:
+        return []
+    if "\t" in stripped:
+        return [part.strip() for part in stripped.split("\t")]
+    if "," in stripped:
+        try:
+            return [part.strip() for part in next(csv.reader([stripped]))]
+        except Exception:
+            pass
+    return [part for part in re.split(r"\s+", stripped) if part]
+
+
+def _unique_text_headers(tokens: list[str]) -> list[str]:
+    out: list[str] = []
+    used: dict[str, int] = {}
+    for index, token in enumerate(tokens, 1):
+        name = re.sub(r"[^A-Za-z0-9_]+", "_", str(token)).strip("_")
+        if not name or name[0].isdigit():
+            name = f"field_{index}" if not name else f"field_{index}_{name}"
+        count = used.get(name, 0) + 1
+        used[name] = count
+        out.append(name if count == 1 else f"{name}_{count}")
+    return out
+
+
+def _semi_structured_text_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = data.decode("latin-1", errors="replace")
+
+    raw_lines = text.splitlines()
+    parsed: list[tuple[int, str, list[str], float]] = []
+    metadata_lines: list[str] = []
+
+    for line_number, raw in enumerate(raw_lines, 1):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("#", "!", "%", "//")):
+            if len(metadata_lines) < 40:
+                metadata_lines.append(stripped)
+            continue
+
+        tokens = _text_tokens(stripped)
+        if len(tokens) < 2:
+            if len(metadata_lines) < 40:
+                metadata_lines.append(stripped)
+            continue
+
+        numeric_ratio = sum(_text_is_number(token) for token in tokens) / max(1, len(tokens))
+        parsed.append((line_number, stripped, tokens, numeric_ratio))
+
+    if not parsed:
+        frame = pd.DataFrame(
+            {
+                "variable": ["raw_text_record"],
+                "unit": [""],
+                "value": [text[:100000]],
+                "text_record_type": ["raw_document"],
+                "text_source_line": [1],
+                "text_field_count": [1],
+            }
+        )
+        return [_apply_meta(frame, meta)]
+
+    numeric_candidates = [entry for entry in parsed if entry[3] >= 0.25]
+    count_source = numeric_candidates or parsed
+    counts = Counter(len(entry[2]) for entry in count_source)
+    modal_count = counts.most_common(1)[0][0]
+
+    modal_numeric = [entry for entry in numeric_candidates if len(entry[2]) == modal_count]
+    modal_any = [entry for entry in parsed if len(entry[2]) == modal_count]
+    data_entries = modal_numeric or modal_any
+
+    # Detect a same-width textual header immediately preceding the data block.
+    header_tokens: list[str] | None = None
+    if data_entries:
+        first_line = data_entries[0][0]
+        for entry in reversed(parsed):
+            if entry[0] >= first_line:
+                continue
+            if len(entry[2]) == modal_count and entry[3] < 0.25:
+                header_tokens = entry[2]
+                break
+
+    columns = (
+        _unique_text_headers(header_tokens)
+        if header_tokens
+        else [f"field_{index}" for index in range(1, modal_count + 1)]
+    )
+
+    records: list[dict[str, Any]] = []
+    data_line_numbers: list[int] = []
+    for line_number, raw, tokens, numeric_ratio in data_entries:
+        if header_tokens and tokens == header_tokens:
+            continue
+        if len(tokens) != modal_count:
+            continue
+        record = {columns[i]: tokens[i] for i in range(modal_count)}
+        records.append(record)
+        data_line_numbers.append(line_number)
+
+    frames: list[pd.DataFrame] = []
+    metadata_excerpt = "\n".join(metadata_lines[:20])
+
+    if records:
+        wide = pd.DataFrame(records)
+        wide["text_source_line"] = data_line_numbers
+
+        for column in list(wide.columns):
+            if column == "text_source_line":
+                continue
+            converted = pd.to_numeric(
+                wide[column].astype(str).str.replace("D", "E").str.replace("d", "e"),
+                errors="coerce",
+            )
+            if converted.notna().mean() >= 0.8:
+                wide[column] = converted
+
+        wide = _normalize_time(wide)
+        wide = _filter_bbox(wide, bbox)
+
+        id_cols: list[str] = ["text_source_line"]
+        for column in wide.columns:
+            low = str(column).lower()
+            if low in LAT_NAMES | LON_NAMES | TIME_NAMES or column == "observation_time":
+                if column not in id_cols:
+                    id_cols.append(column)
+
+        value_cols = [column for column in wide.columns if column not in id_cols]
+        if value_cols:
+            melted = wide.melt(
+                id_vars=id_cols,
+                value_vars=value_cols,
+                var_name="variable",
+                value_name="value",
+            )
+            melted["unit"] = ""
+            melted["text_record_type"] = "parsed_table"
+            melted["text_field_count"] = modal_count
+            if metadata_excerpt:
+                melted["text_metadata_excerpt"] = metadata_excerpt
+            melted = _limit(melted, max_rows)
+            if not melted.empty:
+                frames.append(_apply_meta(melted, meta))
+
+    # Preserve non-modal/ragged records rather than throwing a parser error.
+    data_line_set = {entry[0] for entry in data_entries}
+    ragged_rows: list[dict[str, Any]] = []
+    for line_number, raw, tokens, numeric_ratio in parsed:
+        if line_number in data_line_set:
+            continue
+        ragged_rows.append(
+            {
+                "variable": "raw_text_record",
+                "unit": "",
+                "value": raw,
+                "text_record_type": "ragged_or_header",
+                "text_source_line": line_number,
+                "text_field_count": len(tokens),
+                "raw_fields_json": json.dumps(tokens, ensure_ascii=False),
+                "text_metadata_excerpt": metadata_excerpt,
+            }
+        )
+
+    if ragged_rows:
+        ragged = pd.DataFrame(ragged_rows)
+        ragged = _limit(ragged, max_rows)
+        if not ragged.empty:
+            frames.append(_apply_meta(ragged, meta))
+
+    if frames:
+        return frames
+
+    fallback = pd.DataFrame(
+        {
+            "variable": ["raw_text_record"],
+            "unit": [""],
+            "value": [text[:100000]],
+            "text_record_type": ["raw_document"],
+            "text_source_line": [1],
+            "text_field_count": [modal_count],
+            "text_metadata_excerpt": [metadata_excerpt],
+        }
+    )
+    return [_apply_meta(fallback, meta)]
+
+
 def _table_bytes(
     data: bytes,
     filename: str,
@@ -1203,18 +1728,25 @@ def _table_bytes(
     max_rows: int,
 ) -> list[pd.DataFrame]:
     suffix = Path(filename).suffix.lower()
+
+    # Plain .txt science products are frequently semi-structured rather than
+    # RFC-style CSV. Parse them tolerantly from the beginning.
+    if suffix == ".txt":
+        return _semi_structured_text_bytes(data, filename, meta, bbox, max_rows)
+
     stream = io.BytesIO(data)
-    if suffix in (".tsv", ".tab"):
-        df = pd.read_csv(stream, sep="\t")
-    else:
-        try:
-            df = pd.read_csv(stream)
-        except Exception:
-            stream.seek(0)
-            df = pd.read_csv(stream, sep=None, engine="python")
-    df = _normalize_time(_filter_bbox(df, bbox))
-    df = _limit(df, max_rows)
-    return [_apply_meta(df, meta)] if not df.empty else []
+    try:
+        if suffix in (".tsv", ".tab"):
+            df = pd.read_csv(stream, sep="\t", on_bad_lines="skip")
+        else:
+            df = pd.read_csv(stream, on_bad_lines="skip")
+        if df.empty or len(df.columns) <= 1:
+            raise ValueError("No rectangular delimited table detected.")
+        df = _normalize_time(_filter_bbox(df, bbox))
+        df = _limit(df, max_rows)
+        return [_apply_meta(df, meta)] if not df.empty else []
+    except Exception:
+        return _semi_structured_text_bytes(data, filename, meta, bbox, max_rows)
 
 
 def _json_bytes(
@@ -1383,7 +1915,22 @@ def convert_bytes(
         return convert_bytes(expanded, inner_name, inner_meta, filters, bbox, max_rows)
 
     if suffix in (".nc", ".nc4", ".cdf"):
-        return _xarray_bytes(data, meta, filters, bbox, max_rows)
+        errors: list[str] = []
+        try:
+            frames = _netcdf4_bytes(data, meta, filters, bbox, max_rows)
+            if frames:
+                return frames
+        except Exception as exc:
+            errors.append(f"netCDF4: {exc}")
+
+        try:
+            frames = _xarray_bytes(data, meta, filters, bbox, max_rows)
+            if frames:
+                return frames
+        except Exception as exc:
+            errors.append(f"xarray: {exc}")
+
+        raise ValueError("NetCDF readers failed. " + " | ".join(errors))
 
     if suffix in (".h5", ".hdf5", ".he5"):
         specialized_errors: list[str] = []
@@ -1575,6 +2122,9 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "granule_ur",
         "granule_production_date_utc",
         "granule_size_mb",
+        "conversion_status",
+        "conversion_error",
+        "raw_download_url",
         "source",
         "source_agency",
         "source_provider",

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote, urlparse
 
+import pandas as pd
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
@@ -29,7 +30,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.9.0",
+    version="2.0.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -145,7 +146,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/1.9",
+        "User-Agent": "EarthdataCSVDownloader/2.0",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -248,14 +249,87 @@ def _download_granule_bytes(
     return data, filename, str(final_url)
 
 
+def _granule_meta(
+    req: DownloadRequest,
+    granule: dict,
+    filename: str = "",
+    url: str = "",
+) -> dict:
+    component_names = [
+        value.strip()
+        for value in re.split(r"[;,\n\r]+", req.component or "")
+        if value.strip()
+    ]
+    satellite_names = granule.get("platforms") or []
+    instrument_names = granule.get("instruments") or []
+
+    return {
+        "source": "NASA Earthdata",
+        "source_agency": "NASA",
+        "source_provider": req.collection_provider or "",
+        "source_satellite": ";".join(satellite_names),
+        "source_instrument": ";".join(instrument_names),
+        "component_primary": component_names[0] if component_names else "",
+        "component_names": ";".join(component_names),
+        "component_count": len(component_names),
+        "component_query": req.component,
+        "collection_search_name": req.collection_search_name or "",
+        "collection_id": req.collection_id,
+        "collection_short_name": req.collection_short_name or "",
+        "collection_title": req.collection_title or "",
+        "collection_version": req.collection_version or "",
+        "collection_provider": req.collection_provider or "",
+        "collection_processing_level": req.collection_processing_level or "",
+        "collection_segment_key": "|".join(
+            value for value in [
+                req.collection_short_name or "",
+                req.collection_version or "",
+                req.collection_id or "",
+            ] if value
+        ),
+        "granule_id": granule.get("concept_id") or "",
+        "granule_ur": granule.get("granule_ur") or "",
+        "granule_production_date_utc": granule.get("production_date") or "",
+        "granule_size_mb": granule.get("size_mb") or "",
+        "satellite_platform": ";".join(satellite_names),
+        "instrument": ";".join(instrument_names),
+        "granule_begin": granule.get("begin") or "",
+        "granule_end": granule.get("end") or "",
+        "original_file": filename,
+        "download_url": url,
+        "raw_download_url": url,
+    }
+
+
+def _conversion_failure_frame(
+    req: DownloadRequest,
+    granule: dict,
+    error_text: str,
+    raw_url: str = "",
+) -> pd.DataFrame:
+    meta = _granule_meta(req, granule, filename="", url=raw_url)
+    row = dict(meta)
+    row.update(
+        {
+            "conversion_status": "conversion_failed",
+            "conversion_error": error_text,
+            "variable": "__conversion_status__",
+            "value": "",
+            "unit": "",
+        }
+    )
+    return pd.DataFrame([row])
+
+
 def _download_convert(
     req: DownloadRequest,
     granules: list[dict],
     cycle_override: Optional[dict] = None,
 ) -> tuple[bytes, dict]:
-    frames = []
+    frames: list[pd.DataFrame] = []
     errors: list[dict[str, str]] = []
     session = _session(req.token)
+    successful_granules = 0
 
     for idx, granule in enumerate(granules, 1):
         urls = granule.get("download_urls") or []
@@ -263,10 +337,14 @@ def _download_convert(
             urls = [granule["primary_url"]]
 
         if not urls:
-            errors.append({
-                "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
-                "error": "No downloadable URL is present in NASA CMR metadata.",
-            })
+            error_text = "No downloadable URL is present in NASA CMR metadata."
+            errors.append(
+                {
+                    "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
+                    "error": error_text,
+                }
+            )
+            frames.append(_conversion_failure_frame(req, granule, error_text))
             continue
 
         success = False
@@ -275,50 +353,9 @@ def _download_convert(
         for url in urls:
             try:
                 data, filename, final_url = _download_granule_bytes(session, url, idx)
-
-                component_names = [
-                    value.strip()
-                    for value in re.split(r"[;,\n\r]+", req.component or "")
-                    if value.strip()
-                ]
-                satellite_names = granule.get("platforms") or []
-                instrument_names = granule.get("instruments") or []
-
-                meta = {
-                    "source": "NASA Earthdata",
-                    "source_agency": "NASA",
-                    "source_provider": req.collection_provider or "",
-                    "source_satellite": ";".join(satellite_names),
-                    "source_instrument": ";".join(instrument_names),
-                    "component_primary": component_names[0] if component_names else "",
-                    "component_names": ";".join(component_names),
-                    "component_count": len(component_names),
-                    "component_query": req.component,
-                    "collection_search_name": req.collection_search_name or "",
-                    "collection_id": req.collection_id,
-                    "collection_short_name": req.collection_short_name or "",
-                    "collection_title": req.collection_title or "",
-                    "collection_version": req.collection_version or "",
-                    "collection_provider": req.collection_provider or "",
-                    "collection_processing_level": req.collection_processing_level or "",
-                    "collection_segment_key": "|".join(
-                        value for value in [
-                            req.collection_short_name or "",
-                            req.collection_version or "",
-                            req.collection_id or "",
-                        ] if value
-                    ),
-                    "granule_id": granule.get("concept_id") or "",
-                    "granule_ur": granule.get("granule_ur") or "",
-                    "granule_production_date_utc": granule.get("production_date") or "",
-                    "granule_size_mb": granule.get("size_mb") or "",
-                    "satellite_platform": ";".join(satellite_names),
-                    "instrument": ";".join(instrument_names),
-                    "granule_begin": granule.get("begin") or "",
-                    "granule_end": granule.get("end") or "",
-                    "original_file": filename,
-                    "download_url": final_url,
-                }
+                meta = _granule_meta(req, granule, filename=filename, url=final_url)
+                meta["conversion_status"] = "converted"
+                meta["conversion_error"] = ""
 
                 converted = convert_bytes(
                     data,
@@ -336,16 +373,28 @@ def _download_convert(
                     )
 
                 frames.extend(converted)
+                successful_granules += 1
                 success = True
                 break
             except Exception as exc:
                 url_errors.append(str(exc))
 
         if not success:
-            errors.append({
-                "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
-                "error": " | ".join(url_errors[:3]) or "Download/conversion failed.",
-            })
+            error_text = " | ".join(url_errors[:3]) or "Download/conversion failed."
+            errors.append(
+                {
+                    "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
+                    "error": error_text,
+                }
+            )
+            frames.append(
+                _conversion_failure_frame(
+                    req,
+                    granule,
+                    error_text,
+                    raw_url=urls[0] if urls else "",
+                )
+            )
 
     combined = combine_frames(frames)
 
@@ -379,19 +428,13 @@ def _download_convert(
                 combined["data_cycle_detail"] = detail
 
     if combined.empty:
-        details = "; ".join(
-            f"{item['granule']}: {item['error']}" for item in errors[:3]
-        )
-        if len(errors) > 3:
-            details += f"; plus {len(errors) - 3} more failed granule(s)"
-        raise ValueError(
-            "NASA returned granules, but none could be converted to CSV. " + details
-        )
+        raise ValueError("NASA returned no rows that could be represented in the export.")
 
     csv_bytes = combined.to_csv(index=False).encode("utf-8")
     return csv_bytes, {
         "rows": len(combined),
         "converted_frames": len(frames),
+        "successful_granules": successful_granules,
         "errors": errors,
         "csv_bytes": len(csv_bytes),
     }
@@ -441,7 +484,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.9.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.0.0"}
 
 
 @app.post("/api/token/validate")
@@ -614,6 +657,8 @@ async def download_nasa(req: DownloadRequest):
                 "X-Earthdata-Granules": str(len(granules)),
                 "X-Earthdata-Timezone": "UTC",
                 "X-Earthdata-Conversion-Errors": str(len(report["errors"])),
+                "X-Earthdata-Successful-Granules": str(report.get("successful_granules", 0)),
+                "X-Earthdata-Conversion-Status": "converted" if not report["errors"] else ("partial" if report.get("successful_granules", 0) else "failed"),
             },
         )
     except HTTPException:
@@ -681,6 +726,8 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "X-Earthdata-Timezone": "UTC",
                 "X-Earthdata-Granule-Id": req.granule_id,
                 "X-Earthdata-Conversion-Errors": str(len(report["errors"])),
+                "X-Earthdata-Successful-Granules": str(report.get("successful_granules", 0)),
+                "X-Earthdata-Conversion-Status": "converted" if not report["errors"] else ("partial" if report.get("successful_granules", 0) else "failed"),
                 "X-Earthdata-Processing-Ms": str(elapsed_ms),
             },
         )

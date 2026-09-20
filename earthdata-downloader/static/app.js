@@ -483,6 +483,7 @@ $("downloadCsv").onclick=async function(){
     const started=performance.now();
     let completed=0;
     let convertedGranules=0;
+    let representedGranules=0;
     let totalRows=0;
     let totalBackendMs=0;
     let backendSamples=0;
@@ -571,17 +572,23 @@ $("downloadCsv").onclick=async function(){
 
         const text=await response.text();
         queueCsv(text);
+        representedGranules++;
 
         const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
         if(Number.isFinite(rows)) totalRows+=rows;
 
+        const conversionErrors=Number(response.headers.get("X-Earthdata-Conversion-Errors")||0);
         const backendMs=Number(response.headers.get("X-Earthdata-Processing-Ms")||0);
         if(Number.isFinite(backendMs)&&backendMs>0){
           totalBackendMs+=backendMs;
           backendSamples++;
         }
 
-        convertedGranules++;
+        if(conversionErrors>0){
+          failures.push(label+": conversion failed; manifest row included in CSV");
+        }else{
+          convertedGranules++;
+        }
       }catch(e){
         failures.push(label+": "+(e&&e.message?e.message:String(e)));
       }finally{
@@ -593,11 +600,11 @@ $("downloadCsv").onclick=async function(){
     await Promise.all(tasks);
     await writeQueue;
 
-    if(!header || convertedGranules===0){
+    if(!header || representedGranules===0){
       if(writer&&typeof writer.abort==="function") await writer.abort();
       writer=null;
       const details=failures.slice(0,3).join(" | ");
-      throw new Error("No granules could be converted."+ (details?" "+details:""));
+      throw new Error("No selected granules could be represented in the CSV."+ (details?" "+details:""));
     }
 
     if(usingFileWriter){
@@ -614,7 +621,7 @@ $("downloadCsv").onclick=async function(){
     const skipped=failures.length;
     msg.className=skipped?"message warn":"message success";
     msg.textContent="Converted "+convertedGranules+" of "+total+
-      " granule(s) in "+elapsed.toFixed(1)+"s"+
+      " granule(s); represented "+representedGranules+" in the CSV in "+elapsed.toFixed(1)+"s"+
       " ("+rate.toFixed(rate>=10?1:2)+" granules/s)"+
       (avgBackend!==null?" · avg backend "+avgBackend+"ms":"")+
       (totalRows?" · "+totalRows+" CSV rows":"")+
