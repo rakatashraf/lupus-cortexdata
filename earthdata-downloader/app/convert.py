@@ -430,6 +430,405 @@ def _hdf5_file(
     return frames
 
 
+def _nc4_variables(group: Any, prefix: str = "") -> list[tuple[str, Any, Any]]:
+    out: list[tuple[str, Any, Any]] = []
+    try:
+        for name, variable in group.variables.items():
+            path = f"{prefix}/{name}" if prefix else str(name)
+            out.append((path, variable, group))
+        for name, child in group.groups.items():
+            child_prefix = f"{prefix}/{name}" if prefix else str(name)
+            out.extend(_nc4_variables(child, child_prefix))
+    except Exception:
+        pass
+    return out
+
+
+def _nc4_coord_lookup(root: Any) -> dict[str, list[tuple[str, Any, Any]]]:
+    lookup: dict[str, list[tuple[str, Any, Any]]] = {}
+    for path, variable, group in _nc4_variables(root):
+        base = path.split("/")[-1].lower()
+        lookup.setdefault(base, []).append((path, variable, group))
+    return lookup
+
+
+def _nc4_pick_coord(
+    lookup: dict[str, list[tuple[str, Any, Any]]],
+    dimensions: tuple[str, ...],
+    candidates: set[str],
+) -> tuple[str, Any, Any] | None:
+    dims = {str(dim) for dim in dimensions}
+
+    # Prefer coordinate variables whose own single dimension belongs to the
+    # science variable's dimensions.
+    for candidate in candidates:
+        for item in lookup.get(candidate, []):
+            _, variable, _ = item
+            try:
+                if variable.ndim == 1 and variable.dimensions and str(variable.dimensions[0]) in dims:
+                    return item
+            except Exception:
+                continue
+
+    # Then accept an exact dimension-name coordinate.
+    for dim in dimensions:
+        for item in lookup.get(str(dim).lower(), []):
+            _, variable, _ = item
+            try:
+                if variable.ndim == 1 and variable.dimensions and str(variable.dimensions[0]) == str(dim):
+                    return item
+            except Exception:
+                continue
+    return None
+
+
+def _nc4_decode_time_values(values: np.ndarray, variable: Any) -> tuple[list[str] | None, dict[str, str]]:
+    units = str(getattr(variable, "units", "") or "")
+    calendar = str(getattr(variable, "calendar", "standard") or "standard")
+    meta = {
+        "source_temporal_units": units,
+        "source_temporal_calendar": calendar,
+    }
+    if not units:
+        return None, meta
+
+    try:
+        import netCDF4
+        decoded = netCDF4.num2date(
+            values,
+            units=units,
+            calendar=calendar,
+            only_use_cftime_datetimes=False,
+            only_use_python_datetimes=False,
+        )
+        flat = np.asarray(decoded, dtype=object).reshape(-1)
+        text: list[str] = []
+        for value in flat:
+            if value is None:
+                text.append("")
+                continue
+            try:
+                text.append(value.isoformat())
+            except Exception:
+                text.append(str(value))
+        return text, meta
+    except Exception:
+        meta["source_temporal_decode_status"] = "raw_preserved_decode_failed"
+        return None, meta
+
+
+def _netcdf4_bytes(
+    data: bytes,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    """Read NetCDF3/NetCDF4 directly from bytes using libnetcdf.
+
+    This avoids depending on xarray's optional scipy backend and works for
+    classic NetCDF as well as most NetCDF4/HDF5 files.
+    """
+    import netCDF4
+
+    root = netCDF4.Dataset("earthdata_inmemory.nc", mode="r", memory=data)
+    try:
+        all_vars = _nc4_variables(root)
+        lookup = _nc4_coord_lookup(root)
+        frames: list[pd.DataFrame] = []
+
+        coordinate_bases = LAT_NAMES | LON_NAMES | TIME_NAMES | {"times"}
+        max_cells = max(
+            10000,
+            int(os.getenv("EARTHDATA_MAX_NETCDF_CELLS", "5000000")),
+        )
+
+        for path, variable, group in all_vars:
+            base = path.split("/")[-1]
+            base_lower = base.lower()
+            if base_lower in coordinate_bases:
+                continue
+            if not _wanted(path, filters):
+                continue
+
+            try:
+                dtype = np.dtype(variable.dtype)
+                if not np.issubdtype(dtype, np.number):
+                    continue
+            except Exception:
+                continue
+
+            dimensions = tuple(str(dim) for dim in getattr(variable, "dimensions", ()))
+            shape = tuple(int(v) for v in getattr(variable, "shape", ()))
+            if not shape:
+                try:
+                    scalar = variable[...]
+                    df = pd.DataFrame(
+                        {
+                            "variable": [path],
+                            "unit": [str(getattr(variable, "units", "") or "")],
+                            "value": [scalar.item() if hasattr(scalar, "item") else scalar],
+                        }
+                    )
+                    frames.append(_apply_meta(df, meta))
+                except Exception:
+                    pass
+                continue
+
+            slicer: list[Any] = [slice(None)] * len(shape)
+            coord_vectors: dict[int, tuple[str, np.ndarray, Any]] = {}
+            spatial_slice_used = False
+            empty = False
+
+            lat_item = _nc4_pick_coord(lookup, dimensions, LAT_NAMES)
+            lon_item = _nc4_pick_coord(lookup, dimensions, LON_NAMES)
+            time_item = _nc4_pick_coord(lookup, dimensions, TIME_NAMES | {"times"})
+
+            for kind, item, low, high in (
+                ("latitude", lat_item, bbox["south"], bbox["north"]),
+                ("longitude", lon_item, bbox["west"], bbox["east"]),
+            ):
+                if item is None:
+                    continue
+                _, coord_var, _ = item
+                try:
+                    dim = str(coord_var.dimensions[0])
+                    if dim not in dimensions:
+                        continue
+                    axis = dimensions.index(dim)
+                    values = np.asarray(coord_var[:], dtype=np.float64).reshape(-1)
+                    selected = _axis_overlap_indices(values, low, high)
+                    if not len(selected):
+                        empty = True
+                        break
+                    start, stop = int(selected[0]), int(selected[-1]) + 1
+                    slicer[axis] = slice(start, stop)
+                    coord_vectors[axis] = (kind, values[start:stop], coord_var)
+                    spatial_slice_used = True
+                except Exception:
+                    continue
+
+            if empty:
+                continue
+
+            # Add remaining one-dimensional dimension coordinates.
+            for axis, dim in enumerate(dimensions):
+                if axis in coord_vectors:
+                    continue
+                candidates = lookup.get(dim.lower(), [])
+                coord_item = None
+                for item in candidates:
+                    _, candidate, _ = item
+                    try:
+                        if candidate.ndim == 1 and candidate.dimensions and str(candidate.dimensions[0]) == dim:
+                            coord_item = item
+                            break
+                    except Exception:
+                        continue
+                if coord_item is None and time_item is not None:
+                    _, candidate, _ = time_item
+                    try:
+                        if candidate.ndim == 1 and candidate.dimensions and str(candidate.dimensions[0]) == dim:
+                            coord_item = time_item
+                    except Exception:
+                        pass
+                if coord_item is None:
+                    continue
+                _, coord_var, _ = coord_item
+                try:
+                    dim_slice = slicer[axis]
+                    values = np.asarray(coord_var[dim_slice]).reshape(-1)
+                    coord_vectors[axis] = (path.split("/")[-1] if False else str(coord_var.name).split("/")[-1], values, coord_var)
+                except Exception:
+                    continue
+
+            projected_shape: list[int] = []
+            for axis, size in enumerate(shape):
+                sl = slicer[axis]
+                if isinstance(sl, slice):
+                    start = 0 if sl.start is None else int(sl.start)
+                    stop = int(size) if sl.stop is None else int(sl.stop)
+                    step = 1 if sl.step is None else int(sl.step)
+                    projected_shape.append(max(0, math.ceil((stop - start) / step)))
+                else:
+                    projected_shape.append(1)
+            projected_cells = int(np.prod(projected_shape)) if projected_shape else 1
+
+            if projected_cells > max_cells and not spatial_slice_used:
+                # Avoid serverless OOM on unlocated giant variables. A product-
+                # specific reader can still handle the file before this fallback.
+                continue
+
+            try:
+                values_raw = variable[tuple(slicer)]
+                if np.ma.isMaskedArray(values_raw):
+                    values = np.ma.filled(values_raw, np.nan)
+                else:
+                    values = np.asarray(values_raw)
+                values = np.asarray(values)
+            except Exception:
+                continue
+
+            if values.size == 0:
+                continue
+
+            flat_values = values.reshape(-1)
+            df = pd.DataFrame(
+                {
+                    "variable": path,
+                    "unit": str(getattr(variable, "units", "") or ""),
+                    "value": flat_values,
+                }
+            )
+
+            for axis, dim_size in enumerate(values.shape):
+                coord_info = coord_vectors.get(axis)
+                if coord_info is None:
+                    continue
+                coord_name, vector, coord_var = coord_info
+                vector = np.asarray(vector)
+                if vector.size != dim_size:
+                    continue
+                reshape = [1] * values.ndim
+                reshape[axis] = dim_size
+                broadcast = np.broadcast_to(vector.reshape(reshape), values.shape).reshape(-1)
+
+                low_name = str(coord_name).lower()
+                base_coord = str(getattr(coord_var, "name", coord_name)).split("/")[-1].lower()
+                if low_name in LAT_NAMES or base_coord in LAT_NAMES:
+                    df["latitude"] = pd.to_numeric(pd.Series(broadcast), errors="coerce")
+                elif low_name in LON_NAMES or base_coord in LON_NAMES:
+                    df["longitude"] = pd.to_numeric(pd.Series(broadcast), errors="coerce")
+                elif low_name in TIME_NAMES or low_name == "times" or base_coord in TIME_NAMES or base_coord == "times":
+                    decoded, time_meta = _nc4_decode_time_values(vector, coord_var)
+                    if decoded is not None:
+                        decoded_array = np.asarray(decoded, dtype=object)
+                        decoded_broadcast = np.broadcast_to(decoded_array.reshape(reshape), values.shape).reshape(-1)
+                        df["observation_time"] = decoded_broadcast
+                    else:
+                        df["source_temporal_raw_value"] = broadcast
+                        for key, value in time_meta.items():
+                            df[key] = value
+                else:
+                    safe = re.sub(r"[^A-Za-z0-9_]+", "_", str(coord_name)).strip("_") or f"dim_{axis}"
+                    df[safe] = broadcast
+
+            if spatial_slice_used:
+                df["spatial_selection_method"] = "coordinate_cell_extent_overlap"
+            elif "latitude" in df.columns or "longitude" in df.columns:
+                df = _filter_bbox(df, bbox)
+
+            numeric_values = pd.to_numeric(df["value"], errors="coerce")
+            if numeric_values.notna().any():
+                df["value"] = numeric_values
+                df = df.loc[numeric_values.notna() | df["value"].notna()].copy()
+
+            df = _limit(df, max_rows)
+            if not df.empty:
+                frames.append(_apply_meta(df, meta))
+
+        return frames
+    finally:
+        root.close()
+
+
+def _xarray_bytes(
+    data: bytes,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    import xarray as xr
+
+    try:
+        available = set(xr.backends.list_engines().keys())
+    except Exception:
+        available = set()
+
+    engines: list[str | None] = []
+    for engine in ("h5netcdf", "scipy"):
+        if engine in available:
+            engines.append(engine)
+    engines.append(None)
+
+    errors: list[str] = []
+
+    for engine in engines:
+        for decode_times in (True, False):
+            stream = io.BytesIO(data)
+            try:
+                kwargs: dict[str, Any] = {
+                    "decode_times": decode_times,
+                    "mask_and_scale": True,
+                }
+                if engine:
+                    kwargs["engine"] = engine
+
+                ds = xr.open_dataset(stream, **kwargs)
+                try:
+                    temporal_coord: str | None = None
+                    temporal_units = ""
+                    temporal_calendar = ""
+
+                    if not decode_times:
+                        for coord_name in list(ds.coords) + list(ds.variables):
+                            low = str(coord_name).lower()
+                            if low in TIME_NAMES or low in ("time", "times"):
+                                temporal_coord = str(coord_name)
+                                try:
+                                    temporal_units = str(ds[coord_name].attrs.get("units") or "")
+                                    temporal_calendar = str(ds[coord_name].attrs.get("calendar") or "")
+                                except Exception:
+                                    pass
+                                break
+
+                    frames: list[pd.DataFrame] = []
+                    for name, arr in ds.data_vars.items():
+                        if not _wanted(name, filters):
+                            continue
+                        if not np.issubdtype(arr.dtype, np.number):
+                            continue
+
+                        try:
+                            df = arr.to_dataframe(name="value").reset_index()
+                        except Exception:
+                            values = np.asarray(arr.values).reshape(-1)
+                            df = pd.DataFrame({"value": values})
+
+                        df.insert(0, "variable", name)
+                        unit = str(arr.attrs.get("units") or arr.attrs.get("Units") or "")
+                        df.insert(1, "unit", unit)
+
+                        if decode_times:
+                            df = _normalize_time(df)
+                        elif temporal_coord and temporal_coord in df.columns:
+                            df = df.rename(columns={temporal_coord: "source_temporal_raw_value"})
+                            df["source_temporal_units"] = temporal_units
+                            df["source_temporal_calendar"] = temporal_calendar
+                            df["source_temporal_decode_status"] = "raw_preserved_decode_failed"
+
+                        df = _filter_bbox(df, bbox)
+                        df = _limit(df, max_rows)
+                        if not df.empty:
+                            frames.append(_apply_meta(df, meta))
+
+                    if frames:
+                        return frames
+                finally:
+                    ds.close()
+            except Exception as exc:
+                label = engine or "auto"
+                errors.append(f"{label}/decode_times={decode_times}: {exc}")
+
+    raise ValueError(
+        "NetCDF/xarray fallback failed. "
+        + " | ".join(errors[-4:])
+    )
+
+
+
+
 def _hdf4_dataset_name(names: list[str], candidates: tuple[str, ...]) -> str | None:
     normalized = [(name, str(name).split("/")[-1].lower()) for name in names]
     for candidate in candidates:
