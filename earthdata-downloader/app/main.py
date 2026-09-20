@@ -4,6 +4,7 @@ import asyncio
 import gzip
 import os
 import re
+import time
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -94,6 +95,15 @@ class DownloadRequest(GranuleRequest):
 
 class SingleGranuleDownloadRequest(DownloadRequest):
     granule_id: str
+    granule_ur: Optional[str] = None
+    begin: Optional[str] = None
+    end: Optional[str] = None
+    production_date: Optional[str] = None
+    size_mb: Optional[float] = None
+    platforms: list[str] = []
+    instruments: list[str] = []
+    download_urls: list[str] = []
+    primary_url: Optional[str] = None
     cycle_label: Optional[str] = None
     cycle_interval_seconds: Optional[float] = None
     cycle_detail: Optional[str] = None
@@ -495,16 +505,35 @@ async def download_nasa(req: DownloadRequest):
 
 @app.post("/api/download/nasa/granule")
 async def download_nasa_granule(req: SingleGranuleDownloadRequest):
+    started = time.perf_counter()
     try:
-        granule = await CMRClient(req.token).granule_by_id(
-            req.granule_id,
-            collection_id=req.collection_id,
-        )
-        if not granule:
-            raise HTTPException(
-                404,
-                "The selected granule could not be found in NASA CMR or is not marked downloadable.",
+        granule = {
+            "concept_id": req.granule_id,
+            "granule_ur": req.granule_ur,
+            "begin": req.begin,
+            "end": req.end,
+            "production_date": req.production_date,
+            "size_mb": req.size_mb,
+            "platforms": req.platforms,
+            "instruments": req.instruments,
+            "download_urls": req.download_urls,
+            "primary_url": req.primary_url,
+        }
+
+        # The browser already received this metadata from the CMR granule search.
+        # Avoid a second CMR round-trip for every selected granule. Fall back to
+        # CMR only when a legacy client does not send usable download URLs.
+        if not granule["download_urls"] and not granule["primary_url"]:
+            looked_up = await CMRClient(req.token).granule_by_id(
+                req.granule_id,
+                collection_id=req.collection_id,
             )
+            if not looked_up:
+                raise HTTPException(
+                    404,
+                    "The selected granule could not be found in NASA CMR or is not marked downloadable.",
+                )
+            granule = looked_up
 
         cycle_override = {
             "label": req.cycle_label,
@@ -523,6 +552,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
             None,
             f"{req.component or 'earthdata'}_{granule_label}.csv",
         )
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         return _csv_http_response(
             content,
             name,
@@ -532,6 +562,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "X-Earthdata-Timezone": "UTC",
                 "X-Earthdata-Granule-Id": req.granule_id,
                 "X-Earthdata-Conversion-Errors": str(len(report["errors"])),
+                "X-Earthdata-Processing-Ms": str(elapsed_ms),
             },
         )
     except HTTPException:

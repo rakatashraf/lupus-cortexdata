@@ -291,16 +291,6 @@ function renderGranules(items){
   });
 }
 
-function chooseParallelism(total){
-  const cores=Math.max(4,Number(navigator.hardwareConcurrency)||8);
-  const browserCap=Math.min(24,Math.max(8,cores*2));
-  if(total<=8) return Math.min(total,4);
-  if(total<=40) return Math.min(total,8,browserCap);
-  if(total<=150) return Math.min(total,12,browserCap);
-  if(total<=400) return Math.min(total,16,browserCap);
-  return Math.min(total,24,browserCap);
-}
-
 function formatEta(seconds){
   if(!Number.isFinite(seconds)||seconds<0) return "calculating…";
   if(seconds<60) return Math.max(1,Math.round(seconds))+"s";
@@ -357,12 +347,12 @@ $("downloadCsv").onclick=async function(){
     };
 
     const total=currentGranules.length;
-    const parallelism=chooseParallelism(total);
     const started=performance.now();
-    let nextIndex=0;
     let completed=0;
     let convertedGranules=0;
     let totalRows=0;
+    let totalBackendMs=0;
+    let backendSamples=0;
     let header=null;
     let writeQueue=Promise.resolve();
     const failures=[];
@@ -398,55 +388,68 @@ $("downloadCsv").onclick=async function(){
       const rate=completed/elapsed;
       const remaining=total-completed;
       const eta=rate>0?remaining/rate:Infinity;
+      const avgBackend=backendSamples?Math.round(totalBackendMs/backendSamples):null;
       button.textContent="Converting "+completed+"/"+total+"…";
       msg.className="message";
-      msg.textContent="Turbo conversion: "+completed+"/"+total+
-        " processed · "+parallelism+" parallel workers · "+
-        rate.toFixed(rate>=10?1:2)+" granules/s · ETA "+formatEta(eta);
-    }
-
-    async function worker(){
-      while(true){
-        const i=nextIndex++;
-        if(i>=total) return;
-
-        const granule=currentGranules[i];
-        const label=granule.granule_ur||granule.concept_id||("granule "+(i+1));
-
-        if(!granule.concept_id){
-          failures.push(label+": missing CMR granule ID");
-          completed++;
-          updateProgress();
-          continue;
-        }
-
-        try{
-          const response=await apiResponseWithRetry("/api/download/nasa/granule",{
-            ...baseBody,
-            granule_id:granule.concept_id,
-            cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
-            cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
-            cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
-            cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
-          },2);
-
-          const text=await response.text();
-          queueCsv(text);
-
-          const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
-          if(Number.isFinite(rows)) totalRows+=rows;
-          convertedGranules++;
-        }catch(e){
-          failures.push(label+": "+(e&&e.message?e.message:String(e)));
-        }finally{
-          completed++;
-          updateProgress();
-        }
-      }
+      msg.textContent="Full parallel mode: "+completed+"/"+total+
+        " processed · "+total+" requests launched together · "+
+        rate.toFixed(rate>=10?1:2)+" granules/s · ETA "+formatEta(eta)+
+        (avgBackend!==null?" · avg backend "+avgBackend+"ms":"");
     }
 
     updateProgress();
-    await Promise.all(Array.from({length:parallelism},function(){return worker();}));
+
+    const tasks=currentGranules.map(async function(granule,i){
+      const label=granule.granule_ur||granule.concept_id||("granule "+(i+1));
+
+      if(!granule.concept_id){
+        failures.push(label+": missing CMR granule ID");
+        completed++;
+        updateProgress();
+        return;
+      }
+
+      try{
+        const response=await apiResponseWithRetry("/api/download/nasa/granule",{
+          ...baseBody,
+          granule_id:granule.concept_id,
+          granule_ur:granule.granule_ur||null,
+          begin:granule.begin||null,
+          end:granule.end||null,
+          production_date:granule.production_date||null,
+          size_mb:granule.size_mb!=null?Number(granule.size_mb):null,
+          platforms:Array.isArray(granule.platforms)?granule.platforms:[],
+          instruments:Array.isArray(granule.instruments)?granule.instruments:[],
+          download_urls:Array.isArray(granule.download_urls)?granule.download_urls:[],
+          primary_url:granule.primary_url||null,
+          cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
+          cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
+          cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
+          cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
+        },2);
+
+        const text=await response.text();
+        queueCsv(text);
+
+        const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
+        if(Number.isFinite(rows)) totalRows+=rows;
+
+        const backendMs=Number(response.headers.get("X-Earthdata-Processing-Ms")||0);
+        if(Number.isFinite(backendMs)&&backendMs>0){
+          totalBackendMs+=backendMs;
+          backendSamples++;
+        }
+
+        convertedGranules++;
+      }catch(e){
+        failures.push(label+": "+(e&&e.message?e.message:String(e)));
+      }finally{
+        completed++;
+        updateProgress();
+      }
+    });
+
+    await Promise.all(tasks);
     await writeQueue;
 
     if(!header || convertedGranules===0){
@@ -466,11 +469,13 @@ $("downloadCsv").onclick=async function(){
 
     const elapsed=Math.max(0.001,(performance.now()-started)/1000);
     const rate=convertedGranules/elapsed;
+    const avgBackend=backendSamples?Math.round(totalBackendMs/backendSamples):null;
     const skipped=failures.length;
     msg.className=skipped?"message warn":"message success";
     msg.textContent="Converted "+convertedGranules+" of "+total+
       " granule(s) in "+elapsed.toFixed(1)+"s"+
       " ("+rate.toFixed(rate>=10?1:2)+" granules/s)"+
+      (avgBackend!==null?" · avg backend "+avgBackend+"ms":"")+
       (totalRows?" · "+totalRows+" CSV rows":"")+
       (skipped?" · "+skipped+" skipped after retries. "+failures.slice(0,2).join(" | "):"");
     toast(skipped?"CSV created with some skipped granules.":"Combined CSV created successfully.",skipped?"warn":"");
