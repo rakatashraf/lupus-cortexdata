@@ -46,9 +46,10 @@
           <label>Instrument filter
             <input id="instrumentFilter" placeholder="e.g. MODIS, TROPOMI">
           </label>
-          <label>Maximum collections
-            <input id="collectionLimit" type="number" min="1" max="100" value="40">
-          </label>
+          <div class="info-box">
+            <strong>No collection limit</strong>
+            <span>All matching NASA collections are loaded across every CMR result page.</span>
+          </div>
         </div>
       </div>
     </section>
@@ -78,8 +79,8 @@
       <div class="panel-body">
         <div class="title-row">
           <div>
-            <h2>Select a NASA collection</h2>
-            <p class="muted">Choose the scientifically appropriate product. Keyword matches can represent very different retrieval levels and resolutions.</p>
+            <h2>Select a NASA collection by satellite</h2>
+            <p class="muted">All matching collections are loaded and separated by satellite/platform. A collection associated with multiple platforms can appear in more than one satellite group.</p>
           </div>
           <span id="collectionCount" class="badge"></span>
         </div>
@@ -92,10 +93,13 @@
       <div class="panel-body">
         <h2>Granules and CSV output</h2>
         <div id="selectedCollection" class="selected-box"></div>
-        <div class="grid three">
-          <label>Maximum granules<input id="maxGranules" type="number" min="1" max="50" value="5"></label>
+        <div class="grid two">
           <label>Variable-name filters<input id="variableFilters" placeholder="optional, comma separated"></label>
           <label>Row limit per variable<input id="maxRows" type="number" min="0" value="0"></label>
+        </div>
+        <div class="info-box">
+          <strong>All matching granules are collected</strong>
+          <span>The downloader reads every CMR result page for the selected collection, boundary box, and date range.</span>
         </div>
         <div class="grid two">
           <label>CSV file name<input id="outputName" placeholder="optional-output-name.csv"></label>
@@ -106,7 +110,7 @@
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">Large HDF/NetCDF granules can exceed serverless execution or response limits. Use variable filters and a row limit when testing very large products.</p>
+        <p class="footnote">The search itself has no artificial collection or granule limit. Very large multi-granule downloads can still encounter Vercel serverless execution or response-size limits, which are hosting constraints rather than NASA search limits.</p>
       </div>
     </section>
 
