@@ -82,6 +82,58 @@ jobs:
           frames = convert_bytes(zbuf.getvalue(), "sample.zip", meta, [], bbox, 0)
           assert frames and len(frames[0]) == 1
 
+          import xarray as xr
+
+          bad_time_ds = xr.Dataset(
+              data_vars={
+                  "AOD": (("Time", "latitude", "longitude"), np.array([[[1.25]]])),
+              },
+              coords={
+                  "Time": ("Time", np.array([2025.0])),
+                  "latitude": ("latitude", np.array([23.75])),
+                  "longitude": ("longitude", np.array([90.375])),
+              },
+          )
+          bad_time_ds["Time"].attrs["units"] = "years since 0000-01-01 00:00:00"
+          bad_time_ds["Time"].attrs["calendar"] = "gregorian"
+          bad_nc = bad_time_ds.to_netcdf(engine="scipy")
+          bad_frames = convert_bytes(bad_nc, "MSAQS02L4.2-test.nc", meta, ["AOD"], bbox, 0)
+          assert bad_frames
+          assert "source_temporal_raw_value" in bad_frames[0].columns
+          assert bad_frames[0]["source_temporal_units"].iloc[0].startswith("years since 0000")
+
+          swathbuf = io.BytesIO()
+          with h5py.File(swathbuf, "w") as h:
+              geo = h.create_group("HDFEOS/SWATHS/ColumnAmountNO2/Geolocation Fields")
+              fields = h.create_group("HDFEOS/SWATHS/ColumnAmountNO2/Data Fields")
+              lat = np.array([[22.0, 23.7, 23.8], [24.2, 23.9, 25.0]], dtype="float32")
+              lon = np.array([[89.0, 90.35, 90.45], [90.4, 90.5, 92.0]], dtype="float32")
+              geo.create_dataset("Latitude", data=lat)
+              geo.create_dataset("Longitude", data=lon)
+              t = geo.create_dataset("Time", data=np.array([1000.0, 1010.0]))
+              t.attrs["Units"] = "seconds since 1993-01-01 00:00:00"
+              d = fields.create_dataset(
+                  "ColumnAmountNO2Trop",
+                  data=np.array([[1, 2, 3], [4, 5, 6]], dtype="float32"),
+              )
+              d.attrs["Units"] = "molec/cm2"
+              d.attrs["ScaleFactor"] = np.array([1.0], dtype="float32")
+              d.attrs["Offset"] = np.array([0.0], dtype="float32")
+          swath_bbox = {"south": 23.65, "west": 90.30, "north": 23.95, "east": 90.55}
+          swath_frames = convert_bytes(
+              swathbuf.getvalue(),
+              "OMI-Aura_L2-OMNO2_test.he5",
+              meta,
+              ["ColumnAmountNO2Trop"],
+              swath_bbox,
+              0,
+          )
+          assert swath_frames
+          assert len(swath_frames[0]) == 3
+          assert swath_frames[0]["latitude"].between(23.65, 23.95).all()
+          assert swath_frames[0]["longitude"].between(90.30, 90.55).all()
+          assert set(np.round(swath_frames[0]["value"].astype(float), 6)) == {2.0, 3.0, 5.0}
+
           eosbuf = io.BytesIO()
           with h5py.File(eosbuf, "w") as h:
               fields = h.create_group("HDFEOS/GRIDS/ColumnAmountNO2/Data Fields")

@@ -569,34 +569,71 @@ def _xarray_bytes(
     import xarray as xr
 
     last_error: Exception | None = None
+    attempts: list[tuple[str | None, bool]] = []
     for engine in ("h5netcdf", "scipy", None):
+        attempts.append((engine, True))
+        attempts.append((engine, False))
+
+    for engine, decode_times in attempts:
         stream = io.BytesIO(data)
         try:
-            kwargs = {"decode_times": True, "mask_and_scale": True}
+            kwargs: dict[str, Any] = {
+                "decode_times": decode_times,
+                "mask_and_scale": True,
+            }
             if engine:
                 kwargs["engine"] = engine
+
             ds = xr.open_dataset(stream, **kwargs)
             try:
+                temporal_coord: str | None = None
+                temporal_units = ""
+                temporal_calendar = ""
+
+                if not decode_times:
+                    for coord_name in list(ds.coords) + list(ds.variables):
+                        low = str(coord_name).lower()
+                        if low in TIME_NAMES or low in ("time", "times"):
+                            temporal_coord = str(coord_name)
+                            try:
+                                temporal_units = str(ds[coord_name].attrs.get("units") or "")
+                                temporal_calendar = str(ds[coord_name].attrs.get("calendar") or "")
+                            except Exception:
+                                pass
+                            break
+
                 frames: list[pd.DataFrame] = []
                 for name, arr in ds.data_vars.items():
                     if not _wanted(name, filters):
                         continue
                     if not np.issubdtype(arr.dtype, np.number):
                         continue
+
                     try:
                         df = arr.to_dataframe(name="value").reset_index()
                     except Exception:
                         values = np.asarray(arr.values).reshape(-1)
                         df = pd.DataFrame({"value": values})
+
                     df.insert(0, "variable", name)
                     unit = str(arr.attrs.get("units") or arr.attrs.get("Units") or "")
                     df.insert(1, "unit", unit)
-                    df = _normalize_time(df)
+
+                    if decode_times:
+                        df = _normalize_time(df)
+                    elif temporal_coord and temporal_coord in df.columns:
+                        df = df.rename(columns={temporal_coord: "source_temporal_raw_value"})
+                        df["source_temporal_units"] = temporal_units
+                        df["source_temporal_calendar"] = temporal_calendar
+                        df["source_temporal_decode_status"] = "raw_preserved_decode_failed"
+
                     df = _filter_bbox(df, bbox)
                     df = _limit(df, max_rows)
                     if not df.empty:
                         frames.append(_apply_meta(df, meta))
-                return frames
+
+                if frames:
+                    return frames
             finally:
                 ds.close()
         except Exception as exc:
@@ -769,6 +806,201 @@ def _hdf_eos5_grid_bytes(
                 df = _limit(df, max_rows)
                 if not df.empty:
                     frames.append(_apply_meta(df, meta))
+
+    return frames
+
+
+def _group_child_case_insensitive(group: Any, wanted: str) -> Any | None:
+    target = wanted.casefold()
+    try:
+        for key in group.keys():
+            if str(key).casefold() == target:
+                return group[key]
+    except Exception:
+        pass
+    return None
+
+
+def _dataset_by_basename(group: Any, candidates: set[str]) -> Any | None:
+    try:
+        for name, ds in _h5_datasets(group):
+            if name.split("/")[-1].lower() in candidates:
+                return ds
+    except Exception:
+        pass
+    return None
+
+
+def _hdf_eos5_swath_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    """Read HDF-EOS5 Level-2 swaths using geolocation masking first."""
+    import h5py
+
+    frames: list[pd.DataFrame] = []
+    hard_cap = max(
+        10000,
+        int(os.getenv("EARTHDATA_MAX_SWATH_SELECTED_PIXELS", "1500000")),
+    )
+
+    with h5py.File(io.BytesIO(data), "r") as h:
+        hdfeos = _group_child_case_insensitive(h, "HDFEOS")
+        if hdfeos is None:
+            return []
+        swaths = _group_child_case_insensitive(hdfeos, "SWATHS")
+        if swaths is None:
+            return []
+
+        for swath_name, swath in swaths.items():
+            if not isinstance(swath, h5py.Group):
+                continue
+
+            geo = _group_child_case_insensitive(swath, "Geolocation Fields")
+            fields = _group_child_case_insensitive(swath, "Data Fields")
+            if geo is None or fields is None:
+                continue
+
+            lat_ds = _dataset_by_basename(geo, {"latitude", "lat"})
+            lon_ds = _dataset_by_basename(geo, {"longitude", "lon"})
+            if lat_ds is None or lon_ds is None:
+                continue
+
+            try:
+                lat = np.asarray(lat_ds, dtype=np.float64)
+                lon = np.asarray(lon_ds, dtype=np.float64)
+            except Exception:
+                continue
+
+            if lat.shape != lon.shape or lat.ndim != 2:
+                continue
+
+            mask = (
+                np.isfinite(lat)
+                & np.isfinite(lon)
+                & (lat >= bbox["south"])
+                & (lat <= bbox["north"])
+                & (lon >= bbox["west"])
+                & (lon <= bbox["east"])
+            )
+            selected_count = int(mask.sum())
+            if selected_count == 0:
+                continue
+
+            if max_rows <= 0 and selected_count > hard_cap:
+                raise ValueError(
+                    f"Selected bbox contains {selected_count:,} swath pixels in {swath_name}, "
+                    f"above the safe per-variable limit of {hard_cap:,}. Narrow the bbox or set a row limit."
+                )
+
+            row_idx = np.flatnonzero(mask.any(axis=1))
+            if not len(row_idx):
+                continue
+            r0, r1 = int(row_idx[0]), int(row_idx[-1]) + 1
+            local_mask = mask[r0:r1, :]
+            local_lat = lat[r0:r1, :]
+            local_lon = lon[r0:r1, :]
+
+            time_ds = _dataset_by_basename(geo, TIME_NAMES)
+            raw_time = None
+            raw_time_units = ""
+            raw_time_calendar = ""
+            if time_ds is not None:
+                try:
+                    raw_time_units = _attr_text(time_ds.attrs, "units", "Units")
+                    raw_time_calendar = _attr_text(time_ds.attrs, "calendar", "Calendar")
+                    if time_ds.ndim == 1 and int(time_ds.shape[0]) == lat.shape[0]:
+                        line_time = np.asarray(time_ds[r0:r1])
+                        raw_time = np.repeat(line_time[:, None], lat.shape[1], axis=1)
+                    elif tuple(time_ds.shape) == tuple(lat.shape):
+                        raw_time = np.asarray(time_ds[r0:r1, :])
+                except Exception:
+                    raw_time = None
+
+            for relative_name, ds in _h5_datasets(fields):
+                if not np.issubdtype(ds.dtype, np.number):
+                    continue
+                full_name = f"HDFEOS/SWATHS/{swath_name}/Data Fields/{relative_name}"
+                if not _wanted(full_name, filters):
+                    continue
+                if ds.ndim < 2 or tuple(ds.shape[:2]) != tuple(lat.shape):
+                    continue
+
+                trailing_shape = tuple(int(v) for v in ds.shape[2:])
+                trailing_count = int(np.prod(trailing_shape)) if trailing_shape else 1
+                if trailing_count > 64:
+                    continue
+
+                try:
+                    subset = np.asarray(ds[r0:r1, ...])
+                except Exception:
+                    continue
+                subset = _calibrate_hdf_values(subset, ds.attrs)
+
+                base_name = relative_name.split("/")[-1]
+                unit = _attr_text(ds.attrs, "Units", "units")
+
+                if ds.ndim == 2:
+                    values = subset[local_mask]
+                    lats = local_lat[local_mask]
+                    lons = local_lon[local_mask]
+                    usable = np.isfinite(values)
+                    if not usable.any():
+                        continue
+
+                    df = pd.DataFrame(
+                        {
+                            "variable": base_name,
+                            "unit": unit,
+                            "latitude": lats[usable],
+                            "longitude": lons[usable],
+                            "value": values[usable],
+                        }
+                    )
+                    if raw_time is not None and raw_time.shape == local_mask.shape:
+                        df["source_temporal_raw_value"] = raw_time[local_mask][usable]
+                        df["source_temporal_units"] = raw_time_units
+                        df["source_temporal_calendar"] = raw_time_calendar
+                        df["source_temporal_decode_status"] = "raw_swath_time"
+                    df["hdf_swath"] = str(swath_name)
+                    df = _limit(df, max_rows)
+                    if not df.empty:
+                        frames.append(_apply_meta(df, meta))
+                    continue
+
+                flat_subset = subset.reshape(subset.shape[0], subset.shape[1], trailing_count)
+                selected_values = flat_subset[local_mask]
+                selected_lat = local_lat[local_mask]
+                selected_lon = local_lon[local_mask]
+
+                for extra_index in range(trailing_count):
+                    values = selected_values[:, extra_index]
+                    usable = np.isfinite(values)
+                    if not usable.any():
+                        continue
+                    df = pd.DataFrame(
+                        {
+                            "variable": f"{base_name}[{extra_index}]",
+                            "unit": unit,
+                            "latitude": selected_lat[usable],
+                            "longitude": selected_lon[usable],
+                            "value": values[usable],
+                            "dimension_index": extra_index,
+                        }
+                    )
+                    if raw_time is not None and raw_time.shape == local_mask.shape:
+                        df["source_temporal_raw_value"] = raw_time[local_mask][usable]
+                        df["source_temporal_units"] = raw_time_units
+                        df["source_temporal_calendar"] = raw_time_calendar
+                        df["source_temporal_decode_status"] = "raw_swath_time"
+                    df["hdf_swath"] = str(swath_name)
+                    df = _limit(df, max_rows)
+                    if not df.empty:
+                        frames.append(_apply_meta(df, meta))
 
     return frames
 
@@ -1154,17 +1386,33 @@ def convert_bytes(
         return _xarray_bytes(data, meta, filters, bbox, max_rows)
 
     if suffix in (".h5", ".hdf5", ".he5"):
+        specialized_errors: list[str] = []
+
         try:
             frames = _hdf_eos5_grid_bytes(data, filename, meta, filters, bbox, max_rows)
             if frames:
                 return frames
-        except Exception:
-            pass
+        except Exception as exc:
+            specialized_errors.append(f"HDF-EOS5 grid: {exc}")
 
-        # HE5 commonly means HDF-EOS5. Avoid xarray-first behavior because it can
-        # eagerly materialize non-CF global arrays. Generic HDF5 is safer here.
+        try:
+            frames = _hdf_eos5_swath_bytes(data, filename, meta, filters, bbox, max_rows)
+            if frames:
+                return frames
+        except Exception as exc:
+            specialized_errors.append(f"HDF-EOS5 swath: {exc}")
+
         if suffix == ".he5":
-            return _hdf5_bytes(data, meta, filters, bbox, max_rows)
+            try:
+                frames = _hdf5_bytes(data, meta, filters, bbox, max_rows)
+                if frames:
+                    return frames
+            except Exception as exc:
+                specialized_errors.append(f"generic HDF5: {exc}")
+            raise ValueError(
+                " | ".join(specialized_errors)
+                or "No readable HDF-EOS5 data fields matched the selected bbox."
+            )
 
         try:
             frames = _xarray_bytes(data, meta, filters, bbox, max_rows)
