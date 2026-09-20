@@ -939,17 +939,27 @@ def _hdf4_airs_file(
                 continue
 
             try:
-                scan_cube = np.asarray(rad_ds[scan:scan + 1, :, :])
+                scan_cube = np.asarray(
+                    rad_ds.get(
+                        start=(int(scan), 0, 0),
+                        count=(1, int(dims[1]), int(dims[2])),
+                    )
+                )
             except Exception:
                 skipped_scanlines.append(int(scan))
                 continue
 
-            if scan_cube.ndim != 3 or scan_cube.shape[0] != 1:
+            # pyhdf may squeeze the requested singleton scan dimension.
+            if scan_cube.ndim == 3 and scan_cube.shape[0] == 1:
+                scan_plane = scan_cube[0]
+            elif scan_cube.ndim == 2 and scan_cube.shape == (dims[1], dims[2]):
+                scan_plane = scan_cube
+            else:
                 skipped_scanlines.append(int(scan))
                 continue
 
-            scan_cube = _calibrate_hdf_values(scan_cube, rad_attrs)[0]
-            selected_values = scan_cube[scan_mask, :]
+            scan_plane = _calibrate_hdf_values(scan_plane, rad_attrs)
+            selected_values = scan_plane[scan_mask, :]
             selected_lat = lat[scan, scan_mask]
             selected_lon = lon[scan, scan_mask]
             if selected_values.size == 0:
