@@ -132,5 +132,14 @@ jobs:
           assert "data_timestamp_utc" in combined.columns
           assert "data_cycle" in combined.columns
 
+          # Heterogeneous frames must normalize to a fixed multi-collection schema.
+          mixed_a = pd.DataFrame([{"variable":"A","value":1,"custom_a":"x"}])
+          mixed_b = pd.DataFrame([{"variable":"B","value":2,"custom_b":"y"}])
+          mixed = combine_frames([mixed_a, mixed_b])
+          assert "extra_attributes_json" in mixed.columns
+          assert "custom_a" not in mixed.columns
+          assert "custom_b" not in mixed.columns
+          assert list(mixed.columns) == list(combine_frames([mixed_b]).columns)
+
           print("IN_MEMORY_CONVERSION_TESTS_OK")
           PY

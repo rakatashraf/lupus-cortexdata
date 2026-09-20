@@ -1218,6 +1218,7 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     preferred = [
         "source",
         "component_query",
+        "collection_search_name",
         "collection_id",
         "collection_title",
         "granule_id",
@@ -1244,8 +1245,37 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "variable",
         "value",
         "unit",
+        "hdf_grid",
+        "spatial_resolution_degrees",
         "original_file",
         "download_url",
     ]
-    cols = [c for c in preferred if c in df.columns] + [c for c in df.columns if c not in preferred]
-    return df[cols]
+
+    extra_cols = [column for column in df.columns if column not in preferred]
+    if extra_cols:
+        records = df[extra_cols].to_dict(orient="records")
+        df["extra_attributes_json"] = [
+            json.dumps(
+                {
+                    key: value
+                    for key, value in record.items()
+                    if value is not None and not (
+                        isinstance(value, float) and math.isnan(value)
+                    )
+                },
+                default=str,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            for record in records
+        ]
+    else:
+        df["extra_attributes_json"] = ""
+
+    # A fixed export schema lets rows from completely different NASA
+    # collections/components be merged into one CSV safely.
+    for column in preferred:
+        if column not in df.columns:
+            df[column] = ""
+
+    return df[preferred + ["extra_attributes_json"]]

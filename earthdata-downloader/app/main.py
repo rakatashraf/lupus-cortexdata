@@ -29,7 +29,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.6.0",
+    version="1.7.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -68,6 +68,7 @@ class TokenRequest(BaseModel):
 class CollectionRequest(BaseModel):
     token: str
     component: str = ""
+    components: list[str] = []
     collection_name: str = ""
     bbox: Optional[BBox] = None
     platforms: list[str] = []
@@ -408,7 +409,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.6.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.7.0"}
 
 
 @app.post("/api/token/validate")
@@ -421,28 +422,114 @@ async def token_validate(req: TokenRequest):
         raise HTTPException(502, f"Could not reach NASA CMR: {exc}")
 
 
+def _component_terms(primary: str, extras: list[str]) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw in [primary, *(extras or [])]:
+        for part in re.split(r"[,;\n\r]+", str(raw or "")):
+            value = part.strip()
+            if not value:
+                continue
+            key = value.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            values.append(value)
+    return values
+
+
 @app.post("/api/collections/search")
 async def collections_search(req: CollectionRequest):
-    component = req.component.strip()
+    components = _component_terms(req.component, req.components)
     collection_name = req.collection_name.strip()
 
-    if not component and not collection_name:
-        raise HTTPException(400, "Enter a component/variable or a collection name.")
+    if not components and not collection_name:
+        raise HTTPException(400, "Enter at least one component/variable or a collection name.")
 
     try:
-        nasa = await CMRClient(req.token).collections(
-            component=component or None,
-            collection_name=collection_name or None,
-            bbox=req.bbox.cmr() if req.bbox else None,
-            platforms=req.platforms,
-            instruments=req.instruments,
+        semaphore = asyncio.Semaphore(12)
+
+        async def search_component(component: Optional[str]):
+            async with semaphore:
+                result = await CMRClient(req.token).collections(
+                    component=component,
+                    collection_name=collection_name or None,
+                    bbox=req.bbox.cmr() if req.bbox else None,
+                    platforms=req.platforms,
+                    instruments=req.instruments,
+                )
+                return component, result
+
+        search_terms: list[Optional[str]] = components or [None]
+        results = await asyncio.gather(
+            *(search_component(component) for component in search_terms)
         )
-        external = resolve_external(component) if component else []
+
+        merged: dict[str, dict] = {}
+        total_reported_hits = 0
+        for component, nasa in results:
+            try:
+                total_reported_hits += int(nasa.get("reported_hits_before_deduplication") or nasa.get("hits") or 0)
+            except Exception:
+                pass
+
+            for raw_item in nasa.get("items") or []:
+                item = dict(raw_item)
+                concept_id = str(item.get("concept_id") or "")
+                key = concept_id or f"{item.get('short_name')}::{item.get('version')}::{item.get('title')}"
+
+                if key not in merged:
+                    item["matched_components"] = []
+                    merged[key] = item
+
+                matched = merged[key].setdefault("matched_components", [])
+                if component and component not in matched:
+                    matched.append(component)
+
+        items = list(merged.values())
+        items.sort(
+            key=lambda item: (
+                str(item.get("short_name") or "").casefold(),
+                str(item.get("title") or "").casefold(),
+            )
+        )
+
+        satellite_groups: dict[str, int] = {}
+        for item in items:
+            for platform in item.get("platforms") or ["Unspecified platform"]:
+                satellite_groups[platform] = satellite_groups.get(platform, 0) + 1
+
+        nasa = {
+            "hits": len(items),
+            "retrieved": len(items),
+            "reported_hits_before_deduplication": total_reported_hits,
+            "items": items,
+            "satellite_groups": dict(
+                sorted(satellite_groups.items(), key=lambda pair: pair[0].lower())
+            ),
+            "search_mode": "multi_component" if len(components) > 1 else "component",
+            "component_queries": components,
+        }
+
+        external_by_id: dict[str, dict] = {}
+        for component in components:
+            for candidate in resolve_external(component):
+                key = str(candidate.get("id") or f"{candidate.get('provider')}::{candidate.get('variable')}")
+                if key not in external_by_id:
+                    enriched = dict(candidate)
+                    enriched["matched_components"] = [component]
+                    external_by_id[key] = enriched
+                elif component not in external_by_id[key].setdefault("matched_components", []):
+                    external_by_id[key]["matched_components"].append(component)
+
+        external = list(external_by_id.values())
+
         return {
-            "component": component or None,
+            "component": ", ".join(components) if components else None,
+            "components": components,
             "collection_name": collection_name or None,
             "nasa": nasa,
-            "external_candidates": external if component and not nasa.get("items") else [],
+            "external_candidates": external if components and not items else [],
             "external_candidates_always": external,
         }
     except Exception as exc:

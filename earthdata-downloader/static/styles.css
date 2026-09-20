@@ -4,7 +4,7 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:radial-gradient(circle at top left,#e8f4ec 0,#f4f7f5 34%,#f7f8f7 100%);min-height:100vh}
-button,input{font:inherit}
+button,input,textarea{font:inherit}
 button{cursor:pointer}
 .topbar{padding:42px clamp(22px,5vw,72px) 26px;display:flex;gap:24px;justify-content:space-between;align-items:flex-start;background:#0d2a1e;color:white}
 .topbar h1{margin:6px 0 8px;font-size:clamp(28px,4vw,48px);letter-spacing:-.04em}
@@ -27,8 +27,9 @@ button{cursor:pointer}
 .row{display:flex;gap:12px;align-items:flex-end}
 .grow{flex:1}
 label{display:grid;gap:7px;font-weight:700;font-size:13px;color:#30463a}
-input{width:100%;padding:12px 13px;border:1px solid #cfdcd4;border-radius:11px;background:#fbfcfb;color:#17271f;outline:none}
-input:focus{border-color:#469169;box-shadow:0 0 0 3px rgba(70,145,105,.13)}
+input,textarea{width:100%;padding:12px 13px;border:1px solid #cfdcd4;border-radius:11px;background:#fbfcfb;color:#17271f;outline:none}
+textarea{resize:vertical;min-height:86px}
+input:focus,textarea:focus{border-color:#469169;box-shadow:0 0 0 3px rgba(70,145,105,.13)}
 button{border:0;border-radius:11px;padding:12px 16px;font-weight:800;transition:.16s ease}
 button:hover:not(:disabled){transform:translateY(-1px)}
 button:disabled{opacity:.5;cursor:not-allowed}
@@ -87,3 +88,11 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .collection-search-box label{display:block;font-weight:700}
 .collection-search-box input{margin-top:7px;width:100%;font-size:15px}
 .collection-search-box .muted{margin:7px 0 0}
+
+.collection-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.collection-actions button{padding:9px 12px}
+.collection-card .component-matches{margin-top:8px}
+.selected-collection-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.selected-collection-pill{font-size:11px;font-weight:800;border-radius:999px;padding:5px 8px;background:#dff1e6;color:#155537}
+.granule .collection-origin{color:#52675c}
+@media(max-width:820px){.collection-actions{align-items:stretch}.collection-actions button{width:100%}}

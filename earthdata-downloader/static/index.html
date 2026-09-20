@@ -37,8 +37,8 @@
       <div class="panel-body">
         <h2>What do you want?</h2>
         <div class="grid two">
-          <label>Component / variable
-            <input id="component" placeholder="e.g. NO2, PM2.5, NDVI, soil moisture, precipitation">
+          <label>Components / variables
+            <textarea id="component" rows="3" placeholder="Enter as many as needed, separated by commas, semicolons, or new lines&#10;e.g. NO2, PM2.5, NDVI, soil moisture, precipitation"></textarea>
           </label>
           <label>Satellite / platform filter
             <input id="platformFilter" placeholder="e.g. Terra, Aqua, Sentinel-5P">
@@ -47,8 +47,8 @@
             <input id="instrumentFilter" placeholder="e.g. MODIS, TROPOMI">
           </label>
           <div class="info-box">
-            <strong>No collection limit</strong>
-            <span>All matching NASA collections are loaded across every CMR result page.</span>
+            <strong>No artificial component or collection limit</strong>
+            <span>Search multiple components in one request. Matching collections are merged and tagged with the component(s) that found them.</span>
           </div>
         </div>
       </div>
@@ -79,8 +79,8 @@
       <div class="panel-body">
         <div class="title-row">
           <div>
-            <h2>Select a NASA collection by satellite</h2>
-            <p class="muted">All matching collections are loaded and separated by satellite/platform. Use the collection-name search below to filter only these fetched results.</p>
+            <h2>Select NASA collections by satellite</h2>
+            <p class="muted">Select one, several, or all matching collections. Your selections persist while you filter the fetched list.</p>
           </div>
           <span id="collectionCount" class="badge"></span>
         </div>
@@ -89,6 +89,11 @@
             <input id="collectionResultSearch" type="search" autocomplete="off" placeholder="e.g. MOD13Q1, MCD19A2, NO2 Standard Product">
           </label>
           <p class="muted">This does not run a new NASA search. It filters the full collection list already fetched above, while preserving satellite/platform groups.</p>
+          <div class="collection-actions">
+            <button id="selectAllShown" class="secondary" type="button">Select all shown</button>
+            <button id="clearSelectedCollections" class="secondary" type="button">Clear selected</button>
+            <span id="selectedCollectionCount" class="badge">0 selected</span>
+          </div>
         </div>
         <div id="collections" class="cards"></div>
       </div>
@@ -98,14 +103,14 @@
       <div class="step">5</div>
       <div class="panel-body">
         <h2>Granules and CSV output</h2>
-        <div id="selectedCollection" class="selected-box"></div>
+        <div id="selectedCollection" class="selected-box">No collections selected yet.</div>
         <div class="grid two">
           <label>Variable-name filters<input id="variableFilters" placeholder="optional, comma separated"></label>
           <label>Row limit per variable<input id="maxRows" type="number" min="0" value="0"></label>
         </div>
         <div class="info-box">
-          <strong>All matching granules are collected</strong>
-          <span>The downloader reads every CMR result page. CSV creation uses Full Parallel mode: every selected granule request is launched immediately, converted independently, and merged into one CSV in your browser.</span>
+          <strong>All matching granules from every selected collection are collected</strong>
+          <span>Granule discovery runs across all selected collections, and CSV creation launches every selected granule conversion independently before merging the normalized rows into one CSV.</span>
         </div>
         <div class="info-box">
           <strong>CSV time metadata is explicit</strong>

@@ -1,8 +1,9 @@
 const $ = id => document.getElementById(id);
-let selectedCollection = null;
+let selectedCollections = new Map();
 let currentGranules = [];
 let currentGranuleCycle = null;
 let allCollections = [];
+let visibleCollections = [];
 
 function toast(message, kind){
   const el=$("toast");
@@ -12,12 +13,27 @@ function toast(message, kind){
   window.__toastTimer=setTimeout(function(){el.className="toast";},3200);
 }
 function csvList(value){return (value||"").split(",").map(function(x){return x.trim();}).filter(Boolean);}
+function multiList(value){
+  const out=[],seen=new Set();
+  String(value||"").split(/[;,\n\r]+/).forEach(function(raw){
+    const item=raw.trim();
+    const key=item.toLowerCase();
+    if(item&&!seen.has(key)){seen.add(key);out.push(item);}
+  });
+  return out;
+}
+function componentValues(){return multiList($("component").value);}
 function bbox(){return {south:Number($("south").value),west:Number($("west").value),north:Number($("north").value),east:Number($("east").value)};}
 function dates(){return {start:$("startDate").value,end:$("endDate").value};}
-function searchLabel(){return $("component").value.trim()||"earthdata";}
+function searchLabel(){
+  const values=componentValues();
+  if(!values.length) return "earthdata";
+  if(values.length<=3) return values.join("_");
+  return values.slice(0,3).join("_")+"_plus_"+(values.length-3);
+}
 function validateInputs(requireToken){
   if(requireToken && !$("token").value.trim()) throw new Error("Paste your Earthdata token first.");
-  if(!$("component").value.trim()) throw new Error("Enter a component or variable.");
+  if(!componentValues().length) throw new Error("Enter at least one component or variable.");
   const b=bbox();
   if(Object.values(b).some(function(v){return !Number.isFinite(v);})) throw new Error("Enter a valid bounding box.");
   if(b.south>=b.north) throw new Error("South must be lower than north.");
@@ -126,13 +142,14 @@ $("validateToken").onclick=async function(){
 
 $("searchCollections").onclick=async function(){
   const button=$("searchCollections"),msg=$("searchMessage");
-  msg.className="message";msg.textContent="";selectedCollection=null;currentGranules=[];currentGranuleCycle=null;allCollections=[];
+  msg.className="message";msg.textContent="";selectedCollections.clear();currentGranules=[];currentGranuleCycle=null;allCollections=[];visibleCollections=[];
   $("collectionPanel").classList.add("hidden");$("granulePanel").classList.add("hidden");$("externalArea").classList.add("hidden");
   try{
     validateInputs(true);button.disabled=true;button.textContent="Searching NASA…";
     const body={
       token:$("token").value.trim(),
-      component:$("component").value.trim(),
+      component:componentValues().join(", "),
+      components:componentValues(),
       collection_name:"",
       bbox:bbox(),
       platforms:csvList($("platformFilter").value),
@@ -148,7 +165,7 @@ $("searchCollections").onclick=async function(){
     $("collectionPanel").scrollIntoView({behavior:"smooth",block:"start"});
     if(items.length){
       msg.className="message success";
-      msg.textContent="NASA collections found. Use the collection-name search inside the results panel to narrow the fetched list.";
+      msg.textContent="NASA collections found for "+componentValues().length+" component(s). Select as many collections as you need.";
     }
     else{
       msg.className="message warn";
@@ -159,10 +176,51 @@ $("searchCollections").onclick=async function(){
   finally{button.disabled=false;button.textContent="Search Earthdata";}
 };
 
+function syncCollectionSelectionUI(){
+  const root=$("collections");
+  root.querySelectorAll(".collection-card").forEach(function(card){
+    const id=card.dataset.collectionId||"";
+    const selected=selectedCollections.has(id);
+    card.classList.toggle("selected",selected);
+    const button=card.querySelector(".collection-toggle");
+    if(button){
+      button.textContent=selected?"Selected ✓":"Select collection";
+      button.classList.toggle("primary",selected);
+      button.classList.toggle("secondary",!selected);
+    }
+  });
+  updateSelectedCollectionSummary();
+}
+
+function updateSelectedCollectionSummary(){
+  const items=Array.from(selectedCollections.values());
+  $("selectedCollectionCount").textContent=items.length+" selected";
+  if(!items.length){
+    $("selectedCollection").innerHTML="No collections selected yet.";
+    $("granulePanel").classList.add("hidden");
+    return;
+  }
+
+  const pills=items.slice(0,20).map(function(item){
+    return '<span class="selected-collection-pill">'+escapeHtml(item.short_name||item.title||item.concept_id)+'</span>';
+  }).join("");
+  const more=items.length>20?'<span class="selected-collection-pill">+'+(items.length-20)+' more</span>':"";
+  $("selectedCollection").innerHTML="<strong>"+items.length+" collection"+(items.length===1?"":"s")+" selected</strong>"+
+    '<div class="selected-collection-list">'+pills+more+"</div>";
+  $("granulePanel").classList.remove("hidden");
+  $("downloadCsv").disabled=true;
+  currentGranules=[];
+  $("granules").innerHTML="";
+  $("granuleMessage").textContent="Selection updated. Click Find all granules.";
+  $("granuleMessage").className="message success";
+}
+
 function renderCollections(items){
+  visibleCollections=items.slice();
   const root=$("collections");root.innerHTML="";
   if(!items.length){
     root.innerHTML='<div class="card"><h3>No NASA collection matched</h3><p>Try a broader component term, remove the platform/instrument filter, or use a public fallback below.</p></div>';
+    updateSelectedCollectionSummary();
     return;
   }
 
@@ -192,24 +250,25 @@ function renderCollections(items){
     groups[platform].forEach(function(item){
       const el=document.createElement("article");
       el.className="card collection-card";
+      el.dataset.collectionId=item.concept_id||"";
       const chips=(item.instruments||[]).map(function(x){return '<span class="chip">'+escapeHtml(x)+'</span>';}).join("");
       const otherPlatforms=(item.platforms||[]).filter(function(x){return x!==platform;}).map(function(x){return '<span class="chip">'+escapeHtml(x)+'</span>';}).join("");
       const level=item.processing_level?'<span class="chip">Level '+escapeHtml(item.processing_level)+'</span>':"";
+      const matches=(item.matched_components||[]).map(function(x){return '<span class="chip">'+escapeHtml(x)+'</span>';}).join("");
 
-      el.innerHTML='<h3>'+escapeHtml(item.title||item.short_name||item.concept_id)+'</h3><div class="meta"><span class="chip satellite-chip">'+escapeHtml(platform)+'</span>'+otherPlatforms+chips+level+'</div><p>'+escapeHtml(item.abstract||"No abstract supplied by CMR.")+'</p><p><strong>'+escapeHtml(item.short_name||"")+'</strong> '+(item.version?"· v"+escapeHtml(item.version):"")+'<br>'+escapeHtml(item.temporal_start||"")+(item.temporal_end?" → "+escapeHtml(item.temporal_end):"")+'</p><button class="secondary">Select collection</button>';
+      el.innerHTML='<h3>'+escapeHtml(item.title||item.short_name||item.concept_id)+'</h3>'+
+        '<div class="meta"><span class="chip satellite-chip">'+escapeHtml(platform)+'</span>'+otherPlatforms+chips+level+'</div>'+
+        (matches?'<div class="component-matches"><span class="satellite-label">MATCHED COMPONENTS</span><div class="meta">'+matches+'</div></div>':"")+
+        '<p>'+escapeHtml(item.abstract||"No abstract supplied by CMR.")+'</p>'+
+        '<p><strong>'+escapeHtml(item.short_name||"")+'</strong> '+(item.version?"· v"+escapeHtml(item.version):"")+'<br>'+
+        escapeHtml(item.temporal_start||"")+(item.temporal_end?" → "+escapeHtml(item.temporal_end):"")+'</p>'+
+        '<button class="secondary collection-toggle">Select collection</button>';
 
-      el.querySelector("button").onclick=function(){
-        selectedCollection=item;
-        root.querySelectorAll(".collection-card").forEach(function(x){x.classList.remove("selected");});
-        el.classList.add("selected");
-        $("selectedCollection").innerHTML="<strong>"+escapeHtml(item.title||item.short_name||item.concept_id)+"</strong><br><span>"+escapeHtml(item.concept_id||"")+"</span><br><span>Satellite group: "+escapeHtml(platform)+"</span>";
-        $("granulePanel").classList.remove("hidden");
-        $("downloadCsv").disabled=true;
-        currentGranules=[];
-        $("granules").innerHTML="";
-        $("granuleMessage").textContent="Collection selected. Click Find all granules.";
-        $("granuleMessage").className="message success";
-        $("granulePanel").scrollIntoView({behavior:"smooth",block:"start"});
+      el.querySelector(".collection-toggle").onclick=function(){
+        const id=item.concept_id||"";
+        if(selectedCollections.has(id)) selectedCollections.delete(id);
+        else selectedCollections.set(id,item);
+        syncCollectionSelectionUI();
       };
 
       cards.appendChild(el);
@@ -218,6 +277,8 @@ function renderCollections(items){
     section.appendChild(cards);
     root.appendChild(section);
   });
+
+  syncCollectionSelectionUI();
 }
 
 function updateCollectionCount(filteredCount){
@@ -243,7 +304,8 @@ function filterFetchedCollections(){
       item.short_name||"",
       item.concept_id||"",
       (item.platforms||[]).join(" "),
-      (item.instruments||[]).join(" ")
+      (item.instruments||[]).join(" "),
+      (item.matched_components||[]).join(" ")
     ].join(" ").toLowerCase();
     return terms.every(function(term){return haystack.indexOf(term)!==-1;});
   });
@@ -253,32 +315,94 @@ function filterFetchedCollections(){
 }
 
 $("collectionResultSearch").addEventListener("input",filterFetchedCollections);
+$("selectAllShown").onclick=function(){
+  visibleCollections.forEach(function(item){
+    if(item.concept_id) selectedCollections.set(item.concept_id,item);
+  });
+  syncCollectionSelectionUI();
+};
+$("clearSelectedCollections").onclick=function(){
+  selectedCollections.clear();
+  syncCollectionSelectionUI();
+};
+
 
 $("findGranules").onclick=async function(){
-  const button=$("findGranules"),msg=$("granuleMessage");if(!selectedCollection){toast("Select a NASA collection first.","error");return;}
+  const button=$("findGranules"),msg=$("granuleMessage");
+  const collections=Array.from(selectedCollections.values());
+  if(!collections.length){toast("Select at least one NASA collection first.","error");return;}
+
   try{
-    validateInputs(true);button.disabled=true;button.textContent="Searching granules…";
-    const body={
-      token:$("token").value.trim(),collection_id:selectedCollection.concept_id,bbox:bbox(),date_range:dates(),
-      platform:csvList($("platformFilter").value)[0]||null,instrument:csvList($("instrumentFilter").value)[0]||null,
-      fallback_latest:$("fallbackLatest").checked
-    };
-    const data=await api("/api/granules/search",body,false);
-    currentGranules=data.items||[];
-    currentGranuleCycle=data.granule_cycle||null;
+    validateInputs(true);
+    button.disabled=true;
+    button.textContent="Searching "+collections.length+" collection(s)…";
+    currentGranules=[];
+    currentGranuleCycle=null;
+
+    const jobs=collections.map(async function(collection){
+      const body={
+        token:$("token").value.trim(),
+        collection_id:collection.concept_id,
+        bbox:bbox(),
+        date_range:dates(),
+        platform:csvList($("platformFilter").value)[0]||null,
+        instrument:csvList($("instrumentFilter").value)[0]||null,
+        fallback_latest:$("fallbackLatest").checked
+      };
+      const response=await apiResponseWithRetry("/api/granules/search",body,3);
+      return {collection:collection,data:await response.json()};
+    });
+
+    const settled=await Promise.allSettled(jobs);
+    const failures=[];
+    let fallbackCollections=0;
+    const seen=new Set();
+
+    settled.forEach(function(result){
+      if(result.status!=="fulfilled"){
+        failures.push(result.reason&&result.reason.message?result.reason.message:String(result.reason));
+        return;
+      }
+
+      const collection=result.value.collection;
+      const data=result.value.data||{};
+      if(data.fallback_used) fallbackCollections++;
+      const cycle=data.granule_cycle||null;
+
+      (data.items||[]).forEach(function(raw){
+        const item={...raw};
+        const key=collection.concept_id+"::"+(item.concept_id||item.granule_ur||Math.random());
+        if(seen.has(key)) return;
+        seen.add(key);
+        item._collection_id=collection.concept_id;
+        item._collection_title=collection.title||collection.short_name||collection.concept_id;
+        item._collection_short_name=collection.short_name||"";
+        item._matched_components=(collection.matched_components&&collection.matched_components.length)
+          ?collection.matched_components.slice():componentValues().slice();
+        item._granule_cycle=cycle;
+        currentGranules.push(item);
+      });
+    });
+
     renderGranules(currentGranules);
-
-    const cycleText=currentGranuleCycle&&currentGranuleCycle.label
-      ?" Granule cadence estimate: "+currentGranuleCycle.label+" ("+(currentGranuleCycle.detail||currentGranuleCycle.basis||"based on granule start timestamps")+")."
-      :"";
-
-    if(data.fallback_used){msg.className="message warn";msg.textContent=(data.fallback_reason||"Requested dates were empty, so the newest available granules were used.")+cycleText;}
-    else if(currentGranules.length){msg.className="message success";msg.textContent="Loaded all "+currentGranules.length+" downloadable granule(s) available in the requested date range."+cycleText;}
-    else{msg.className="message error";msg.textContent="No downloadable granules were found.";}
+    if(currentGranules.length){
+      msg.className=failures.length||fallbackCollections?"message warn":"message success";
+      msg.textContent="Loaded "+currentGranules.length+" granule(s) across "+collections.length+" selected collection(s)."+
+        (fallbackCollections?" "+fallbackCollections+" collection(s) used most-recent fallback dates.":"")+
+        (failures.length?" "+failures.length+" collection search(es) failed after retries.":"");
+    }else{
+      msg.className="message error";
+      msg.textContent="No downloadable granules were found across the selected collections."+
+        (failures.length?" "+failures.slice(0,2).join(" | "):"");
+    }
     $("downloadCsv").disabled=!currentGranules.length;
-  }catch(e){msg.className="message error";msg.textContent=e.message;}
-  finally{button.disabled=false;button.textContent="Find all granules";}
+  }catch(e){
+    msg.className="message error";msg.textContent=e.message;
+  }finally{
+    button.disabled=false;button.textContent="Find all granules";
+  }
 };
+
 
 function renderGranules(items){
   const root=$("granules");root.innerHTML="";
@@ -286,10 +410,16 @@ function renderGranules(items){
     const el=document.createElement("div");el.className="granule";
     const start=item.begin||"time unknown";
     const end=item.end||"time unknown";
-    el.innerHTML="<strong>"+escapeHtml(item.granule_ur||item.concept_id||"Granule")+"</strong><span><b>Start UTC:</b> "+escapeHtml(start)+"<br><b>End UTC:</b> "+escapeHtml(end)+"</span><span>"+escapeHtml((item.platforms||[]).join(", ")||"platform unknown")+"</span><span>"+(item.size_mb?escapeHtml(String(item.size_mb))+" MB":"")+"</span>";
+    const origin=item._collection_short_name||item._collection_title||item._collection_id||"collection unknown";
+    const components=(item._matched_components||[]).join(", ");
+    el.innerHTML="<strong>"+escapeHtml(item.granule_ur||item.concept_id||"Granule")+"</strong>"+
+      "<span><b>Start UTC:</b> "+escapeHtml(start)+"<br><b>End UTC:</b> "+escapeHtml(end)+"</span>"+
+      "<span class='collection-origin'><b>"+escapeHtml(origin)+"</b>"+(components?"<br>"+escapeHtml(components):"")+"</span>"+
+      "<span>"+(item.size_mb?escapeHtml(String(item.size_mb))+" MB":"")+"</span>";
     root.appendChild(el);
   });
 }
+
 
 function formatEta(seconds){
   if(!Number.isFinite(seconds)||seconds<0) return "calculating…";
@@ -300,7 +430,7 @@ function formatEta(seconds){
 }
 
 $("downloadCsv").onclick=async function(){
-  if(!selectedCollection||!currentGranules.length){toast("Find all granules first.","error");return;}
+  if(!selectedCollections.size||!currentGranules.length){toast("Find all granules first.","error");return;}
   const button=$("downloadCsv");
   const msg=$("granuleMessage");
 
@@ -332,10 +462,10 @@ $("downloadCsv").onclick=async function(){
 
     const baseBody={
       token:$("token").value.trim(),
-      component:$("component").value.trim(),
-      collection_search_name:$("collectionResultSearch").value.trim()||null,
-      collection_id:selectedCollection.concept_id,
-      collection_title:selectedCollection.title||selectedCollection.short_name||null,
+      component:componentValues().join("; "),
+      collection_search_name:null,
+      collection_id:"",
+      collection_title:"",
       bbox:bbox(),
       date_range:dates(),
       platform:csvList($("platformFilter").value)[0]||null,
@@ -412,6 +542,10 @@ $("downloadCsv").onclick=async function(){
       try{
         const response=await apiResponseWithRetry("/api/download/nasa/granule",{
           ...baseBody,
+          component:(granule._matched_components&&granule._matched_components.length)
+            ?granule._matched_components.join("; "):componentValues().join("; "),
+          collection_id:granule._collection_id||"",
+          collection_title:granule._collection_title||granule._collection_short_name||"",
           granule_id:granule.concept_id,
           granule_ur:granule.granule_ur||null,
           begin:granule.begin||null,
@@ -422,10 +556,10 @@ $("downloadCsv").onclick=async function(){
           instruments:Array.isArray(granule.instruments)?granule.instruments:[],
           download_urls:Array.isArray(granule.download_urls)?granule.download_urls:[],
           primary_url:granule.primary_url||null,
-          cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
-          cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
-          cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
-          cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
+          cycle_label:granule._granule_cycle&&granule._granule_cycle.label?granule._granule_cycle.label:null,
+          cycle_interval_seconds:granule._granule_cycle&&granule._granule_cycle.interval_seconds!=null?granule._granule_cycle.interval_seconds:null,
+          cycle_detail:granule._granule_cycle&&granule._granule_cycle.detail?granule._granule_cycle.detail:null,
+          cycle_basis:granule._granule_cycle&&granule._granule_cycle.basis?granule._granule_cycle.basis:null
         },2);
 
         const text=await response.text();
