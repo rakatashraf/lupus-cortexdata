@@ -156,6 +156,7 @@ jobs:
               0,
           )
           assert airs_frames
+          print("AIRS_DEBUG", [(len(frame), list(frame.columns), frame.get("hdf4_reader").iloc[0] if "hdf4_reader" in frame.columns and len(frame) else "") for frame in airs_frames])
           assert sum(len(frame) for frame in airs_frames)==12
           assert all("spectral_channel_index" in frame.columns for frame in airs_frames)
 
