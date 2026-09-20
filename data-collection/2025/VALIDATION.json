@@ -1,0 +1,10 @@
+{
+  "regression_tests_passed": 20,
+  "docker_executed": false,
+  "laptop_access_established": false,
+  "nasa_metadata_queries_succeeded": true,
+  "nasa_science_download_http_status": 401,
+  "osm_geometry_http_status": 403,
+  "actual_observation_csv_created": false,
+  "full_30_component_2025_training_dataset_completed": false
+}

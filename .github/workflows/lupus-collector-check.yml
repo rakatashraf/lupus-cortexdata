@@ -1,0 +1,65 @@
+name: Validate local Lupus collector
+on:
+  pull_request:
+    paths:
+      - 'data-collection/2025/**'
+      - '.github/workflows/lupus-collector-check.yml'
+permissions:
+  contents: read
+concurrency:
+  group: lupus-collector-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  docker-and-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: data-collection/2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated test configuration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import secrets
+          text=Path('.env.example').read_text().replace('N8N_ENCRYPTION_KEY=', 'N8N_ENCRYPTION_KEY='+secrets.token_hex(32))
+          Path('.env').write_text(text)
+          PY
+      - name: Build both Docker images
+        run: docker compose build
+      - name: Run regression tests inside worker image
+        run: docker compose run --rm --no-deps -T -v "$PWD:/project:ro" earthdata-worker sh -c 'pip install --quiet pytest httpx && python -m pytest -q --disable-warnings /project/tests'
+      - name: Start services and verify local HTTP endpoints
+        run: |
+          docker compose up -d
+          python3 - <<'PY'
+          import urllib.request, urllib.error, json, time
+          deadline=time.monotonic()+180
+          while time.monotonic()<deadline:
+              try:
+                  with urllib.request.urlopen('http://localhost:8089/health',timeout=3) as r:
+                      assert json.load(r)['ok']
+                  with urllib.request.urlopen('http://localhost:5679/healthz',timeout=3) as r:
+                      assert r.status==200
+                  break
+              except (OSError,AssertionError): time.sleep(2)
+          else: raise RuntimeError('Services did not become healthy')
+          with urllib.request.urlopen('http://localhost:8089/preflight',timeout=5) as r:
+              result=json.load(r)
+              assert result['hdf4_supported'] is True
+              assert result['credentials_configured'] is False
+          req=urllib.request.Request('http://localhost:8089/run',method='POST')
+          try:
+              urllib.request.urlopen(req,timeout=5)
+              raise AssertionError('Collection must reject missing credentials')
+          except urllib.error.HTTPError as e:
+              assert e.code==400
+          print('Worker, HDF4 support, credential gate and n8n HTTP health verified.')
+          PY
+      - name: Show service logs
+        if: always()
+        run: docker compose logs --tail=100
+      - name: Stop test services
+        if: always()
+        run: docker compose down --volumes

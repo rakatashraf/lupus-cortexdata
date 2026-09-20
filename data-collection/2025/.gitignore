@@ -1,0 +1,6 @@
+.env
+local-files/*
+!local-files/.gitkeep
+__pycache__/
+*.pyc
+.pytest_cache/

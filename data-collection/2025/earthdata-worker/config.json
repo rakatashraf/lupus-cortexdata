@@ -1,0 +1,418 @@
+{
+  "bbox": {
+    "west": 89.24,
+    "south": 22.8,
+    "east": 91.31,
+    "north": 24.8
+  },
+  "temporal": {
+    "start": "2025-01-01T00:00:00Z",
+    "end": "2025-12-31T23:59:59Z"
+  },
+  "model_grid_deg": 0.01,
+  "outputs": {
+    "final": "lupus_cortex_2025_actual.csv"
+  },
+  "delete_raw_after_processing": true,
+  "download_batch_size": 1,
+  "products": [
+    {
+      "component_id": 1,
+      "component": "PM2.5",
+      "short_name": "M2T1NXAER",
+      "version": "5.12.4",
+      "cadence": "hourly",
+      "adapter": "merra2_aerosol",
+      "subvariables": [
+        "PM25"
+      ]
+    },
+    {
+      "component_id": 2,
+      "component": "PM10",
+      "short_name": "M2T1NXAER",
+      "version": "5.12.4",
+      "cadence": "hourly",
+      "adapter": "merra2_aerosol",
+      "subvariables": [
+        "PM10"
+      ]
+    },
+    {
+      "component_id": 3,
+      "component": "NO2",
+      "short_name": "OMNO2d",
+      "version": "004",
+      "cadence": "daily",
+      "adapter": "omi_grid",
+      "subvariables": [
+        "ColumnAmountNO2Trop"
+      ]
+    },
+    {
+      "component_id": 4,
+      "component": "O3",
+      "short_name": "OMTO3e",
+      "version": "004",
+      "cadence": "daily",
+      "adapter": "omi_grid",
+      "subvariables": [
+        "ColumnAmountO3"
+      ]
+    },
+    {
+      "component_id": 5,
+      "component": "SO2",
+      "short_name": "OMSO2e",
+      "version": "004",
+      "cadence": "daily",
+      "adapter": "omi_grid",
+      "subvariables": [
+        "ColumnAmountSO2"
+      ]
+    },
+    {
+      "component_id": 6,
+      "component": "CO",
+      "short_name": "AIRS3STD",
+      "version": "7.0",
+      "cadence": "daily",
+      "adapter": "airs_l3",
+      "subvariables": [
+        "CO_total_column_A",
+        "CO_total_column_D"
+      ]
+    },
+    {
+      "component_id": 7,
+      "component": "AOD",
+      "short_name": "MCD19A2",
+      "version": "061",
+      "cadence": "daily",
+      "adapter": "maiac_aod",
+      "subvariables": [
+        "Optical_Depth_055"
+      ]
+    },
+    {
+      "component_id": 8,
+      "component": "Land Surface Temperature",
+      "short_name": "MOD11A1",
+      "version": "061",
+      "cadence": "daily",
+      "adapter": "modis_lst",
+      "subvariables": [
+        "LST_Day_1km",
+        "LST_Night_1km"
+      ]
+    },
+    {
+      "component_id": 8,
+      "component": "Land Surface Temperature",
+      "short_name": "MYD11A1",
+      "version": "061",
+      "cadence": "daily",
+      "adapter": "modis_lst",
+      "subvariables": [
+        "LST_Day_1km",
+        "LST_Night_1km"
+      ]
+    },
+    {
+      "component_id": 9,
+      "component": "Air Temperature",
+      "short_name": "M2T1NXSLV",
+      "version": "5.12.4",
+      "cadence": "hourly",
+      "adapter": "merra2_surface",
+      "subvariables": [
+        "T2M"
+      ]
+    },
+    {
+      "component_id": 10,
+      "component": "Relative Humidity",
+      "short_name": "M2T1NXSLV",
+      "version": "5.12.4",
+      "cadence": "hourly",
+      "adapter": "merra2_surface",
+      "subvariables": [
+        "RH2M_DERIVED"
+      ]
+    },
+    {
+      "component_id": 11,
+      "component": "NDVI",
+      "short_name": "MOD13A2",
+      "version": "061",
+      "cadence": "16-day",
+      "adapter": "modis_ndvi",
+      "subvariables": [
+        "1_km_16_days_NDVI"
+      ]
+    },
+    {
+      "component_id": 11,
+      "component": "NDVI",
+      "short_name": "MYD13A2",
+      "version": "061",
+      "cadence": "16-day",
+      "adapter": "modis_ndvi",
+      "subvariables": [
+        "1_km_16_days_NDVI"
+      ]
+    },
+    {
+      "component_id": 12,
+      "component": "Green-space percentage",
+      "short_name": "HLSL30",
+      "version": "2.0",
+      "cadence": "scene",
+      "adapter": "hls_landcover",
+      "subvariables": [
+        "GREEN_PERCENT"
+      ]
+    },
+    {
+      "component_id": 12,
+      "component": "Green-space percentage",
+      "short_name": "HLSS30",
+      "version": "2.0",
+      "cadence": "scene",
+      "adapter": "hls_landcover",
+      "subvariables": [
+        "GREEN_PERCENT"
+      ]
+    },
+    {
+      "component_id": 13,
+      "component": "Built-up percentage",
+      "short_name": "HLSL30",
+      "version": "2.0",
+      "cadence": "scene",
+      "adapter": "hls_landcover",
+      "subvariables": [
+        "BUILT_PERCENT"
+      ]
+    },
+    {
+      "component_id": 13,
+      "component": "Built-up percentage",
+      "short_name": "HLSS30",
+      "version": "2.0",
+      "cadence": "scene",
+      "adapter": "hls_landcover",
+      "subvariables": [
+        "BUILT_PERCENT"
+      ]
+    },
+    {
+      "component_id": 14,
+      "component": "Impervious surface",
+      "short_name": "HLSL30",
+      "version": "2.0",
+      "cadence": "annual-derived",
+      "adapter": "hls_landcover",
+      "subvariables": [
+        "IMPERVIOUS_PERCENT"
+      ]
+    },
+    {
+      "component_id": 14,
+      "component": "Impervious surface",
+      "short_name": "HLSS30",
+      "version": "2.0",
+      "cadence": "annual-derived",
+      "adapter": "hls_landcover",
+      "subvariables": [
+        "IMPERVIOUS_PERCENT"
+      ]
+    },
+    {
+      "component_id": 15,
+      "component": "Precipitation",
+      "short_name": "GPM_3IMERGHH",
+      "version": "07",
+      "cadence": "30-min",
+      "adapter": "imerg",
+      "subvariables": [
+        "precipitation"
+      ]
+    },
+    {
+      "component_id": 16,
+      "component": "Extreme rainfall",
+      "short_name": "GPM_3IMERGHH",
+      "version": "07",
+      "cadence": "30-min-derived",
+      "adapter": "imerg",
+      "subvariables": [
+        "EXTREME_RAIN"
+      ]
+    },
+    {
+      "component_id": 17,
+      "component": "Soil moisture",
+      "short_name": "SPL3SMP_E",
+      "version": "006",
+      "cadence": "daily",
+      "adapter": "smap",
+      "subvariables": [
+        "soil_moisture"
+      ]
+    },
+    {
+      "component_id": 18,
+      "component": "Surface-water extent",
+      "short_name": "OPERA_L3_DSWX-HLS_V1",
+      "version": "1.0",
+      "cadence": "scene",
+      "adapter": "opera_dswx",
+      "subvariables": [
+        "WATER_PERCENT"
+      ]
+    },
+    {
+      "component_id": 19,
+      "component": "Flood extent",
+      "short_name": "OPERA_L3_DSWX-HLS_V1",
+      "version": "1.0",
+      "cadence": "event-derived",
+      "adapter": "opera_dswx",
+      "subvariables": [
+        "FLOOD_PERCENT"
+      ]
+    },
+    {
+      "component_id": 20,
+      "component": "Drought anomaly",
+      "short_name": "TELLUS_GRAC-GRFO_MASCON_GRID_RL06.3_V4",
+      "version": "RL06.3Mv04",
+      "cadence": "monthly+daily-derived",
+      "adapter": "grace_smap_drought",
+      "subvariables": [
+        "TWS_ANOMALY",
+        "SOIL_MOISTURE_Z"
+      ]
+    },
+    {
+      "component_id": 21,
+      "component": "Population density",
+      "short_name": "CIESIN_SEDAC_GPWv4_POPDENS_R11",
+      "version": "4.11",
+      "cadence": "static-reference",
+      "adapter": "sedac_population",
+      "subvariables": [
+        "POP_DENSITY"
+      ]
+    },
+    {
+      "component_id": 22,
+      "component": "Vulnerable-age population",
+      "short_name": "CIESIN_SEDAC_GPWv4_BDC_R11",
+      "version": "4.11",
+      "cadence": "static-reference",
+      "adapter": "sedac_age",
+      "subvariables": [
+        "VULNERABLE_AGE_PERCENT"
+      ]
+    },
+    {
+      "component_id": 23,
+      "component": "Road density",
+      "short_name": null,
+      "version": "OSM-2025-snapshot",
+      "cadence": "static-reference",
+      "adapter": "osm",
+      "subvariables": [
+        "ROAD_DENSITY"
+      ]
+    },
+    {
+      "component_id": 24,
+      "component": "Public-transport accessibility",
+      "short_name": null,
+      "version": "OSM/GTFS-2025",
+      "cadence": "static/schedule",
+      "adapter": "osm",
+      "subvariables": [
+        "TRANSIT_ACCESS"
+      ]
+    },
+    {
+      "component_id": 25,
+      "component": "Hospital accessibility",
+      "short_name": null,
+      "version": "OSM+road-network",
+      "cadence": "static",
+      "adapter": "osm",
+      "subvariables": [
+        "HOSPITAL_ACCESS_MIN",
+        "HOSPITAL_DISTANCE_KM"
+      ]
+    },
+    {
+      "component_id": 26,
+      "component": "Green-space accessibility",
+      "short_name": null,
+      "version": "HLS+OSM+population",
+      "cadence": "annual-derived",
+      "adapter": "derived_access",
+      "subvariables": [
+        "GREEN_ACCESS_PERCENT"
+      ]
+    },
+    {
+      "component_id": 27,
+      "component": "Critical-infrastructure density",
+      "short_name": null,
+      "version": "OSM-2025-snapshot",
+      "cadence": "static-reference",
+      "adapter": "osm",
+      "subvariables": [
+        "CRITICAL_INFRA_DENSITY"
+      ]
+    },
+    {
+      "component_id": 28,
+      "component": "Night-time lights",
+      "short_name": "VNP46A2",
+      "version": "2",
+      "cadence": "daily",
+      "adapter": "black_marble",
+      "subvariables": [
+        "DNB_BRDF-Corrected_NTL"
+      ]
+    },
+    {
+      "component_id": 29,
+      "component": "Elevation / slope",
+      "short_name": "NASADEM_HGT",
+      "version": "001",
+      "cadence": "static",
+      "adapter": "nasadem",
+      "subvariables": [
+        "ELEVATION",
+        "SLOPE"
+      ]
+    },
+    {
+      "component_id": 30,
+      "component": "Disaster exposure / readiness",
+      "short_name": null,
+      "version": "Lupus-Cortex-v1",
+      "cadence": "derived",
+      "adapter": "composite",
+      "subvariables": [
+        "DISASTER_EXPOSURE_READINESS"
+      ]
+    }
+  ],
+  "checkpoint_every_granules": 50,
+  "quality_policy": "Only finite, timestamped observations. Proxies explicitly labeled. No invented completeness.",
+  "blocked_components": {
+    "2": "MERRA-2 total aerosol surface mass is not PM10. A documented size-cut source is required.",
+    "22": "GPW age bins need a verified explicit age/sex/total manifest; filename regex inference was unsafe.",
+    "30": "Disaster readiness requires a defined, validated target and observed preparedness inputs; removed invented defaults."
+  }
+}

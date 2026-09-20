@@ -1,0 +1,285 @@
+{
+  "name": "Lupus Cortex 2025 - Resume local collection",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "48a78dc8-b98c-4e66-aba1-18ad2465b7f5",
+      "name": "Start 2025 Acquisition",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -860,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://earthdata-worker:8080/health",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "308182ff-20e6-442a-a2f3-8611b62a6430",
+      "name": "Check worker health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -640,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://earthdata-worker:8080/run",
+        "sendBody": false,
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "968446c5-b897-4b34-a3ab-239e098dc637",
+      "name": "Launch Full-Year Download",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -420,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "minutes"
+      },
+      "id": "8770e8ad-020e-4e9f-bca3-e7751be39b56",
+      "name": "Wait 1 Minute",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -180,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://earthdata-worker:8080/status",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "bba68330-947f-4ec8-8d59-beb3ef62eddc",
+      "name": "Check Pipeline Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "db853687-4aa3-4403-8b23-9ac54553c012",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "partial",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1340475-2499-415f-8ed7-5a50875dba3a",
+      "name": "Collection ended?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "331968bd-8a90-4d9a-af55-6a296c256d0d",
+              "leftValue": "={{ [\"failed\", \"interrupted\", \"idle\", \"inventory_completed\"].includes($json.status) ? \"failed\" : \"running\" }}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ad9e75a7-7a33-418c-9703-1e6566721eb1",
+      "name": "Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ $json.error || \"Earthdata worker failed. Check container logs: docker-compose logs earthdata-worker\" }}"
+      },
+      "id": "18205896-b1ae-463d-862c-c44aa2bb1faa",
+      "name": "Stop With Worker Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        760,
+        260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "aba0ec8d-e7b8-454e-abc8-01e7e981da92",
+      "name": "Review coverage and remaining gaps",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        540,
+        -40
+      ],
+      "notes": "Collection ended. Inspect coverage and training_ready. Partial does not mean all 30 components or a full year. CSV: local-files/lupus_cortex_2025_actual.csv.",
+      "notesInFlow": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start 2025 Acquisition": {
+      "main": [
+        [
+          {
+            "node": "Check worker health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check worker health": {
+      "main": [
+        [
+          {
+            "node": "Launch Full-Year Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Launch Full-Year Download": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Minute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "Check Pipeline Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pipeline Status": {
+      "main": [
+        [
+          {
+            "node": "Collection ended?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collection ended?": {
+      "main": [
+        [
+          {
+            "node": "Review coverage and remaining gaps",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed?": {
+      "main": [
+        [
+          {
+            "node": "Stop With Worker Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 1 Minute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false
+  },
+  "versionId": "de737b17-69dc-491e-aafe-7d12b8982621",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "id": "Lupus2025LocalV2"
+}
