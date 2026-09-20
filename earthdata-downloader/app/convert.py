@@ -5,8 +5,6 @@ import io
 import json
 import math
 import os
-import shutil
-import tempfile
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -1011,65 +1009,6 @@ def convert_bytes(
         "Unsupported or unreadable Earthdata format. Reader attempts: "
         + " | ".join(errors[:3])
     )
-
-
-def convert_file(
-    path: Path,
-    meta: dict[str, Any],
-    filters: list[str],
-    bbox: dict[str, float],
-    max_rows: int,
-) -> list[pd.DataFrame]:
-    suffix = path.suffix.lower()
-
-    if suffix == ".zip":
-        frames: list[pd.DataFrame] = []
-        with tempfile.TemporaryDirectory(prefix="earthdata_zip_") as td:
-            with zipfile.ZipFile(path) as z:
-                z.extractall(td)
-            for child in Path(td).rglob("*"):
-                if child.is_file():
-                    try:
-                        frames.extend(convert_file(child, meta, filters, bbox, max_rows))
-                    except Exception:
-                        continue
-        return frames
-
-    if suffix == ".gz":
-        target = Path(tempfile.mktemp(prefix="earthdata_gz_", suffix=Path(path.stem).suffix or ".bin"))
-        try:
-            with gzip.open(path, "rb") as src, target.open("wb") as dst:
-                shutil.copyfileobj(src, dst)
-            return convert_file(target, meta, filters, bbox, max_rows)
-        finally:
-            target.unlink(missing_ok=True)
-
-    if suffix in (".nc", ".nc4", ".cdf"):
-        return _xarray_file(path, meta, filters, bbox, max_rows)
-    if suffix in (".h5", ".hdf5", ".he5"):
-        try:
-            return _xarray_file(path, meta, filters, bbox, max_rows)
-        except Exception:
-            return _hdf5_file(path, meta, filters, bbox, max_rows)
-    if suffix in (".hdf", ".h4"):
-        try:
-            return _hdf4_file(path, meta, filters, bbox, max_rows)
-        except Exception:
-            return _hdf5_file(path, meta, filters, bbox, max_rows)
-    if suffix in (".tif", ".tiff"):
-        return _geotiff_file(path, meta, filters, bbox, max_rows)
-    if suffix in (".csv", ".tsv", ".tab", ".txt"):
-        return _table_file(path, meta, bbox, max_rows)
-    if suffix in (".json", ".geojson"):
-        return _json_file(path, meta, bbox, max_rows)
-
-    # Some providers omit useful extensions. Try the scientific readers in order.
-    for reader in (_xarray_file, _hdf5_file):
-        try:
-            return reader(path, meta, filters, bbox, max_rows)
-        except Exception:
-            pass
-    raise ValueError(f"Unsupported or unreadable Earthdata format: {path.name}")
 
 
 def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
