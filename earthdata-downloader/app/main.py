@@ -27,7 +27,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.1.0",
+    version="1.2.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -69,7 +69,6 @@ class CollectionRequest(BaseModel):
     bbox: Optional[BBox] = None
     platforms: list[str] = []
     instruments: list[str] = []
-    page_size: int = 50
 
 
 class GranuleRequest(BaseModel):
@@ -79,7 +78,6 @@ class GranuleRequest(BaseModel):
     date_range: DateRange
     platform: Optional[str] = None
     instrument: Optional[str] = None
-    max_granules: int = 10
     fallback_latest: bool = True
 
 
@@ -222,7 +220,7 @@ def _download_convert(req: DownloadRequest, granules: list[dict]) -> tuple[bytes
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.1.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.2.0"}
 
 
 @app.post("/api/token/validate")
@@ -245,7 +243,6 @@ async def collections_search(req: CollectionRequest):
             bbox=req.bbox.cmr() if req.bbox else None,
             platforms=req.platforms,
             instruments=req.instruments,
-            page_size=req.page_size,
         )
         external = resolve_external(req.component)
         return {
@@ -270,7 +267,6 @@ async def granules_search(req: GranuleRequest):
             end_date=req.date_range.end.isoformat(),
             platform=req.platform,
             instrument=req.instrument,
-            max_granules=req.max_granules,
             fallback_latest=req.fallback_latest,
         )
     except Exception as exc:
@@ -287,7 +283,6 @@ async def download_nasa(req: DownloadRequest):
             end_date=req.date_range.end.isoformat(),
             platform=req.platform,
             instrument=req.instrument,
-            max_granules=req.max_granules,
             fallback_latest=req.fallback_latest,
         )
         granules = result.get("items") or []
@@ -303,6 +298,7 @@ async def download_nasa(req: DownloadRequest):
                 "Content-Disposition": f'attachment; filename="{name}"',
                 "X-Earthdata-Fallback-Used": str(bool(result.get("fallback_used"))).lower(),
                 "X-Earthdata-Rows": str(report["rows"]),
+                "X-Earthdata-Granules": str(len(granules)),
             },
         )
     except HTTPException:
