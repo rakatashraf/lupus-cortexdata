@@ -1,0 +1,111 @@
+name: Earthdata Downloader CI
+
+on:
+  push:
+    branches:
+      - earthdata-downloader-vercel
+    paths:
+      - "earthdata-downloader/**"
+      - ".github/workflows/earthdata-downloader-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: earthdata-downloader
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi httpx requests pandas numpy xarray scipy h5netcdf h5py rasterio cftime
+
+      - name: Compile downloader
+        run: |
+          python -m py_compile app/main.py app/convert.py app/cmr.py app/external.py
+
+      - name: Exercise in-memory converters
+        run: |
+          python - <<'PY'
+          import gzip
+          import io
+          import json
+          import zipfile
+
+          import h5py
+          import numpy as np
+          import pandas as pd
+          import rasterio
+          from rasterio.io import MemoryFile
+          from rasterio.transform import from_origin
+
+          from app.convert import combine_frames, convert_bytes
+
+          bbox = {"south": 23.0, "west": 90.0, "north": 24.0, "east": 91.0}
+          meta = {
+              "source": "test",
+              "component_query": "test",
+              "collection_id": "C-TEST",
+              "collection_title": "Test",
+              "granule_id": "G-TEST",
+              "granule_ur": "G-TEST",
+              "satellite_platform": "TEST",
+              "instrument": "TEST",
+              "granule_begin": "2025-01-01T00:00:00Z",
+              "granule_end": "2025-01-01T01:00:00Z",
+              "original_file": "test",
+              "download_url": "https://example.invalid/test",
+          }
+
+          csv_data = b"latitude,longitude,time,value\n23.5,90.5,2025-01-01T00:00:00Z,10\n"
+          frames = convert_bytes(csv_data, "sample.csv", meta, [], bbox, 0)
+          assert frames and len(frames[0]) == 1
+
+          gz_data = gzip.compress(csv_data)
+          frames = convert_bytes(gz_data, "sample.csv.gz", meta, [], bbox, 0)
+          assert frames and len(frames[0]) == 1
+
+          zbuf = io.BytesIO()
+          with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+              z.writestr("inside.csv", csv_data)
+          frames = convert_bytes(zbuf.getvalue(), "sample.zip", meta, [], bbox, 0)
+          assert frames and len(frames[0]) == 1
+
+          hbuf = io.BytesIO()
+          with h5py.File(hbuf, "w") as h:
+              h.create_dataset("latitude", data=np.array([[23.4, 23.6]]))
+              h.create_dataset("longitude", data=np.array([[90.4, 90.6]]))
+              d = h.create_dataset("NO2", data=np.array([[1.0, 2.0]]))
+              d.attrs["units"] = "mol/m2"
+          frames = convert_bytes(hbuf.getvalue(), "sample.h5", meta, ["NO2"], bbox, 0)
+          assert frames and len(frames[0]) == 2
+
+          profile = {
+              "driver": "GTiff",
+              "height": 2,
+              "width": 2,
+              "count": 1,
+              "dtype": "float32",
+              "crs": "EPSG:4326",
+              "transform": from_origin(90.0, 24.0, 0.5, 0.5),
+          }
+          with MemoryFile() as mem:
+              with mem.open(**profile) as dst:
+                  dst.write(np.array([[1, 2], [3, 4]], dtype="float32"), 1)
+              tif_data = mem.read()
+          frames = convert_bytes(tif_data, "sample.tif", meta, [], bbox, 0)
+          assert frames
+
+          combined = combine_frames(frames)
+          assert "data_timestamp_utc" in combined.columns
+          assert "data_cycle" in combined.columns
+
+          print("IN_MEMORY_CONVERSION_TESTS_OK")
+          PY
