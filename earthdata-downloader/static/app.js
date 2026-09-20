@@ -34,6 +34,39 @@ async function api(path,body,asBlob){
   }
   return asBlob?response.blob():response.json();
 }
+function sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
+
+async function apiResponseWithRetry(path,body,maxAttempts){
+  const attempts=Math.max(1,maxAttempts||3);
+  let lastError=null;
+  for(let attempt=1;attempt<=attempts;attempt++){
+    try{
+      const response=await fetch(path,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+      if(response.ok) return response;
+
+      let detail="HTTP "+response.status;
+      try{const data=await response.clone().json();detail=data.detail||detail;}
+      catch(e){try{detail=await response.clone().text()||detail;}catch(_){}}
+
+      const retryable=response.status===408||response.status===409||response.status===425||
+        response.status===429||response.status===500||response.status===502||
+        response.status===503||response.status===504;
+
+      if(!retryable || attempt===attempts) throw new Error(detail);
+      lastError=new Error(detail);
+    }catch(e){
+      lastError=e;
+      if(attempt===attempts) throw e;
+    }
+    await sleep(Math.min(5000,750*Math.pow(2,attempt-1)));
+  }
+  throw lastError||new Error("Request failed.");
+}
+
 async function apiResponse(path,body){
   const response=await fetch(path,{
     method:"POST",
@@ -263,8 +296,30 @@ $("downloadCsv").onclick=async function(){
   const button=$("downloadCsv");
   const msg=$("granuleMessage");
 
+  let writer=null;
+  let usingFileWriter=false;
+
   try{
     validateInputs(true);
+
+    let name=$("outputName").value.trim()||slug(searchLabel())+"_earthdata.csv";
+    if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
+
+    if("showSaveFilePicker" in window){
+      try{
+        const handle=await window.showSaveFilePicker({
+          suggestedName:name,
+          types:[{description:"CSV file",accept:{"text/csv":[".csv"]}}]
+        });
+        writer=await handle.createWritable();
+        usingFileWriter=true;
+      }catch(e){
+        if(e&&e.name==="AbortError") return;
+        writer=null;
+        usingFileWriter=false;
+      }
+    }
+
     button.disabled=true;
 
     const baseBody={
@@ -285,7 +340,9 @@ $("downloadCsv").onclick=async function(){
 
     let header=null;
     const parts=[];
+    const failures=[];
     let totalRows=0;
+    let convertedGranules=0;
 
     for(let i=0;i<currentGranules.length;i++){
       const granule=currentGranules[i];
@@ -294,49 +351,76 @@ $("downloadCsv").onclick=async function(){
       msg.className="message";
       msg.textContent="Downloading and converting "+(i+1)+" of "+currentGranules.length+": "+label;
 
-      const response=await apiResponse("/api/download/nasa/granule",{
-        ...baseBody,
-        granule_id:granule.concept_id,
-        cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
-        cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
-        cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
-        cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
-      });
-
-      const text=await response.text();
-      const chunk=splitCsvHeader(text);
-      if(!chunk.header) throw new Error("A converted granule returned an empty CSV.");
-
-      if(header===null){
-        header=chunk.header;
-        parts.push(header+"\n");
-      }else if(chunk.header!==header){
-        throw new Error(
-          "NASA granules in this collection produced different CSV schemas. "+
-          "Use a variable-name filter to select a consistent variable set."
-        );
+      if(!granule.concept_id){
+        failures.push(label+": missing CMR granule ID");
+        continue;
       }
 
-      if(chunk.body){
-        parts.push(chunk.body);
-        if(!chunk.body.endsWith("\n")) parts.push("\n");
-      }
+      try{
+        const response=await apiResponseWithRetry("/api/download/nasa/granule",{
+          ...baseBody,
+          granule_id:granule.concept_id,
+          cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
+          cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
+          cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
+          cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
+        },3);
 
-      const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
-      if(Number.isFinite(rows)) totalRows+=rows;
+        const text=await response.text();
+        const chunk=splitCsvHeader(text);
+        if(!chunk.header) throw new Error("Converted granule returned an empty CSV.");
+
+        if(header===null){
+          header=chunk.header;
+          if(usingFileWriter) await writer.write(header+"\n");
+          else parts.push(header+"\n");
+        }else if(chunk.header!==header){
+          throw new Error("CSV schema differs from earlier granules in this collection.");
+        }
+
+        if(chunk.body){
+          const bodyText=chunk.body+(chunk.body.endsWith("\n")?"":"\n");
+          if(usingFileWriter) await writer.write(bodyText);
+          else parts.push(bodyText);
+        }
+
+        const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
+        if(Number.isFinite(rows)) totalRows+=rows;
+        convertedGranules++;
+      }catch(e){
+        failures.push(label+": "+(e&&e.message?e.message:String(e)));
+      }
     }
 
-    if(!header) throw new Error("No CSV data was produced.");
+    if(!header || convertedGranules===0){
+      if(writer&&typeof writer.abort==="function") await writer.abort();
+      writer=null;
+      const details=failures.slice(0,3).join(" | ");
+      throw new Error("No granules could be converted."+ (details?" "+details:""));
+    }
 
-    const blob=new Blob(parts,{type:"text/csv;charset=utf-8"});
-    let name=$("outputName").value.trim()||slug(searchLabel())+"_earthdata.csv";
-    if(!name.toLowerCase().endsWith(".csv")) name+=".csv";
-    downloadBlob(blob,name);
+    if(usingFileWriter){
+      await writer.close();
+      writer=null;
+    }else{
+      const blob=new Blob(parts,{type:"text/csv;charset=utf-8"});
+      downloadBlob(blob,name);
+    }
 
-    msg.className="message success";
-    msg.textContent="Converted all "+currentGranules.length+" granule(s) into one CSV"+(totalRows?" with "+totalRows+" rows.":".");
-    toast("Combined CSV created successfully.");
+    const skipped=failures.length;
+    msg.className=skipped?"message warn":"message success";
+    msg.textContent="Converted "+convertedGranules+" of "+currentGranules.length+
+      " granule(s) into one CSV"+(totalRows?" with "+totalRows+" rows.":".")+
+      (skipped?" "+skipped+" granule(s) were skipped after retries. "+failures.slice(0,2).join(" | "):"");
+    toast(skipped?"CSV created with some skipped granules.":"Combined CSV created successfully.",skipped?"warn":"");
   }catch(e){
+    if(writer){
+      try{
+        if(typeof writer.abort==="function") await writer.abort();
+        else await writer.close();
+      }catch(_){}
+      writer=null;
+    }
     msg.className="message error";
     msg.textContent=e.message;
     toast(e.message,"error");

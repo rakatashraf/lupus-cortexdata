@@ -28,7 +28,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="1.5.0",
+    version="1.6.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -130,7 +130,8 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/1.1",
+        "User-Agent": "EarthdataCSVDownloader/1.6",
+        "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
 
@@ -165,10 +166,29 @@ def _download_granule_bytes(
     url: str,
     idx: int,
 ) -> tuple[bytes, str, str]:
-    max_mb = max(1, int(os.getenv("EARTHDATA_MAX_GRANULE_MB", "384")))
+    max_mb = max(1, int(os.getenv("EARTHDATA_MAX_GRANULE_MB", "256")))
     max_bytes = max_mb * 1024 * 1024
 
     with session.get(url, stream=True, timeout=(25, 300), allow_redirects=True) as response:
+        if response.status_code in (401, 403):
+            raise PermissionError(
+                "NASA denied access to this granule. Validate the Earthdata token and make sure "
+                "your Earthdata account is authorized for the collection's DAAC/provider."
+            )
+        if response.status_code == 404:
+            raise FileNotFoundError(
+                "NASA returned 404 for this granule URL. The CMR link may be stale; another "
+                "download URL will be tried automatically when available."
+            )
+        if response.status_code == 429:
+            retry_after = response.headers.get("retry-after")
+            suffix = f" Retry after {retry_after} second(s)." if retry_after else ""
+            raise RuntimeError("NASA temporarily rate-limited the download request." + suffix)
+        if 500 <= response.status_code <= 599:
+            raise RuntimeError(
+                f"NASA data provider returned HTTP {response.status_code}. "
+                "This is usually temporary; retry the granule shortly."
+            )
         response.raise_for_status()
 
         final_url = response.url or url
@@ -343,6 +363,9 @@ def _csv_http_response(
     response_content = content
     response_headers = dict(headers)
     response_headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response_headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response_headers["Pragma"] = "no-cache"
+    response_headers["X-Content-Type-Options"] = "nosniff"
     response_headers["X-Earthdata-Uncompressed-Bytes"] = str(len(content))
 
     if len(content) > 3_000_000:
@@ -375,7 +398,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.5.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "1.6.0"}
 
 
 @app.post("/api/token/validate")

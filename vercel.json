@@ -3,7 +3,13 @@
   "services": {
     "earthdata-downloader": {
       "root": "earthdata-downloader/",
-      "entrypoint": "app.main:app"
+      "entrypoint": "app.main:app",
+      "functions": {
+        "app/main.py": {
+          "maxDuration": 60,
+          "memory": 2048
+        }
+      }
     }
   },
   "rewrites": [
@@ -13,5 +19,6 @@
         "service": "earthdata-downloader"
       }
     }
-  ]
+  ],
+  "fluid": true
 }
