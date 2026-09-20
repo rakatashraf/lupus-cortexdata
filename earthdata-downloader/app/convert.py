@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import math
-import shutil
+import os
 import tempfile
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -538,6 +540,476 @@ def _json_file(
     df = _normalize_time(_filter_bbox(df, bbox))
     df = _limit(df, max_rows)
     return [_apply_meta(df, meta)] if not df.empty else []
+
+
+
+def _xarray_bytes(
+    data: bytes,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    import xarray as xr
+
+    last_error: Exception | None = None
+    for engine in ("h5netcdf", "scipy", None):
+        stream = io.BytesIO(data)
+        try:
+            kwargs = {"decode_times": True, "mask_and_scale": True}
+            if engine:
+                kwargs["engine"] = engine
+            ds = xr.open_dataset(stream, **kwargs)
+            try:
+                frames: list[pd.DataFrame] = []
+                for name, arr in ds.data_vars.items():
+                    if not _wanted(name, filters):
+                        continue
+                    if not np.issubdtype(arr.dtype, np.number):
+                        continue
+                    try:
+                        df = arr.to_dataframe(name="value").reset_index()
+                    except Exception:
+                        values = np.asarray(arr.values).reshape(-1)
+                        df = pd.DataFrame({"value": values})
+                    df.insert(0, "variable", name)
+                    unit = str(arr.attrs.get("units") or arr.attrs.get("Units") or "")
+                    df.insert(1, "unit", unit)
+                    df = _normalize_time(df)
+                    df = _filter_bbox(df, bbox)
+                    df = _limit(df, max_rows)
+                    if not df.empty:
+                        frames.append(_apply_meta(df, meta))
+                return frames
+            finally:
+                ds.close()
+        except Exception as exc:
+            last_error = exc
+
+    raise ValueError(f"NetCDF/xarray in-memory reader failed: {last_error}")
+
+
+def _hdf5_bytes(
+    data: bytes,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    import h5py
+
+    frames: list[pd.DataFrame] = []
+    with h5py.File(io.BytesIO(data), "r") as h:
+        datasets = _h5_datasets(h)
+        lat_ds = next((obj for name, obj in datasets if name.split("/")[-1].lower() in LAT_NAMES), None)
+        lon_ds = next((obj for name, obj in datasets if name.split("/")[-1].lower() in LON_NAMES), None)
+        time_ds = next((obj for name, obj in datasets if name.split("/")[-1].lower() in TIME_NAMES), None)
+
+        lat_arr = np.asarray(lat_ds) if lat_ds is not None else None
+        lon_arr = np.asarray(lon_ds) if lon_ds is not None else None
+        time_arr = np.asarray(time_ds) if time_ds is not None else None
+
+        for name, ds in datasets:
+            base = name.split("/")[-1]
+            if base.lower() in LAT_NAMES | LON_NAMES | TIME_NAMES:
+                continue
+            if not _wanted(name, filters):
+                continue
+            if not np.issubdtype(ds.dtype, np.number):
+                continue
+            try:
+                arr = np.asarray(ds)
+            except Exception:
+                continue
+            if arr.size == 0:
+                continue
+
+            values = arr.reshape(-1)
+            df = pd.DataFrame({"variable": name, "value": values})
+            unit_raw = ds.attrs.get("units", "")
+            if isinstance(unit_raw, bytes):
+                unit_raw = unit_raw.decode(errors="ignore")
+            df.insert(1, "unit", str(unit_raw))
+
+            if lat_arr is not None and lon_arr is not None and lat_arr.shape == arr.shape and lon_arr.shape == arr.shape:
+                df["latitude"] = lat_arr.reshape(-1)
+                df["longitude"] = lon_arr.reshape(-1)
+                df = _filter_bbox(df, bbox)
+            elif arr.ndim:
+                inds = np.unravel_index(np.arange(arr.size), arr.shape)
+                for i, ind in enumerate(inds):
+                    df[f"index_{i}"] = ind
+
+            if time_arr is not None and time_arr.shape == arr.shape:
+                try:
+                    df["observation_time"] = time_arr.reshape(-1)
+                except Exception:
+                    pass
+
+            df = _limit(df, max_rows)
+            if not df.empty:
+                frames.append(_apply_meta(df, meta))
+
+    return frames
+
+
+def _raster_source_frames(
+    src: Any,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+    variable_prefix: str = "",
+) -> list[pd.DataFrame]:
+    import rasterio
+    from rasterio.windows import from_bounds
+    from rasterio.warp import transform_bounds, transform
+
+    frames: list[pd.DataFrame] = []
+    try:
+        if src.crs:
+            left, bottom, right, top = transform_bounds(
+                "EPSG:4326",
+                src.crs,
+                bbox["west"],
+                bbox["south"],
+                bbox["east"],
+                bbox["north"],
+                densify_pts=21,
+            )
+            window = from_bounds(left, bottom, right, top, src.transform)
+            window = window.round_offsets().round_lengths()
+            full = rasterio.windows.Window(0, 0, src.width, src.height)
+            window = window.intersection(full)
+        else:
+            window = rasterio.windows.Window(0, 0, src.width, src.height)
+    except Exception:
+        window = rasterio.windows.Window(0, 0, src.width, src.height)
+
+    if int(window.width) <= 0 or int(window.height) <= 0:
+        return frames
+
+    transform_window = src.window_transform(window)
+    data = src.read(window=window, masked=True)
+
+    for band in range(data.shape[0]):
+        description = (src.descriptions or [None] * src.count)[band]
+        base_name = description or f"band_{band + 1}"
+        name = f"{variable_prefix}:{base_name}" if variable_prefix else base_name
+        if not _wanted(name, filters):
+            continue
+
+        arr = data[band]
+        rows, cols = np.where(~np.ma.getmaskarray(arr))
+        if len(rows) == 0:
+            continue
+
+        values = np.asarray(arr[rows, cols], dtype=float)
+        out: dict[str, Any] = {
+            "variable": name,
+            "unit": "",
+            "value": values,
+        }
+
+        if src.crs:
+            xs, ys = rasterio.transform.xy(transform_window, rows, cols, offset="center")
+            xs = np.asarray(xs, dtype=float)
+            ys = np.asarray(ys, dtype=float)
+            if str(src.crs).upper() not in ("EPSG:4326", "OGC:CRS84"):
+                lons, lats = transform(src.crs, "EPSG:4326", xs.tolist(), ys.tolist())
+            else:
+                lons, lats = xs.tolist(), ys.tolist()
+            out["latitude"] = lats
+            out["longitude"] = lons
+        else:
+            out["row"] = rows
+            out["column"] = cols
+
+        df = pd.DataFrame(out)
+        if "latitude" in df.columns and "longitude" in df.columns:
+            df = _filter_bbox(df, bbox)
+        df = _limit(df, max_rows)
+        if not df.empty:
+            frames.append(_apply_meta(df, meta))
+
+    return frames
+
+
+def _raster_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    import rasterio
+    from rasterio.io import MemoryFile
+
+    suffix = Path(filename).suffix or ".bin"
+    frames: list[pd.DataFrame] = []
+    with MemoryFile(data, ext=suffix) as mem:
+        try:
+            with mem.open() as src:
+                subdatasets = list(src.subdatasets or [])
+                if not subdatasets:
+                    return _raster_source_frames(src, meta, filters, bbox, max_rows)
+        except Exception:
+            subdatasets = []
+
+        for subdataset in subdatasets:
+            try:
+                with rasterio.open(subdataset) as src:
+                    label = subdataset.rsplit(":", 1)[-1].strip('"') or "subdataset"
+                    frames.extend(
+                        _raster_source_frames(
+                            src,
+                            meta,
+                            filters,
+                            bbox,
+                            max_rows,
+                            variable_prefix=label,
+                        )
+                    )
+            except Exception:
+                continue
+
+    if frames:
+        return frames
+    raise ValueError("Raster/GDAL in-memory reader could not open this dataset.")
+
+
+def _table_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    suffix = Path(filename).suffix.lower()
+    stream = io.BytesIO(data)
+    if suffix in (".tsv", ".tab"):
+        df = pd.read_csv(stream, sep="\t")
+    else:
+        try:
+            df = pd.read_csv(stream)
+        except Exception:
+            stream.seek(0)
+            df = pd.read_csv(stream, sep=None, engine="python")
+    df = _normalize_time(_filter_bbox(df, bbox))
+    df = _limit(df, max_rows)
+    return [_apply_meta(df, meta)] if not df.empty else []
+
+
+def _json_bytes(
+    data: bytes,
+    meta: dict[str, Any],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    obj = json.loads(data.decode("utf-8", errors="replace"))
+    if isinstance(obj, dict) and isinstance(obj.get("features"), list):
+        rows: list[dict[str, Any]] = []
+        for feat in obj["features"]:
+            props = dict(feat.get("properties") or {})
+            geom = feat.get("geometry") or {}
+            coords = geom.get("coordinates")
+            if geom.get("type") == "Point" and isinstance(coords, list) and len(coords) >= 2:
+                props["longitude"] = coords[0]
+                props["latitude"] = coords[1]
+            rows.append(props)
+        df = pd.DataFrame(rows)
+    elif isinstance(obj, list):
+        df = pd.json_normalize(obj)
+    elif isinstance(obj, dict):
+        df = pd.json_normalize(obj)
+    else:
+        return []
+
+    df = _normalize_time(_filter_bbox(df, bbox))
+    df = _limit(df, max_rows)
+    return [_apply_meta(df, meta)] if not df.empty else []
+
+
+def _scratch_file(
+    data: bytes,
+    filename: str,
+) -> Path | None:
+    candidates = [
+        os.getenv("EARTHDATA_SCRATCH_DIR", "").strip(),
+        "/dev/shm",
+        "/tmp",
+    ]
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename) or "earthdata.bin"
+
+    for directory in candidates:
+        if not directory:
+            continue
+        try:
+            base = Path(directory)
+            base.mkdir(parents=True, exist_ok=True)
+            path = base / f"earthdata_{uuid.uuid4().hex}_{safe_name}"
+            path.write_bytes(data)
+            return path
+        except Exception:
+            continue
+    return None
+
+
+def _hdf4_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    # First try GDAL/rasterio's in-memory HDF driver. This needs no writable filesystem.
+    try:
+        frames = _raster_bytes(data, filename, meta, filters, bbox, max_rows)
+        if frames:
+            return frames
+    except Exception:
+        pass
+
+    # pyhdf requires a real path. Use shared memory or /tmp only when the runtime actually allows it.
+    path = _scratch_file(data, filename)
+    if path is None:
+        raise ValueError(
+            "This HDF4 granule requires pyhdf, but the host provides no writable scratch filesystem. "
+            "The downloader already attempted the in-memory GDAL reader."
+        )
+    try:
+        return _hdf4_file(path, meta, filters, bbox, max_rows)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def _read_gzip_limited(data: bytes) -> bytes:
+    max_mb = max(1, int(os.getenv("EARTHDATA_MAX_EXPANDED_MB", "384")))
+    limit = max_mb * 1024 * 1024
+    with gzip.GzipFile(fileobj=io.BytesIO(data), mode="rb") as gz:
+        expanded = gz.read(limit + 1)
+    if len(expanded) > limit:
+        raise ValueError(f"Expanded GZIP exceeds the configured {max_mb} MB safety limit.")
+    return expanded
+
+
+def _detect_suffix(filename: str, data: bytes) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix:
+        return suffix
+
+    head = data[:16]
+    if head.startswith(b"PK\x03\x04"):
+        return ".zip"
+    if head.startswith(b"\x1f\x8b"):
+        return ".gz"
+    if head.startswith(b"\x89HDF\r\n\x1a\n"):
+        return ".h5"
+    if head.startswith((b"CDF\x01", b"CDF\x02", b"CDF\x05")):
+        return ".nc"
+    if head.startswith((b"II*\x00", b"MM\x00*")):
+        return ".tif"
+    if head.startswith(b"\x0e\x03\x13\x01"):
+        return ".hdf"
+    return ""
+
+
+def convert_bytes(
+    data: bytes,
+    filename: str,
+    meta: dict[str, Any],
+    filters: list[str],
+    bbox: dict[str, float],
+    max_rows: int,
+) -> list[pd.DataFrame]:
+    if not data:
+        raise ValueError("Downloaded granule is empty.")
+
+    suffix = _detect_suffix(filename, data)
+
+    if suffix == ".zip":
+        frames: list[pd.DataFrame] = []
+        max_member_mb = max(1, int(os.getenv("EARTHDATA_MAX_ARCHIVE_MEMBER_MB", "384")))
+        max_member = max_member_mb * 1024 * 1024
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                if info.file_size > max_member:
+                    continue
+                try:
+                    child = archive.read(info)
+                    child_meta = dict(meta)
+                    child_meta["original_file"] = info.filename
+                    frames.extend(
+                        convert_bytes(
+                            child,
+                            info.filename,
+                            child_meta,
+                            filters,
+                            bbox,
+                            max_rows,
+                        )
+                    )
+                except Exception:
+                    continue
+        if not frames:
+            raise ValueError("ZIP archive contained no supported convertible dataset.")
+        return frames
+
+    if suffix == ".gz":
+        expanded = _read_gzip_limited(data)
+        inner_name = Path(filename).stem or "earthdata.bin"
+        inner_meta = dict(meta)
+        inner_meta["original_file"] = inner_name
+        return convert_bytes(expanded, inner_name, inner_meta, filters, bbox, max_rows)
+
+    if suffix in (".nc", ".nc4", ".cdf"):
+        return _xarray_bytes(data, meta, filters, bbox, max_rows)
+
+    if suffix in (".h5", ".hdf5", ".he5"):
+        try:
+            frames = _xarray_bytes(data, meta, filters, bbox, max_rows)
+            if frames:
+                return frames
+        except Exception:
+            pass
+        return _hdf5_bytes(data, meta, filters, bbox, max_rows)
+
+    if suffix in (".hdf", ".h4"):
+        return _hdf4_bytes(data, filename, meta, filters, bbox, max_rows)
+
+    if suffix in (".tif", ".tiff"):
+        return _raster_bytes(data, filename, meta, filters, bbox, max_rows)
+
+    if suffix in (".csv", ".tsv", ".tab", ".txt"):
+        return _table_bytes(data, filename, meta, bbox, max_rows)
+
+    if suffix in (".json", ".geojson"):
+        return _json_bytes(data, meta, bbox, max_rows)
+
+    # Extensionless or mislabeled files are common in data services. Probe readers safely.
+    errors: list[str] = []
+    for label, reader in (
+        ("xarray", lambda: _xarray_bytes(data, meta, filters, bbox, max_rows)),
+        ("HDF5", lambda: _hdf5_bytes(data, meta, filters, bbox, max_rows)),
+        ("raster/GDAL", lambda: _raster_bytes(data, filename, meta, filters, bbox, max_rows)),
+        ("JSON", lambda: _json_bytes(data, meta, bbox, max_rows)),
+        ("table", lambda: _table_bytes(data, filename, meta, bbox, max_rows)),
+    ):
+        try:
+            frames = reader()
+            if frames:
+                return frames
+        except Exception as exc:
+            errors.append(f"{label}: {exc}")
+
+    raise ValueError(
+        "Unsupported or unreadable Earthdata format. Reader attempts: "
+        + " | ".join(errors[:3])
+    )
 
 
 def convert_file(
