@@ -296,7 +296,11 @@ $("downloadCsv").onclick=async function(){
 
       const response=await apiResponse("/api/download/nasa/granule",{
         ...baseBody,
-        granule_id:granule.concept_id
+        granule_id:granule.concept_id,
+        cycle_label:currentGranuleCycle&&currentGranuleCycle.label?currentGranuleCycle.label:null,
+        cycle_interval_seconds:currentGranuleCycle&&currentGranuleCycle.interval_seconds!=null?currentGranuleCycle.interval_seconds:null,
+        cycle_detail:currentGranuleCycle&&currentGranuleCycle.detail?currentGranuleCycle.detail:null,
+        cycle_basis:currentGranuleCycle&&currentGranuleCycle.basis?currentGranuleCycle.basis:null
       });
 
       const text=await response.text();
