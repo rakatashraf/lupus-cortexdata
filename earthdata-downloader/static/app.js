@@ -152,12 +152,19 @@ function chooseDownloadConcurrency(granules){
   const heavyRatio=heavy/Math.max(1,total);
   const harmonyRatio=harmony/Math.max(1,total);
 
-  if(heavyRatio>=0.6 && harmonyRatio<0.5) return Math.min(total,4);
-  if(heavyRatio>=0.3) return Math.min(total,6);
-  if(harmonyRatio>=0.7) return Math.min(total,12);
-  if(total>=500) return 10;
-  if(total>=100) return 8;
-  return Math.min(total,6);
+  // Harmony-compatible products are already subset on NASA's side, so large
+  // jobs can safely use a wider pool without downloading giant raw granules.
+  if(total>=1000 && harmonyRatio>=0.70) return 24;
+  if(total>=500 && harmonyRatio>=0.70) return 20;
+
+  // Heavy raw HDF/HDF-EOS products need stricter pressure control.
+  if(heavyRatio>=0.60 && harmonyRatio<0.50) return Math.min(total,6);
+  if(heavyRatio>=0.30 && harmonyRatio<0.50) return Math.min(total,8);
+
+  if(total>=1000) return 16;
+  if(total>=500) return 14;
+  if(total>=100) return 12;
+  return Math.min(total,8);
 }
 
 
@@ -751,6 +758,9 @@ $("downloadCsv").onclick=async function(){
     let harmonyAccelerated=0;
     let directProcessed=0;
     let attemptsCompleted=0;
+    let attemptsStarted=0;
+    let activeAttempts=0;
+    let primaryCompleted=0;
     const expectedHeader=FIXED_EXPORT_COLUMNS.join(",");
     let header=expectedHeader;
     let writeQueue=Promise.resolve();
@@ -762,7 +772,7 @@ $("downloadCsv").onclick=async function(){
       parts.push(expectedHeader+"\n");
     }
     msg.className="message";
-    msg.textContent="Download started. The CSV file/header is being written now while satellite and ground-data workers run in parallel.";
+    msg.textContent="Download started. CSV header created. Launching conversion workers now; completed granules will be written immediately instead of waiting for the full job.";
 
     function queueCsv(text){
       const chunk=splitCsvHeader(text);
@@ -825,16 +835,23 @@ $("downloadCsv").onclick=async function(){
       const avgBackend=backendSamples?Math.round(totalBackendMs/backendSamples):null;
       button.textContent="Converting "+finalized+"/"+total+"…";
       msg.className="message";
-      msg.textContent=stage+": "+finalized+"/"+total+" finalized · "+
+      msg.textContent=stage+": "+
+        finalized+"/"+total+" finalized · "+
+        primaryCompleted+" primary finished · "+
+        attemptsStarted+" started · "+
+        activeAttempts+" active · "+
+        attemptsCompleted+" responses · "+
         primaryConcurrency+" primary workers · "+
-        attemptsCompleted+" attempts · "+
         (pendingRecovery?pendingRecovery+" awaiting recovery · ":"")+
-        rate.toFixed(rate>=10?1:2)+" finalized/s · ETA "+formatEta(eta)+
+        (rate>0?rate.toFixed(rate>=10?1:2)+" finalized/s · ETA "+formatEta(eta):"waiting for first completed granule")+
         (avgBackend!==null?" · avg backend "+avgBackend+"ms":"");
     }
 
     async function attemptGranule(granule,recoveryMode){
       const label=granule.granule_ur||granule.concept_id||"granule";
+      attemptsStarted++;
+      activeAttempts++;
+      updateProgress(recoveryMode?"Recovery conversion":"Primary conversion",0);
       if(!granule.concept_id){
         return {
           ok:false,
@@ -853,6 +870,7 @@ $("downloadCsv").onclick=async function(){
           {timeoutMs:recoveryMode?290000:210000}
         );
         attemptsCompleted++;
+        activeAttempts=Math.max(0,activeAttempts-1);
 
         const text=await response.text();
         const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
@@ -887,6 +905,7 @@ $("downloadCsv").onclick=async function(){
         };
       }catch(error){
         attemptsCompleted++;
+        activeAttempts=Math.max(0,activeAttempts-1);
         return {
           ok:false,
           granule:granule,
@@ -931,89 +950,70 @@ $("downloadCsv").onclick=async function(){
 
     updateProgress("Primary conversion",0);
 
-    const primaryResults=await runBounded(
+    const recoveryQueue=[];
+    await runBounded(
       currentGranules,
       primaryConcurrency,
-      async function(granule){
-        return attemptGranule(granule,false);
-      }
-    );
+      async function(granule,index){
+        const value=await attemptGranule(granule,false);
+        primaryCompleted++;
 
-    const recoveryQueue=[];
-
-    primaryResults.forEach(function(result,index){
-      const granule=currentGranules[index];
-      if(result.status==="fulfilled"&&result.value.ok){
-        const value=result.value;
-        queueCsv(value.text);
-        representedGranules++;
-        convertedGranules++;
-        totalRows+=Number.isFinite(value.rows)?value.rows:0;
-        if(String(value.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
-        else directProcessed++;
-        finalized++;
-      }else{
-        const value=result.status==="fulfilled"
-          ?result.value
-          :{
-              ok:false,
-              granule:granule,
-              label:granule.granule_ur||granule.concept_id||("granule "+(index+1)),
-              error:result.reason&&result.reason.message?result.reason.message:String(result.reason),
-              manifest:null
-            };
-        recoveryQueue.push(value);
-      }
-    });
-
-    updateProgress("Recovery pass",recoveryQueue.length);
-
-    if(recoveryQueue.length){
-      await sleep(1500);
-      const recoveryResults=await runBounded(
-        recoveryQueue,
-        Math.min(2,recoveryQueue.length),
-        async function(previous){
-          const next=await attemptGranule(previous.granule,true);
-          if(!next.manifest&&previous.manifest) next.manifest=previous.manifest;
-          if(!next.error&&previous.error) next.error=previous.error;
-          return next;
-        }
-      );
-
-      recoveryResults.forEach(function(result,index){
-        const previous=recoveryQueue[index];
-        if(result.status==="fulfilled"&&result.value.ok){
-          const value=result.value;
+        if(value&&value.ok){
           queueCsv(value.text);
           representedGranules++;
           convertedGranules++;
           totalRows+=Number.isFinite(value.rows)?value.rows:0;
           if(String(value.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
           else directProcessed++;
+          finalized++;
         }else{
-          const value=result.status==="fulfilled"
-            ?result.value
-            :{
-                granule:previous.granule,
-                label:previous.label,
-                error:result.reason&&result.reason.message?result.reason.message:String(result.reason),
-                manifest:previous.manifest
-              };
-          const errorText=value.error||previous.error||"Granule conversion failed after recovery retries.";
-          finalFailures.push(value.label+": "+errorText);
-          try{
-            queueCsv(value.manifest||previous.manifest||localFailureCsv(value.granule,errorText));
-            representedGranules++;
-          }catch(_){}
+          recoveryQueue.push(value||{
+            ok:false,
+            granule:granule,
+            label:granule.granule_ur||granule.concept_id||("granule "+(index+1)),
+            error:"Primary conversion returned no result.",
+            manifest:null
+          });
         }
-        finalized++;
-        updateProgress("Recovery pass",Math.max(0,recoveryQueue.length-index-1));
-      });
-    }
 
-    if(!recoveryQueue.length){
-      finalized=total;
+        updateProgress("Primary conversion",recoveryQueue.length);
+        return value;
+      }
+    );
+
+    updateProgress("Recovery pass",recoveryQueue.length);
+
+    if(recoveryQueue.length){
+      await sleep(750);
+      await runBounded(
+        recoveryQueue,
+        Math.min(4,recoveryQueue.length),
+        async function(previous,index){
+          const next=await attemptGranule(previous.granule,true);
+          if(!next.manifest&&previous.manifest) next.manifest=previous.manifest;
+          if(!next.error&&previous.error) next.error=previous.error;
+
+          if(next.ok){
+            queueCsv(next.text);
+            representedGranules++;
+            convertedGranules++;
+            totalRows+=Number.isFinite(next.rows)?next.rows:0;
+            if(String(next.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
+            else directProcessed++;
+          }else{
+            const errorText=next.error||previous.error||"Granule conversion failed after recovery retries.";
+            finalFailures.push(next.label+": "+errorText);
+            try{
+              queueCsv(next.manifest||previous.manifest||localFailureCsv(next.granule,errorText));
+              representedGranules++;
+            }catch(_){}
+          }
+
+          finalized++;
+          updateProgress("Recovery pass",Math.max(0,recoveryQueue.length-index-1));
+          return next;
+        }
+      );
     }
 
     await groundPromise;
