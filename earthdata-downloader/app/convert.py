@@ -306,6 +306,319 @@ def _wanted(name: str, filters: list[str]) -> bool:
     return any(f.lower() in low for f in filters if f.strip())
 
 
+
+_COMPONENT_ALIAS_GROUPS: dict[str, set[str]] = {
+    "pm25": {"pm25", "pm2.5", "pm_2_5", "particulate matter 2.5", "fine particulate matter"},
+    "pm10": {"pm10", "particulate matter 10", "coarse particulate matter"},
+    "no2": {"no2", "nitrogen dioxide", "nitrogendioxide", "columnamountno2", "no2trop", "troposphericno2"},
+    "o3": {"o3", "ozone", "columnozone", "totalozone"},
+    "so2": {"so2", "sulfur dioxide", "sulphur dioxide", "sulfurdioxide", "columnamountso2"},
+    "co": {"co", "carbon monoxide", "carbonmonoxide", "columnamountco"},
+    "aod": {"aod", "aerosol optical depth", "aerosolopticaldepth", "opticaldepth", "aerosol index", "aerosolindex"},
+    "lst": {"lst", "land surface temperature", "landsurfacetemperature", "surfacetemperature"},
+    "airtemperature": {"air temperature", "airtemperature", "temperature2m", "t2m", "tavg", "temperature"},
+    "relativehumidity": {"relative humidity", "relativehumidity", "humidity", "rh"},
+    "ndvi": {"ndvi", "normalized difference vegetation index", "normalizeddifferencevegetationindex"},
+    "greenspace": {"green space", "greenspace", "vegetation fraction", "vegetationfraction", "green fraction", "greenfraction"},
+    "builtup": {"built up", "builtup", "built-up", "urban fraction", "urbanfraction"},
+    "impervioussurface": {"impervious surface", "impervioussurface", "impervious", "imperviousness"},
+    "precipitation": {"precipitation", "rainfall", "rain", "prcp", "imerg"},
+    "extremerainfall": {"extreme rainfall", "extremerainfall", "heavy precipitation", "heavyprecipitation", "rainfall", "precipitation", "prcp"},
+    "soilmoisture": {"soil moisture", "soilmoisture", "sm", "surface soil moisture", "surfacesoilmoisture"},
+    "surfacewater": {"surface water", "surfacewater", "water extent", "waterextent"},
+    "floodextent": {"flood extent", "floodextent", "flooded", "inundation"},
+    "droughtanomaly": {"drought anomaly", "droughtanomaly", "drought", "water storage anomaly", "waterstorageanomaly"},
+    "populationdensity": {"population density", "populationdensity", "popdensity"},
+    "vulnerableagepopulation": {"vulnerable age population", "vulnerableagepopulation", "age population", "agepopulation"},
+    "roaddensity": {"road density", "roaddensity", "roads"},
+    "publictransportaccessibility": {"public transport accessibility", "publictransportaccessibility", "public transport", "publictransport", "transit"},
+    "hospitalaccessibility": {"hospital accessibility", "hospitalaccessibility", "hospital", "healthcare"},
+    "greenspaceaccessibility": {"green space accessibility", "greenspaceaccessibility", "park accessibility", "parkaccessibility"},
+    "criticalinfrastructuredensity": {"critical infrastructure density", "criticalinfrastructuredensity", "critical infrastructure", "criticalinfrastructure"},
+    "nighttimelights": {"night time lights", "nighttime lights", "nighttimelights", "night lights", "nightlights", "ntl"},
+    "elevation": {"elevation", "dem", "altitude", "height"},
+    "slope": {"slope", "terrain slope", "terrainslope"},
+    "disasterexposure": {"disaster exposure", "disasterexposure", "hazard exposure", "hazardexposure"},
+    "disasterreadiness": {"disaster readiness", "disasterreadiness", "preparedness"},
+}
+
+_GENERIC_SCIENCE_VARIABLES = {
+    "value", "data", "measurement", "observation", "band", "band1", "band01",
+    "layer", "layer1", "layer01",
+}
+_NON_SCIENCE_VARIABLE_HINTS = {
+    "latitude", "longitude", "quality", "qualityflag", "qa", "flag",
+    "uncertainty", "error", "weight", "weights", "time", "datetime",
+}
+
+
+def _science_name(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def _science_basename(value: Any) -> str:
+    raw = str(value or "").replace("\\", "/").replace(":", "/")
+    return _science_name(raw.split("/")[-1])
+
+
+def _component_aliases(component: str) -> set[str]:
+    raw = str(component or "").strip()
+    normalized = _science_name(raw)
+    aliases: set[str] = {normalized} if normalized else set()
+
+    for canonical, group in _COMPONENT_ALIAS_GROUPS.items():
+        normalized_group = {_science_name(item) for item in group} | {_science_name(canonical)}
+        if normalized in normalized_group:
+            aliases |= normalized_group
+            aliases.add(_science_name(canonical))
+            break
+
+    return {alias for alias in aliases if alias}
+
+
+def component_filter_terms(components: Iterable[str]) -> list[str]:
+    """Return conservative reader-level variable hints for selected components."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for component in components:
+        aliases = _component_aliases(str(component))
+        # Prefer meaningful aliases; tiny aliases such as CO/O3 remain useful
+        # only when they are exact source-variable tokens and are handled again
+        # by the final strict scope gate.
+        for alias in sorted(aliases, key=lambda value: (-len(value), value)):
+            if len(alias) < 2 or alias in seen:
+                continue
+            seen.add(alias)
+            out.append(alias)
+    return out
+
+
+def _component_match_score(variable: Any, component: str) -> tuple[int, str]:
+    raw = str(variable or "")
+    base = _science_basename(raw)
+    full = _science_name(raw)
+    if not base:
+        return 0, ""
+
+    if any(hint == base or hint in base for hint in _NON_SCIENCE_VARIABLE_HINTS):
+        return 0, ""
+
+    component_norm = _science_name(component)
+    aliases = _component_aliases(component)
+
+    if component_norm and base == component_norm:
+        return 120, "exact_component_name"
+    if base in aliases:
+        return 115, "exact_component_alias"
+
+    best = 0
+    basis = ""
+    for alias in aliases:
+        if len(alias) >= 4 and (alias in base or alias in full):
+            score = 90 + min(20, len(alias))
+            if score > best:
+                best = score
+                basis = "component_alias_in_variable"
+
+    return best, basis
+
+
+def strict_scope_filter(
+    df: pd.DataFrame,
+    components: Iterable[str],
+    start_date: Any,
+    end_date: Any,
+    keep_audit_rows: bool = False,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Keep only rows matching selected component(s) and requested UTC dates."""
+    if df.empty:
+        return df, {
+            "input_rows": 0,
+            "retained_rows": 0,
+            "dropped_component_rows": 0,
+            "dropped_date_rows": 0,
+            "audit_rows": 0,
+        }
+
+    requested: list[str] = []
+    seen_components: set[str] = set()
+    for raw in components:
+        value = str(raw or "").strip()
+        key = value.casefold()
+        if value and key not in seen_components:
+            seen_components.add(key)
+            requested.append(value)
+
+    start_ts = pd.Timestamp(f"{start_date}T00:00:00Z")
+    end_ts = pd.Timestamp(f"{end_date}T23:59:59.999999Z")
+
+    work = df.copy()
+    status = work.get(
+        "conversion_status",
+        pd.Series("converted", index=work.index),
+    ).fillna("converted").astype(str)
+    audit_mask = status.isin(
+        ["conversion_failed", "request_failed", "ground_unavailable"]
+    )
+
+    variables = work.get(
+        "variable",
+        pd.Series("", index=work.index),
+    ).fillna("").astype(str)
+
+    assigned_components: list[str] = []
+    component_basis: list[str] = []
+    component_match: list[bool] = []
+
+    for variable in variables:
+        scores: list[tuple[int, int, str, str]] = []
+        for index, component in enumerate(requested):
+            score, basis = _component_match_score(variable, component)
+            if score > 0:
+                scores.append((score, -index, component, basis))
+
+        if scores:
+            scores.sort(reverse=True)
+            best = scores[0]
+            assigned_components.append(best[2])
+            component_basis.append(best[3])
+            component_match.append(True)
+            continue
+
+        base = _science_basename(variable)
+        if len(requested) == 1 and base in _GENERIC_SCIENCE_VARIABLES:
+            assigned_components.append(requested[0])
+            component_basis.append("single_component_generic_science_field")
+            component_match.append(True)
+        else:
+            assigned_components.append("")
+            component_basis.append("no_unambiguous_component_match")
+            component_match.append(False)
+
+    work["scope_component_match"] = component_match
+    work["component_match_basis"] = component_basis
+
+    observation = pd.to_datetime(
+        work.get("observation_time", pd.Series("", index=work.index)),
+        utc=True,
+        errors="coerce",
+    )
+    data_timestamp = pd.to_datetime(
+        work.get("data_timestamp_utc", pd.Series("", index=work.index)),
+        utc=True,
+        errors="coerce",
+    )
+    granule_start = pd.to_datetime(
+        work.get("granule_start_utc", pd.Series("", index=work.index)),
+        utc=True,
+        errors="coerce",
+    )
+    granule_end = pd.to_datetime(
+        work.get("granule_end_utc", pd.Series("", index=work.index)),
+        utc=True,
+        errors="coerce",
+    )
+
+    exact_observation = observation.notna()
+    exact_in_range = exact_observation & observation.between(start_ts, end_ts)
+
+    no_observation = ~exact_observation
+    interval_fully_inside = (
+        no_observation
+        & granule_start.notna()
+        & (granule_start >= start_ts)
+        & (granule_start <= end_ts)
+        & (granule_end.isna() | (granule_end <= end_ts))
+    )
+    timestamp_only_in_range = (
+        no_observation
+        & granule_start.isna()
+        & data_timestamp.notna()
+        & data_timestamp.between(start_ts, end_ts)
+    )
+
+    date_match = exact_in_range | interval_fully_inside | timestamp_only_in_range
+    date_basis = np.select(
+        [exact_in_range, interval_fully_inside, timestamp_only_in_range],
+        [
+            "exact_observation_time",
+            "granule_interval_fully_inside_requested_range",
+            "source_timestamp_inside_requested_range",
+        ],
+        default="outside_or_ambiguous_requested_range",
+    )
+
+    work["scope_date_match"] = date_match
+    work["scope_date_basis"] = date_basis
+    work["requested_start_date"] = str(start_date)
+    work["requested_end_date"] = str(end_date)
+    work["strict_scope_match"] = work["scope_component_match"] & work["scope_date_match"] & ~audit_mask
+
+    assigned_series = pd.Series(assigned_components, index=work.index, dtype="object")
+    matched = work["strict_scope_match"]
+
+    work.loc[matched, "component_primary"] = assigned_series.loc[matched]
+    work.loc[matched, "component_segment"] = assigned_series.loc[matched]
+    work.loc[matched, "component_names"] = assigned_series.loc[matched]
+    work.loc[matched, "component_count"] = 1
+
+    filtered_mask = matched | (audit_mask if keep_audit_rows else False)
+    result = work.loc[filtered_mask].copy()
+
+    if not result.empty:
+        collection_key = result.get(
+            "collection_segment_key",
+            pd.Series("", index=result.index),
+        ).fillna("").astype(str)
+        variable_key = result.get(
+            "variable",
+            pd.Series("", index=result.index),
+        ).fillna("").astype(str)
+        spatial_key = result.get(
+            "spatial_cell_id",
+            pd.Series("nonspatial", index=result.index),
+        ).fillna("nonspatial").astype(str)
+
+        result["series_id"] = (
+            result.get(
+                "component_segment",
+                pd.Series("", index=result.index),
+            ).fillna("").astype(str)
+            + "|"
+            + collection_key
+            + "|"
+            + variable_key
+            + "|"
+            + spatial_key
+        )
+        result["sequence_id"] = result["series_id"]
+        result["training_row_usable"] = (
+            result.get(
+                "training_row_usable",
+                pd.Series(False, index=result.index),
+            ).fillna(False).astype(bool)
+            & result["strict_scope_match"].fillna(False).astype(bool)
+        )
+        result.loc[
+            ~result["strict_scope_match"].fillna(False).astype(bool),
+            "training_exclude_reason",
+        ] = "strict_scope_excluded"
+
+    science_mask = ~audit_mask
+    report = {
+        "input_rows": int(len(work)),
+        "science_rows": int(science_mask.sum()),
+        "retained_rows": int((work["strict_scope_match"]).sum()),
+        "dropped_component_rows": int(
+            (science_mask & ~work["scope_component_match"]).sum()
+        ),
+        "dropped_date_rows": int(
+            (science_mask & work["scope_component_match"] & ~work["scope_date_match"]).sum()
+        ),
+        "audit_rows": int(audit_mask.sum()),
+    }
+    return result.reset_index(drop=True), report
+
 def _xarray_file(
     path: Path,
     meta: dict[str, Any],
@@ -2440,6 +2753,13 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "component_primary",
         "component_names",
         "component_count",
+        "scope_component_match",
+        "component_match_basis",
+        "strict_scope_match",
+        "requested_start_date",
+        "requested_end_date",
+        "scope_date_match",
+        "scope_date_basis",
         "collection_segment_key",
         "collection_id",
         "collection_short_name",

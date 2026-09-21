@@ -185,6 +185,7 @@ async function apiResponse(path,body){
 
 const FIXED_EXPORT_COLUMNS=[
   "component_segment","component_primary","component_names","component_count",
+  "scope_component_match","component_match_basis","strict_scope_match","requested_start_date","requested_end_date","scope_date_match","scope_date_basis",
   "collection_segment_key","collection_id","collection_short_name","collection_title",
   "collection_version","collection_provider","collection_processing_level",
   "granule_id","granule_ur","granule_production_date_utc","granule_size_mb",
@@ -226,6 +227,13 @@ function localFailureCsv(granule,errorText){
     component_primary:components[0]||"",
     component_names:components.join(";"),
     component_count:components.length,
+    scope_component_match:false,
+    component_match_basis:"audit_row",
+    strict_scope_match:false,
+    requested_start_date:$("startDate").value||"",
+    requested_end_date:$("endDate").value||"",
+    scope_date_match:false,
+    scope_date_basis:"audit_row",
     collection_segment_key:[
       granule._collection_short_name||"",
       granule._collection_version||"",
@@ -375,6 +383,19 @@ function configureLowBandwidthMode(){
     hint.textContent=slow
       ?"Slow/data-saver connection detected. Low-Bandwidth Training Mode is enabled automatically."
       :"Low-Bandwidth Training Mode is enabled by default to minimize transferred CSV bytes.";
+  }
+}
+
+function syncStrictScopeMode(){
+  const strict=$("strictScopeMode").checked;
+  const fallback=$("fallbackLatest");
+  fallback.disabled=strict;
+  if(strict) fallback.checked=false;
+  const hint=$("strictScopeHint");
+  if(hint){
+    hint.textContent=strict
+      ?"Strict mode active: only selected component variables and rows inside the selected UTC date range can enter the CSV. Most-recent fallback is disabled."
+      :"Compatibility mode: most-recent fallback and audit rows may be included.";
   }
 }
 
@@ -607,7 +628,8 @@ $("findGranules").onclick=async function(){
           date_range:dates(),
           platform:csvList($("platformFilter").value)[0]||null,
           instrument:csvList($("instrumentFilter").value)[0]||null,
-          fallback_latest:$("fallbackLatest").checked
+          fallback_latest:$("fallbackLatest").checked && !$("strictScopeMode").checked,
+          strict_scope_mode:$("strictScopeMode").checked
         };
         const response=await apiResponseWithRetry(
           "/api/granules/search",
@@ -740,7 +762,8 @@ $("downloadCsv").onclick=async function(){
       date_range:dates(),
       platform:csvList($("platformFilter").value)[0]||null,
       instrument:csvList($("instrumentFilter").value)[0]||null,
-      fallback_latest:$("fallbackLatest").checked,
+      fallback_latest:$("fallbackLatest").checked && !$("strictScopeMode").checked,
+      strict_scope_mode:$("strictScopeMode").checked,
       variable_filters:csvList($("variableFilters").value),
       output_name:null,
       max_rows_per_variable:Number($("maxRows").value)||0,
@@ -759,6 +782,7 @@ $("downloadCsv").onclick=async function(){
     let backendSamples=0;
     let harmonyAccelerated=0;
     let directProcessed=0;
+    let strictScopeDroppedRows=0;
     const failureBuckets={};
     let attemptsCompleted=0;
     let attemptsStarted=0;
@@ -879,6 +903,8 @@ $("downloadCsv").onclick=async function(){
         const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
         const conversionErrors=Number(response.headers.get("X-Earthdata-Conversion-Errors")||0);
         const accessPath=String(response.headers.get("X-Earthdata-Access-Path")||"direct");
+        const scopeDropped=Number(response.headers.get("X-Earthdata-Scope-Dropped-Rows")||0);
+        if(Number.isFinite(scopeDropped)&&scopeDropped>0) strictScopeDroppedRows+=scopeDropped;
         const backendMs=Number(response.headers.get("X-Earthdata-Processing-Ms")||0);
 
         if(Number.isFinite(backendMs)&&backendMs>0){
@@ -1018,10 +1044,12 @@ $("downloadCsv").onclick=async function(){
           }else{
             const errorText=next.error||previous.error||"Granule conversion failed after recovery retries.";
             finalFailures.push(next.label+": "+errorText);
-            try{
-              queueCsv(next.manifest||previous.manifest||localFailureCsv(next.granule,errorText));
-              representedGranules++;
-            }catch(_){}
+            if(!$("strictScopeMode").checked){
+              try{
+                queueCsv(next.manifest||previous.manifest||localFailureCsv(next.granule,errorText));
+                representedGranules++;
+              }catch(_){}
+            }
           }
 
           finalized++;
@@ -1062,6 +1090,7 @@ $("downloadCsv").onclick=async function(){
       " · Harmony "+harmonyAccelerated+" · direct "+directProcessed+
       (totalRows?" · "+totalRows+" CSV rows":"")+
       ($("lowBandwidthMode").checked?" · low-bandwidth training mode":" · raw-row mode")+
+      ($("strictScopeMode").checked?" · strict component/date scope · "+strictScopeDroppedRows+" irrelevant rows removed":"")+
       ($("includeGroundData").checked?" · ground "+groundStatus+" ("+groundRows+" rows)":"")+
       (unresolved
         ?" · "+unresolved+" granule(s) unresolved after cause-aware recovery"+
@@ -1112,4 +1141,6 @@ async function downloadExternal(item,button){
   finally{button.disabled=false;button.textContent="Fetch external CSV";}
 }
 setDefaultDates();
-configureLowBandwidthMode();health();
+configureLowBandwidthMode();
+syncStrictScopeMode();
+$("strictScopeMode").addEventListener("change",syncStrictScopeMode);health();

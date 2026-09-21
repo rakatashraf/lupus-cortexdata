@@ -20,7 +20,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .cmr import CMRClient
-from .convert import combine_frames, compact_training_frame, convert_bytes
+from .convert import combine_frames, compact_training_frame, component_filter_terms, convert_bytes, strict_scope_filter
 from .external import fetch as fetch_external
 from .external import fetch_ground as fetch_ground_external
 from .external import resolve as resolve_external
@@ -31,7 +31,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.7.0",
+    version="2.8.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -85,6 +85,7 @@ class GranuleRequest(BaseModel):
     platform: Optional[str] = None
     instrument: Optional[str] = None
     fallback_latest: bool = True
+    strict_scope_mode: bool = True
 
 
 class DownloadRequest(GranuleRequest):
@@ -165,7 +166,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.7",
+        "User-Agent": "EarthdataCSVDownloader/2.8",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -197,6 +198,21 @@ def _filename(url: str, response: requests.Response, idx: int) -> str:
 
 
 HARMONY = "https://harmony.earthdata.nasa.gov"
+
+
+def _finalize_science_scope(
+    combined: pd.DataFrame,
+    req: DownloadRequest,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    if combined.empty or not req.strict_scope_mode:
+        return combined, {}
+    return strict_scope_filter(
+        combined,
+        _component_terms(req.component, []),
+        req.date_range.start.isoformat(),
+        req.date_range.end.isoformat(),
+        keep_audit_rows=False,
+    )
 
 
 def _harmony_capabilities(token: str, collection_id: str) -> dict:
@@ -520,6 +536,9 @@ def _granule_meta(
         "component_names": ";".join(component_names),
         "component_count": len(component_names),
         "component_query": req.component,
+        "requested_start_date": req.date_range.start.isoformat(),
+        "requested_end_date": req.date_range.end.isoformat(),
+        "strict_scope_mode": bool(req.strict_scope_mode),
         "collection_search_name": req.collection_search_name or "",
         "collection_id": req.collection_id,
         "collection_short_name": req.collection_short_name or "",
@@ -692,6 +711,9 @@ def _download_convert(
     errors: list[dict[str, str]] = []
     failure_classes: dict[str, int] = {}
     session = _session(req.token)
+    requested_components = _component_terms(req.component, [])
+    automatic_filters = component_filter_terms(requested_components)
+    effective_filters = req.variable_filters or automatic_filters
     successful_granules = 0
 
     for idx, granule in enumerate(granules, 1):
@@ -733,7 +755,7 @@ def _download_convert(
                     data,
                     filename=filename,
                     meta=meta,
-                    filters=req.variable_filters,
+                    filters=effective_filters,
                     bbox=req.bbox.dict4(),
                     max_rows=max(0, int(req.max_rows_per_variable)),
                 )
@@ -741,7 +763,7 @@ def _download_convert(
                 # Human component labels and NASA internal variable names often
                 # differ. On recovery, retry the same scientifically valid file
                 # without the variable-name filter before declaring failure.
-                if not converted and req.recovery_mode and req.variable_filters:
+                if not converted and req.recovery_mode and effective_filters:
                     relaxed_meta = dict(meta)
                     relaxed_meta["recovery_strategy"] = "relaxed_variable_filter"
                     converted = convert_bytes(
@@ -818,7 +840,41 @@ def _download_convert(
             else:
                 combined["data_cycle_detail"] = detail
 
-    if req.low_bandwidth_training_mode and not combined.empty:
+    scope_report: dict[str, Any] = {}
+    if req.strict_scope_mode and successful_granules > 0 and not combined.empty:
+        combined, scope_report = strict_scope_filter(
+            combined,
+            requested_components,
+            req.date_range.start.isoformat(),
+            req.date_range.end.isoformat(),
+            keep_audit_rows=False,
+        )
+        if combined.empty:
+            error_text = (
+                "The granule decoded successfully, but no science rows matched both "
+                "the selected component(s) and requested date range."
+            )
+            failure_class = "strict_scope_no_matching_rows"
+            failure_classes[failure_class] = failure_classes.get(failure_class, 0) + 1
+            errors.append({
+                "granule": ";".join(
+                    str(item.get("granule_ur") or item.get("concept_id") or "")
+                    for item in granules[:3]
+                ),
+                "error": error_text,
+                "failure_class": failure_class,
+            })
+            successful_granules = 0
+            combined = combine_frames([
+                _conversion_failure_frame(
+                    req,
+                    granules[0] if granules else {},
+                    error_text,
+                    recovery_strategy="strict_component_and_date_gate",
+                )
+            ])
+
+    if req.low_bandwidth_training_mode and not combined.empty and successful_granules > 0:
         combined = compact_training_frame(combined, req.training_grid_degrees)
 
     if combined.empty:
@@ -831,6 +887,7 @@ def _download_convert(
         "successful_granules": successful_granules,
         "errors": errors,
         "failure_classes": failure_classes,
+        "scope_report": scope_report,
         "csv_bytes": len(csv_bytes),
     }
 
@@ -879,7 +936,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.7.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.8.0"}
 
 
 @app.post("/api/token/validate")
@@ -1018,7 +1075,7 @@ async def granules_search(req: GranuleRequest):
             end_date=req.date_range.end.isoformat(),
             platform=req.platform,
             instrument=req.instrument,
-            fallback_latest=req.fallback_latest,
+            fallback_latest=(req.fallback_latest and not req.strict_scope_mode),
         )
         harmony_task = asyncio.to_thread(
             _harmony_capabilities,
@@ -1042,7 +1099,7 @@ async def download_nasa(req: DownloadRequest):
             end_date=req.date_range.end.isoformat(),
             platform=req.platform,
             instrument=req.instrument,
-            fallback_latest=req.fallback_latest,
+            fallback_latest=(req.fallback_latest and not req.strict_scope_mode),
         )
         granules = result.get("items") or []
         if not granules:
@@ -1144,11 +1201,12 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                         subset_data,
                         filename=subset_name or "harmony_subset",
                         meta=meta,
-                        filters=req.variable_filters,
+                        filters=effective_filters,
                         bbox=req.bbox.dict4(),
                         max_rows=max(0, int(req.max_rows_per_variable)),
                     )
                     combined = combine_frames(frames)
+                    combined, harmony_scope_report = _finalize_science_scope(combined, req)
                     if req.low_bandwidth_training_mode and not combined.empty:
                         combined = compact_training_frame(combined, req.training_grid_degrees)
                     if not combined.empty:
@@ -1159,6 +1217,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                             "successful_granules": 1,
                             "errors": [],
                             "failure_classes": {},
+                            "scope_report": harmony_scope_report,
                             "csv_bytes": len(content),
                         }
                         access_path = "harmony"
@@ -1189,11 +1248,12 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                         subset_data,
                         filename=subset_name,
                         meta=meta,
-                        filters=req.variable_filters,
+                        filters=effective_filters,
                         bbox=req.bbox.dict4(),
                         max_rows=max(0, int(req.max_rows_per_variable)),
                     )
                     combined = combine_frames(frames)
+                    combined, harmony_scope_report = _finalize_science_scope(combined, req)
                     if req.low_bandwidth_training_mode and not combined.empty:
                         combined = compact_training_frame(combined, req.training_grid_degrees)
                     if not combined.empty:
@@ -1204,6 +1264,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                             "successful_granules": 1,
                             "errors": [],
                             "failure_classes": {},
+                            "scope_report": harmony_scope_report,
                             "csv_bytes": len(content),
                         }
                         access_path = "harmony-recovery"
@@ -1245,11 +1306,12 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                             subset_data,
                             filename=subset_name,
                             meta=meta,
-                            filters=req.variable_filters,
+                            filters=effective_filters,
                             bbox=req.bbox.dict4(),
                             max_rows=max(0, int(req.max_rows_per_variable)),
                         )
                         combined = combine_frames(frames)
+                        combined, harmony_scope_report = _finalize_science_scope(combined, req)
                         if req.low_bandwidth_training_mode and not combined.empty:
                             combined = compact_training_frame(combined, req.training_grid_degrees)
                         if not combined.empty:
@@ -1285,6 +1347,11 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "X-Earthdata-Processing-Ms": str(elapsed_ms),
                 "X-Earthdata-Access-Path": access_path,
                 "X-Earthdata-Recovery-Metadata": recovery_metadata_strategy,
+                "X-Earthdata-Strict-Scope": str(bool(req.strict_scope_mode)).lower(),
+                "X-Earthdata-Scope-Dropped-Rows": str(
+                    int(report.get("scope_report", {}).get("dropped_component_rows", 0))
+                    + int(report.get("scope_report", {}).get("dropped_date_rows", 0))
+                ),
                 "X-Earthdata-Failure-Class": (
                     next(iter(report.get("failure_classes", {}).keys()), "")
                     if report.get("errors") else ""

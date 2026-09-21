@@ -68,7 +68,12 @@
           <label>Start date<input id="startDate" type="date"></label>
           <label>End date<input id="endDate" type="date"></label>
         </div>
-        <label class="check"><input id="fallbackLatest" type="checkbox" checked> If the selected dates contain no granules, use the most recent available granules for the same collection and area.</label>
+        <label class="check">
+          <input id="strictScopeMode" type="checkbox" checked>
+          <span><strong>Strict clean component/date scope</strong><small>Export only rows whose actual science variable matches the selected component and whose observation time is inside the selected UTC date range.</small></span>
+        </label>
+        <div id="strictScopeHint" class="message success"></div>
+        <label class="check"><input id="fallbackLatest" type="checkbox"> If strict mode is off and the selected dates contain no granules, use the most recent available granules for the same collection and area.</label>
         <button id="searchCollections" class="primary">Search Earthdata</button>
         <div id="searchMessage" class="message"></div>
       </div>
@@ -105,7 +110,7 @@
         <h2>Granules and CSV output</h2>
         <div id="selectedCollection" class="selected-box">No collections selected yet.</div>
         <div class="grid two">
-          <label>Variable-name filters<input id="variableFilters" placeholder="optional, comma separated"></label>
+          <label>Variable-name filters<input id="variableFilters" placeholder="optional; strict mode automatically derives component-aware variable filters"></label>
           <label>Row limit per variable<input id="maxRows" type="number" min="0" value="0"></label>
         </div>
         <div class="grid two">
@@ -148,7 +153,7 @@
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">On supported desktop browsers the output file is created immediately after you choose its save location, then rows are appended as NASA and ground-source conversions complete. Low-Bandwidth Training Mode is recommended for Lupus Cortex training because it reduces transfer size while preserving temporal/spatial statistics.</p>
+        <p class="footnote">Strict clean scope is recommended for Lupus Cortex training. The converter may inspect extra source variables internally during recovery, but only selected-component rows inside the requested UTC date range are permitted into the final CSV. On supported desktop browsers, accepted rows are appended as soon as they finish.</p>
       </div>
     </section>
 

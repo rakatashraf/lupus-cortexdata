@@ -53,7 +53,7 @@ jobs:
           from rasterio.io import MemoryFile
           from rasterio.transform import from_origin
 
-          from app.convert import combine_frames, compact_training_frame, convert_bytes, _hdf4_airs_file
+          from app.convert import combine_frames, compact_training_frame, component_filter_terms, convert_bytes, strict_scope_filter, _hdf4_airs_file
           from app.main import _classify_granule_failure, _harmony_output_format, _merge_refreshed_granule
           from app.external import resolve_ground
 
@@ -432,6 +432,118 @@ jobs:
           assert "value_mean" in compact.columns
           assert "value_std" in compact.columns
           assert pd.to_numeric(compact["source_row_count"], errors="coerce").fillna(0).sum() >= 20
+
+          mixed_scope = combine_frames([pd.DataFrame([
+              {
+                  "component_names":"NO2;O3",
+                  "component_primary":"NO2",
+                  "collection_id":"C-MIX",
+                  "collection_short_name":"MIX",
+                  "granule_id":"G-MIX",
+                  "granule_begin":"2025-01-01T00:00:00Z",
+                  "granule_end":"2025-01-01T23:59:59Z",
+                  "observation_time":"2025-01-01T06:00:00Z",
+                  "variable":"ColumnAmountNO2Trop",
+                  "value":1.0,
+                  "unit":"molec/cm2",
+                  "latitude":23.75,
+                  "longitude":90.4,
+                  "conversion_status":"converted",
+              },
+              {
+                  "component_names":"NO2;O3",
+                  "component_primary":"NO2",
+                  "collection_id":"C-MIX",
+                  "collection_short_name":"MIX",
+                  "granule_id":"G-MIX",
+                  "granule_begin":"2025-01-01T00:00:00Z",
+                  "granule_end":"2025-01-01T23:59:59Z",
+                  "observation_time":"2025-01-01T07:00:00Z",
+                  "variable":"O3",
+                  "value":2.0,
+                  "unit":"DU",
+                  "latitude":23.75,
+                  "longitude":90.4,
+                  "conversion_status":"converted",
+              },
+              {
+                  "component_names":"NO2;O3",
+                  "component_primary":"NO2",
+                  "collection_id":"C-MIX",
+                  "collection_short_name":"MIX",
+                  "granule_id":"G-MIX",
+                  "granule_begin":"2025-01-01T00:00:00Z",
+                  "granule_end":"2025-01-01T23:59:59Z",
+                  "observation_time":"2025-01-01T08:00:00Z",
+                  "variable":"SO2",
+                  "value":3.0,
+                  "unit":"DU",
+                  "latitude":23.75,
+                  "longitude":90.4,
+                  "conversion_status":"converted",
+              },
+              {
+                  "component_names":"NO2;O3",
+                  "component_primary":"NO2",
+                  "collection_id":"C-MIX",
+                  "collection_short_name":"MIX",
+                  "granule_id":"G-MIX",
+                  "granule_begin":"2025-02-01T00:00:00Z",
+                  "granule_end":"2025-02-01T23:59:59Z",
+                  "observation_time":"2025-02-01T06:00:00Z",
+                  "variable":"ColumnAmountNO2Trop",
+                  "value":4.0,
+                  "unit":"molec/cm2",
+                  "latitude":23.75,
+                  "longitude":90.4,
+                  "conversion_status":"converted",
+              },
+          ])])
+          no2_only, no2_report = strict_scope_filter(
+              mixed_scope,
+              ["NO2"],
+              "2025-01-01",
+              "2025-01-01",
+          )
+          assert len(no2_only) == 1
+          assert no2_only.iloc[0]["component_segment"] == "NO2"
+          assert no2_only.iloc[0]["variable"] == "ColumnAmountNO2Trop"
+          assert bool(no2_only.iloc[0]["strict_scope_match"]) is True
+          assert no2_report["dropped_component_rows"] >= 2
+          assert no2_report["dropped_date_rows"] >= 1
+
+          two_components, _ = strict_scope_filter(
+              mixed_scope,
+              ["NO2", "O3"],
+              "2025-01-01",
+              "2025-01-01",
+          )
+          assert set(two_components["component_segment"]) == {"NO2", "O3"}
+          assert set(two_components["variable"]) == {"ColumnAmountNO2Trop", "O3"}
+          assert component_filter_terms(["NO2"])
+          assert any("no2" in item for item in component_filter_terms(["NO2"]))
+
+          generic_scope = combine_frames([pd.DataFrame([{
+              "component_names":"NDVI",
+              "component_primary":"NDVI",
+              "collection_id":"C-GENERIC",
+              "granule_id":"G-GENERIC",
+              "granule_begin":"2025-01-01T00:00:00Z",
+              "granule_end":"2025-01-01T23:00:00Z",
+              "variable":"band_1",
+              "value":0.4,
+              "latitude":23.75,
+              "longitude":90.4,
+              "conversion_status":"converted",
+          }])])
+          generic_filtered, _ = strict_scope_filter(
+              generic_scope,
+              ["NDVI"],
+              "2025-01-01",
+              "2025-01-01",
+          )
+          assert len(generic_filtered) == 1
+          assert generic_filtered.iloc[0]["component_segment"] == "NDVI"
 
           assert _classify_granule_failure("NASA returned 404 for this granule URL") == "stale_or_missing_url"
           assert _classify_granule_failure("NASA temporarily rate-limited the download request") == "rate_limited"
