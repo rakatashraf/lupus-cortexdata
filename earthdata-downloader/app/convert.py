@@ -2666,7 +2666,16 @@ def compact_training_frame(
         grouped = numeric.groupby(group_cols, dropna=False, sort=False)
         base = grouped.first().reset_index()
         base.drop(
-            columns=["_fast_weight", "_fast_weighted_value"],
+            columns=[
+                "_fast_weight",
+                "_fast_weighted_value",
+                "aggregation_sample_count",
+                "source_row_count",
+                "value_mean",
+                "value_std",
+                "value_min",
+                "value_max",
+            ],
             inplace=True,
             errors="ignore",
         )
