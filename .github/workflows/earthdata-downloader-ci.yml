@@ -333,6 +333,15 @@ jobs:
               "weight",
               "weight_unit",
               "weight_variable",
+              "timestamp_epoch_seconds",
+              "spatial_cell_id",
+              "series_id",
+              "sequence_id",
+              "sequence_order",
+              "value_numeric",
+              "sample_weight",
+              "training_row_usable",
+              "model_feature_schema_version",
           }
           assert required.issubset(set(mixed.columns))
 
@@ -370,6 +379,30 @@ jobs:
           science = weighted_out[weighted_out["variable"] == "ColumnAmountNO2Trop"].iloc[0]
           assert np.isclose(float(science["weight"]), 0.75)
           assert science["weight_variable"] == "Weight"
+
+          training = combine_frames([
+              pd.DataFrame([{
+                  "component_names":"NO2",
+                  "component_primary":"NO2",
+                  "collection_id":"C-TRAIN",
+                  "collection_short_name":"OMNO2d",
+                  "collection_version":"004",
+                  "granule_id":"G-TRAIN",
+                  "granule_begin":"2025-01-01T06:00:00Z",
+                  "variable":"ColumnAmountNO2Trop",
+                  "value":2.5,
+                  "unit":"molec/cm2",
+                  "latitude":23.75,
+                  "longitude":90.375,
+                  "conversion_status":"converted",
+              }])
+          ])
+          row = training.iloc[0]
+          assert row["model_feature_schema_version"] == "lupus-cortex-training-v1"
+          assert bool(row["training_row_usable"]) is True
+          assert np.isclose(float(row["sample_weight"]), 1.0)
+          assert str(row["series_id"])
+          assert np.isfinite(float(row["sequence_order"]))
 
           print("IN_MEMORY_CONVERSION_TESTS_OK")
           PY
