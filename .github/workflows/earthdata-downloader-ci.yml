@@ -54,7 +54,7 @@ jobs:
           from rasterio.transform import from_origin
 
           from app.convert import combine_frames, compact_training_frame, convert_bytes, _hdf4_airs_file
-          from app.main import _harmony_output_format
+          from app.main import _classify_granule_failure, _harmony_output_format, _merge_refreshed_granule
           from app.external import resolve_ground
 
           bbox = {"south": 23.0, "west": 90.0, "north": 24.0, "east": 91.0}
@@ -432,6 +432,16 @@ jobs:
           assert "value_mean" in compact.columns
           assert "value_std" in compact.columns
           assert pd.to_numeric(compact["source_row_count"], errors="coerce").fillna(0).sum() >= 20
+
+          assert _classify_granule_failure("NASA returned 404 for this granule URL") == "stale_or_missing_url"
+          assert _classify_granule_failure("NASA temporarily rate-limited the download request") == "rate_limited"
+          assert _classify_granule_failure("FUNCTION_INVOCATION_TIMEOUT") == "timeout"
+          merged_granule = _merge_refreshed_granule(
+              {"download_urls":["https://old.example/data"],"primary_url":"https://old.example/data"},
+              {"download_urls":["https://new.example/file.nc"],"primary_url":"https://new.example/file.nc"},
+          )
+          assert merged_granule["download_urls"][0].endswith(".nc")
+          assert len(merged_granule["download_urls"]) == 2
 
           assert resolve_ground("PM2.5")["provider_id"] == "openaq"
           assert resolve_ground("precipitation")["provider_id"] == "noaa_ncei_daily"

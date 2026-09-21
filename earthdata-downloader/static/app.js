@@ -188,7 +188,7 @@ const FIXED_EXPORT_COLUMNS=[
   "collection_segment_key","collection_id","collection_short_name","collection_title",
   "collection_version","collection_provider","collection_processing_level",
   "granule_id","granule_ur","granule_production_date_utc","granule_size_mb",
-  "conversion_status","conversion_error","raw_download_url",
+  "conversion_status","conversion_error","failure_class","recovery_strategy","raw_download_url",
   "source","source_type","source_agency","ground_provider","ground_data_available","ground_status","station_id","station_name","provider_location_id","provider_sensor_id","measurement_quality","coverage_percent","source_provider","source_satellite","source_instrument",
   "satellite_platform","instrument","data_timestamp_utc","data_date_utc","data_time_utc",
   "timestamp_status","timestamp_source","timestamp_timezone","granule_start_utc",
@@ -243,6 +243,8 @@ function localFailureCsv(granule,errorText){
     granule_size_mb:granule.size_mb==null?"":granule.size_mb,
     conversion_status:"request_failed",
     conversion_error:errorText,
+    failure_class:"request_or_infrastructure",
+    recovery_strategy:"browser_recovery_exhausted",
     raw_download_url:firstUrl,
     timestamp_epoch_seconds:begin?Math.floor(Date.parse(begin)/1000):"",
     year:begin?new Date(begin).getUTCFullYear():"",
@@ -757,6 +759,7 @@ $("downloadCsv").onclick=async function(){
     let backendSamples=0;
     let harmonyAccelerated=0;
     let directProcessed=0;
+    const failureBuckets={};
     let attemptsCompleted=0;
     let attemptsStarted=0;
     let activeAttempts=0;
@@ -884,6 +887,8 @@ $("downloadCsv").onclick=async function(){
         }
 
         if(conversionErrors>0){
+          const failureClass=String(response.headers.get("X-Earthdata-Failure-Class")||"unknown");
+          failureBuckets[failureClass]=(failureBuckets[failureClass]||0)+1;
           return {
             ok:false,
             granule:granule,
@@ -891,7 +896,8 @@ $("downloadCsv").onclick=async function(){
             error:"NASA granule reached the converter but no scientific rows were decoded.",
             manifest:text,
             rows:rows,
-            accessPath:accessPath
+            accessPath:accessPath,
+            failureClass:failureClass
           };
         }
 
@@ -906,11 +912,20 @@ $("downloadCsv").onclick=async function(){
       }catch(error){
         attemptsCompleted++;
         activeAttempts=Math.max(0,activeAttempts-1);
+        const errorText=error&&error.message?error.message:String(error);
+        let failureClass="request_or_infrastructure";
+        if(/429|rate.?limit/i.test(errorText)) failureClass="rate_limited";
+        else if(/404|stale|not found/i.test(errorText)) failureClass="stale_or_missing_url";
+        else if(/401|403|denied|authoriz/i.test(errorText)) failureClass="authorization";
+        else if(/timeout|timed out/i.test(errorText)) failureClass="timeout";
+        else if(/server error|500|502|503|504|FUNCTION_INVOCATION/i.test(errorText)) failureClass="provider_or_serverless";
+        failureBuckets[failureClass]=(failureBuckets[failureClass]||0)+1;
         return {
           ok:false,
           granule:granule,
           label:label,
-          error:error&&error.message?error.message:String(error),
+          error:errorText,
+          failureClass:failureClass,
           manifest:null
         };
       }
@@ -1049,7 +1064,11 @@ $("downloadCsv").onclick=async function(){
       ($("lowBandwidthMode").checked?" · low-bandwidth training mode":" · raw-row mode")+
       ($("includeGroundData").checked?" · ground "+groundStatus+" ("+groundRows+" rows)":"")+
       (unresolved
-        ?" · "+unresolved+" granule(s) remained non-convertible after the recovery pass and are marked as audit rows."
+        ?" · "+unresolved+" granule(s) unresolved after cause-aware recovery"+
+          (Object.keys(failureBuckets).length
+            ?" · failure classes "+Object.entries(failureBuckets).sort(function(a,b){return b[1]-a[1];}).slice(0,4).map(function(entry){return entry[0]+":"+entry[1];}).join(", ")
+            :"")+
+          ". Audit rows are excluded from training."
         :" · all selected granules converted successfully.");
     toast(
       unresolved?"CSV created; unresolved granules are explicitly marked for exclusion from training.":"All selected granules converted successfully.",

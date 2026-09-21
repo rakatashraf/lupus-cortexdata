@@ -351,6 +351,39 @@ class CMRClient:
             return None
         return self._format_granule(items[0])
 
+    async def granule_by_ur(
+        self,
+        granule_ur: str,
+        collection_id: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        name = granule_ur.strip()
+        if not name:
+            return None
+        params: list[tuple[str, str]] = [
+            ("readable_granule_name[]", name),
+            ("downloadable", "true"),
+            ("page_size", "5"),
+        ]
+        if collection_id:
+            params.append(("collection_concept_id", collection_id.strip()))
+
+        data = await self._get("granules.umm_json", params)
+        items = data.get("items") or []
+        if not items:
+            return None
+
+        exact: Optional[dict[str, Any]] = None
+        first: Optional[dict[str, Any]] = None
+        for entry in items:
+            formatted = self._format_granule(entry)
+            if first is None:
+                first = formatted
+            if str(formatted.get("granule_ur") or "") == name:
+                exact = formatted
+                break
+        return exact or first
+
+
     @staticmethod
     def _granule_cycle_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         timestamps: list[datetime] = []

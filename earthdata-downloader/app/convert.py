@@ -2453,6 +2453,8 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "granule_size_mb",
         "conversion_status",
         "conversion_error",
+        "failure_class",
+        "recovery_strategy",
         "raw_download_url",
         "source",
         "source_type",

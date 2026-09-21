@@ -31,7 +31,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.6.0",
+    version="2.7.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -165,7 +165,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.6",
+        "User-Agent": "EarthdataCSVDownloader/2.7",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -548,11 +548,124 @@ def _granule_meta(
     }
 
 
+def _classify_granule_failure(error_text: str) -> str:
+    text = str(error_text or "").lower()
+    if not text:
+        return "unknown"
+    if "401" in text or "403" in text or "denied access" in text or "authorized" in text:
+        return "authorization"
+    if "404" in text or "stale" in text or "not found" in text:
+        return "stale_or_missing_url"
+    if "429" in text or "rate-limit" in text or "rate limit" in text:
+        return "rate_limited"
+    if any(token in text for token in ("http 500", "http 502", "http 503", "http 504", "provider returned http 5", "server error")):
+        return "provider_server_error"
+    if any(token in text for token in ("timeout", "timed out", "function_invocation_timeout")):
+        return "timeout"
+    if any(token in text for token in ("larger than", "memory limit", "exceeded the configured", "response limit", "too large")):
+        return "oversized"
+    if "html page instead of science data" in text:
+        return "non_data_url"
+    if any(token in text for token in ("no matching data rows", "no rows", "bounding-box filtering", "bbox", "no bbox")):
+        return "no_rows_after_filter"
+    if any(token in text for token in ("netcdf", "hdf", "he5", "geotiff", "reader failed", "unsupported", "decode", "conversion failed")):
+        return "format_or_decode"
+    return "unknown"
+
+
+def _url_recovery_rank(url: str) -> tuple[int, int, str]:
+    lower = str(url or "").lower()
+    clean = lower.split("?")[0]
+    direct_exts = (
+        ".nc", ".nc4", ".cdf", ".h5", ".hdf5", ".he5", ".hdf",
+        ".tif", ".tiff", ".csv", ".tsv", ".txt", ".json", ".geojson",
+        ".zip", ".gz",
+    )
+    if clean.endswith(direct_exts):
+        score = 0
+    elif "download" in lower or "data" in lower:
+        score = 1
+    elif any(token in lower for token in ("opendap", "dods", "thredds")):
+        score = 4
+    else:
+        score = 2
+    return (score, len(url), url)
+
+
+def _merge_refreshed_granule(original: dict, fresh: dict | None) -> dict:
+    if not fresh:
+        return dict(original)
+
+    merged = dict(original)
+    for key in (
+        "concept_id", "granule_ur", "begin", "end", "production_date",
+        "size_mb", "platforms", "instruments",
+    ):
+        value = fresh.get(key)
+        if value not in (None, "", []):
+            merged[key] = value
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for value in (fresh.get("download_urls") or []) + (original.get("download_urls") or []):
+        url = str(value or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+
+    for value in (fresh.get("primary_url"), original.get("primary_url")):
+        url = str(value or "").strip()
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+
+    urls.sort(key=_url_recovery_rank)
+    merged["download_urls"] = urls
+    merged["primary_url"] = urls[0] if urls else None
+    return merged
+
+
+async def _refresh_granule_for_recovery(
+    req: SingleGranuleDownloadRequest,
+    granule: dict,
+) -> tuple[dict, str]:
+    client = CMRClient(req.token)
+    fresh = None
+    strategy = "reuse_original_metadata"
+
+    try:
+        fresh = await client.granule_by_id(
+            str(granule.get("concept_id") or req.granule_id),
+            collection_id=req.collection_id,
+        )
+        if fresh:
+            strategy = "fresh_cmr_concept_id"
+    except Exception:
+        fresh = None
+
+    if not fresh:
+        granule_ur = str(granule.get("granule_ur") or req.granule_ur or "")
+        if granule_ur:
+            try:
+                fresh = await client.granule_by_ur(
+                    granule_ur,
+                    collection_id=req.collection_id,
+                )
+                if fresh:
+                    strategy = "fresh_cmr_granule_ur"
+            except Exception:
+                fresh = None
+
+    return _merge_refreshed_granule(granule, fresh), strategy
+
+
 def _conversion_failure_frame(
     req: DownloadRequest,
     granule: dict,
     error_text: str,
     raw_url: str = "",
+    recovery_strategy: str = "",
 ) -> pd.DataFrame:
     meta = _granule_meta(req, granule, filename="", url=raw_url)
     row = dict(meta)
@@ -560,6 +673,8 @@ def _conversion_failure_frame(
         {
             "conversion_status": "conversion_failed",
             "conversion_error": error_text,
+            "failure_class": _classify_granule_failure(error_text),
+            "recovery_strategy": recovery_strategy,
             "variable": "__conversion_status__",
             "value": "",
             "unit": "",
@@ -575,6 +690,7 @@ def _download_convert(
 ) -> tuple[bytes, dict]:
     frames: list[pd.DataFrame] = []
     errors: list[dict[str, str]] = []
+    failure_classes: dict[str, int] = {}
     session = _session(req.token)
     successful_granules = 0
 
@@ -591,7 +707,16 @@ def _download_convert(
                     "error": error_text,
                 }
             )
-            frames.append(_conversion_failure_frame(req, granule, error_text))
+            failure_class = _classify_granule_failure(error_text)
+            failure_classes[failure_class] = failure_classes.get(failure_class, 0) + 1
+            frames.append(
+                _conversion_failure_frame(
+                    req,
+                    granule,
+                    error_text,
+                    recovery_strategy="fresh_cmr_lookup" if req.recovery_mode else "",
+                )
+            )
             continue
 
         success = False
@@ -613,6 +738,21 @@ def _download_convert(
                     max_rows=max(0, int(req.max_rows_per_variable)),
                 )
 
+                # Human component labels and NASA internal variable names often
+                # differ. On recovery, retry the same scientifically valid file
+                # without the variable-name filter before declaring failure.
+                if not converted and req.recovery_mode and req.variable_filters:
+                    relaxed_meta = dict(meta)
+                    relaxed_meta["recovery_strategy"] = "relaxed_variable_filter"
+                    converted = convert_bytes(
+                        data,
+                        filename=filename,
+                        meta=relaxed_meta,
+                        filters=[],
+                        bbox=req.bbox.dict4(),
+                        max_rows=max(0, int(req.max_rows_per_variable)),
+                    )
+
                 if not converted:
                     raise ValueError(
                         "The file was readable, but no matching data rows remained after "
@@ -628,10 +768,13 @@ def _download_convert(
 
         if not success:
             error_text = " | ".join(url_errors[:3]) or "Download/conversion failed."
+            failure_class = _classify_granule_failure(error_text)
+            failure_classes[failure_class] = failure_classes.get(failure_class, 0) + 1
             errors.append(
                 {
                     "granule": str(granule.get("granule_ur") or granule.get("concept_id") or idx),
                     "error": error_text,
+                    "failure_class": failure_class,
                 }
             )
             frames.append(
@@ -640,6 +783,7 @@ def _download_convert(
                     granule,
                     error_text,
                     raw_url=urls[0] if urls else "",
+                    recovery_strategy="alternate_urls_exhausted",
                 )
             )
 
@@ -686,6 +830,7 @@ def _download_convert(
         "converted_frames": len(frames),
         "successful_granules": successful_granules,
         "errors": errors,
+        "failure_classes": failure_classes,
         "csv_bytes": len(csv_bytes),
     }
 
@@ -734,7 +879,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.6.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.7.0"}
 
 
 @app.post("/api/token/validate")
@@ -957,6 +1102,13 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 )
             granule = looked_up
 
+        recovery_metadata_strategy = ""
+        if req.recovery_mode:
+            granule, recovery_metadata_strategy = await _refresh_granule_for_recovery(
+                req,
+                granule,
+            )
+
         cycle_override = {
             "label": req.cycle_label,
             "interval_seconds": req.cycle_interval_seconds,
@@ -1006,6 +1158,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                             "converted_frames": len(frames),
                             "successful_granules": 1,
                             "errors": [],
+                            "failure_classes": {},
                             "csv_bytes": len(content),
                         }
                         access_path = "harmony"
@@ -1050,6 +1203,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                             "converted_frames": len(frames),
                             "successful_granules": 1,
                             "errors": [],
+                            "failure_classes": {},
                             "csv_bytes": len(content),
                         }
                         access_path = "harmony-recovery"
@@ -1130,6 +1284,11 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "X-Earthdata-Conversion-Status": "converted" if not report["errors"] else ("partial" if report.get("successful_granules", 0) else "failed"),
                 "X-Earthdata-Processing-Ms": str(elapsed_ms),
                 "X-Earthdata-Access-Path": access_path,
+                "X-Earthdata-Recovery-Metadata": recovery_metadata_strategy,
+                "X-Earthdata-Failure-Class": (
+                    next(iter(report.get("failure_classes", {}).keys()), "")
+                    if report.get("errors") else ""
+                ),
             },
         )
     except HTTPException:
