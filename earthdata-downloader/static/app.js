@@ -192,10 +192,12 @@ const FIXED_EXPORT_COLUMNS=[
   "coordinate_status","coordinate_crs","variable","value","value_numeric","unit",
   "weight","weight_numeric","sample_weight","sample_weight_source","weight_unit",
   "weight_variable","spectral_channel_index","spectral_frequency","spectral_frequency_unit","dimension_index","hdf_swath","airs_scanline","series_id","sequence_id","sequence_order","training_row_usable",
-  "training_exclude_reason","model_feature_schema_version","hdf_grid",
+  "training_exclude_reason","model_feature_schema_version","export_mode",
+  "aggregation_grid_degrees","aggregation_sample_count","source_row_count",
+  "value_mean","value_std","value_min","value_max","hdf_grid",
   "spatial_resolution_degrees","observation_time","granule_begin","granule_end",
   "component_query","collection_search_name","original_file","download_url",
-  "export_mode","aggregation_grid_degrees","aggregation_sample_count","source_row_count","value_mean","value_std","value_min","value_max","extra_attributes_json"
+  "extra_attributes_json"
 ]
 
 function csvEscape(value){
