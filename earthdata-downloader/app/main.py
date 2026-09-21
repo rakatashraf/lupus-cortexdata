@@ -1159,6 +1159,10 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 )
             granule = looked_up
 
+        requested_components = _component_terms(req.component, [])
+        automatic_filters = component_filter_terms(requested_components)
+        effective_filters = req.variable_filters or automatic_filters
+
         recovery_metadata_strategy = ""
         if req.recovery_mode:
             granule, recovery_metadata_strategy = await _refresh_granule_for_recovery(

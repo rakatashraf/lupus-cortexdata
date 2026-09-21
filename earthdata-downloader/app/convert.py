@@ -400,7 +400,10 @@ def _component_match_score(variable: Any, component: str) -> tuple[int, str]:
     if not base:
         return 0, ""
 
-    if any(hint == base or hint in base for hint in _NON_SCIENCE_VARIABLE_HINTS):
+    if (
+        base in _NON_SCIENCE_VARIABLE_HINTS
+        or base.startswith(("quality", "qa", "flag", "uncertainty", "error", "weight"))
+    ):
         return 0, ""
 
     component_norm = _science_name(component)
