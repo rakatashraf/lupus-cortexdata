@@ -22,6 +22,7 @@ from urllib3.util.retry import Retry
 from .cmr import CMRClient
 from .convert import combine_frames, compact_training_frame, convert_bytes
 from .external import fetch as fetch_external
+from .external import fetch_ground as fetch_ground_external
 from .external import resolve as resolve_external
 
 
@@ -30,7 +31,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.5.0",
+    version="2.6.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -133,6 +134,15 @@ class ExternalRequest(BaseModel):
     output_name: Optional[str] = None
 
 
+class GroundRequest(BaseModel):
+    components: list[str]
+    bbox: BBox
+    date_range: DateRange
+    openaq_api_key: Optional[str] = None
+    low_bandwidth_training_mode: bool = True
+    training_grid_degrees: float = Field(default=0.05, ge=0.005, le=1.0)
+
+
 def _safe_csv(name: Optional[str], fallback: str) -> str:
     raw = re.sub(r"[^A-Za-z0-9._-]+", "_", name or fallback).strip("._")
     if not raw.lower().endswith(".csv"):
@@ -155,7 +165,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.5",
+        "User-Agent": "EarthdataCSVDownloader/2.6",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -724,7 +734,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.5.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.6.0"}
 
 
 @app.post("/api/token/validate")
@@ -1126,6 +1136,46 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
         raise
     except Exception as exc:
         raise HTTPException(500, f"Granule download/conversion failed: {exc}")
+
+
+@app.post("/api/download/ground")
+async def download_ground(req: GroundRequest):
+    components = _component_terms("", req.components)
+    if not components:
+        raise HTTPException(400, "At least one component is required for ground-data lookup.")
+
+    semaphore = asyncio.Semaphore(6)
+
+    async def one(component: str) -> pd.DataFrame:
+        async with semaphore:
+            return await asyncio.to_thread(
+                fetch_ground_external,
+                component,
+                req.bbox.dict4(),
+                req.date_range.start,
+                req.date_range.end,
+                req.openaq_api_key,
+            )
+
+    frames = await asyncio.gather(*(one(component) for component in components))
+    frames = [frame for frame in frames if frame is not None and not frame.empty]
+    if not frames:
+        raise HTTPException(404, "No ground/reference data or status rows were produced.")
+
+    combined = combine_frames(frames)
+    if req.low_bandwidth_training_mode and not combined.empty:
+        combined = compact_training_frame(combined, req.training_grid_degrees)
+
+    content = combined.to_csv(index=False).encode("utf-8")
+    return _csv_http_response(
+        content,
+        "ground_observations.csv",
+        {
+            "X-Earthdata-Rows": str(len(combined)),
+            "X-Earthdata-Timezone": "UTC",
+            "X-Earthdata-Source-Type": "ground",
+        },
+    )
 
 
 @app.post("/api/download/external/{provider_id}")
