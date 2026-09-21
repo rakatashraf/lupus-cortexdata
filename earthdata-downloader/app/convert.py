@@ -560,6 +560,12 @@ def strict_scope_filter(
     assigned_series = pd.Series(assigned_components, index=work.index, dtype="object")
     matched = work["strict_scope_match"]
 
+    for column in ("component_primary", "component_segment", "component_names"):
+        if column in work.columns:
+            work[column] = work[column].astype("object")
+    if "component_count" in work.columns:
+        work["component_count"] = work["component_count"].astype("object")
+
     work.loc[matched, "component_primary"] = assigned_series.loc[matched]
     work.loc[matched, "component_segment"] = assigned_series.loc[matched]
     work.loc[matched, "component_names"] = assigned_series.loc[matched]
