@@ -52,36 +52,114 @@ async function api(path,body,asBlob){
 }
 function sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
 
-async function apiResponseWithRetry(path,body,maxAttempts){
+async function apiResponseWithRetry(path,body,maxAttempts,options){
+  const opts=options||{};
   const attempts=Math.max(1,maxAttempts||3);
+  const timeoutMs=Math.max(5000,Number(opts.timeoutMs)||180000);
   let lastError=null;
+
   for(let attempt=1;attempt<=attempts;attempt++){
+    let timer=null;
+    const controller=new AbortController();
     try{
+      timer=setTimeout(function(){controller.abort();},timeoutMs);
       const response=await fetch(path,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(body)
+        body:JSON.stringify(body),
+        signal:controller.signal
       });
+      clearTimeout(timer);
+      timer=null;
+
       if(response.ok) return response;
 
       let detail="HTTP "+response.status;
       try{const data=await response.clone().json();detail=data.detail||detail;}
       catch(e){try{detail=await response.clone().text()||detail;}catch(_){}}
 
+      const text=String(detail||"");
       const retryable=response.status===408||response.status===409||response.status===425||
         response.status===429||response.status===500||response.status===502||
-        response.status===503||response.status===504;
+        response.status===503||response.status===504||
+        /FUNCTION_INVOCATION_FAILED|FUNCTION_INVOCATION_TIMEOUT|server error|temporar/i.test(text);
 
-      if(!retryable || attempt===attempts) throw new Error(detail);
-      lastError=new Error(detail);
+      if(!retryable || attempt===attempts) throw new Error(text);
+
+      let delayMs=Math.min(10000,1000*Math.pow(2,attempt-1));
+      const retryAfter=response.headers.get("Retry-After");
+      if(retryAfter){
+        const seconds=Number(retryAfter);
+        if(Number.isFinite(seconds)&&seconds>=0) delayMs=Math.max(delayMs,seconds*1000);
+      }
+      lastError=new Error(text);
+      await sleep(delayMs);
+      continue;
     }catch(e){
-      lastError=e;
-      if(attempt===attempts) throw e;
+      if(timer) clearTimeout(timer);
+      const isAbort=e&&e.name==="AbortError";
+      const normalized=isAbort
+        ?new Error("Conversion request timed out before the server returned a result.")
+        :e;
+      lastError=normalized;
+      if(attempt===attempts) throw normalized;
+      await sleep(Math.min(10000,1000*Math.pow(2,attempt-1)));
     }
-    await sleep(Math.min(5000,750*Math.pow(2,attempt-1)));
   }
   throw lastError||new Error("Request failed.");
 }
+
+async function runBounded(items,concurrency,handler){
+  const list=Array.from(items||[]);
+  if(!list.length) return [];
+  const limit=Math.max(1,Math.min(list.length,Number(concurrency)||1));
+  const results=new Array(list.length);
+  let next=0;
+
+  async function worker(){
+    while(true){
+      const index=next++;
+      if(index>=list.length) return;
+      try{
+        results[index]={status:"fulfilled",value:await handler(list[index],index)};
+      }catch(error){
+        results[index]={status:"rejected",reason:error};
+      }
+    }
+  }
+
+  await Promise.all(Array.from({length:limit},function(){return worker();}));
+  return results;
+}
+
+function isHeavyGranule(granule){
+  const name=String(granule.granule_ur||granule.primary_url||"").toLowerCase();
+  const shortName=String(granule._collection_short_name||"").toUpperCase();
+  const size=Number(granule.size_mb)||0;
+  return size>=20 ||
+    /\.(hdf|he5|h5)(?:$|[?#])/i.test(name) ||
+    shortName.indexOf("AIRIBRAD")===0 ||
+    shortName.indexOf("OMNO2")===0;
+}
+
+function chooseDownloadConcurrency(granules){
+  const total=granules.length;
+  if(total<=3) return total;
+  const heavy=granules.filter(isHeavyGranule).length;
+  const harmony=granules.filter(function(g){
+    return !!(g._harmony&&g._harmony.available&&g._harmony.bbox_subset);
+  }).length;
+  const heavyRatio=heavy/Math.max(1,total);
+  const harmonyRatio=harmony/Math.max(1,total);
+
+  if(heavyRatio>=0.6 && harmonyRatio<0.5) return Math.min(total,4);
+  if(heavyRatio>=0.3) return Math.min(total,6);
+  if(harmonyRatio>=0.7) return Math.min(total,12);
+  if(total>=500) return 10;
+  if(total>=100) return 8;
+  return Math.min(total,6);
+}
+
 
 async function apiResponse(path,body){
   const response=await fetch(path,{
@@ -451,21 +529,29 @@ $("findGranules").onclick=async function(){
     currentGranules=[];
     currentGranuleCycle=null;
 
-    const jobs=collections.map(async function(collection){
-      const body={
-        token:$("token").value.trim(),
-        collection_id:collection.concept_id,
-        bbox:bbox(),
-        date_range:dates(),
-        platform:csvList($("platformFilter").value)[0]||null,
-        instrument:csvList($("instrumentFilter").value)[0]||null,
-        fallback_latest:$("fallbackLatest").checked
-      };
-      const response=await apiResponseWithRetry("/api/granules/search",body,3);
-      return {collection:collection,data:await response.json()};
-    });
+    const settled=await runBounded(
+      collections,
+      Math.min(6,Math.max(2,collections.length)),
+      async function(collection){
+        const body={
+          token:$("token").value.trim(),
+          collection_id:collection.concept_id,
+          bbox:bbox(),
+          date_range:dates(),
+          platform:csvList($("platformFilter").value)[0]||null,
+          instrument:csvList($("instrumentFilter").value)[0]||null,
+          fallback_latest:$("fallbackLatest").checked
+        };
+        const response=await apiResponseWithRetry(
+          "/api/granules/search",
+          body,
+          4,
+          {timeoutMs:120000}
+        );
+        return {collection:collection,data:await response.json()};
+      }
+    );
 
-    const settled=await Promise.allSettled(jobs);
     const failures=[];
     let fallbackCollections=0;
     const seen=new Set();
@@ -594,8 +680,9 @@ $("downloadCsv").onclick=async function(){
     };
 
     const total=currentGranules.length;
+    const primaryConcurrency=chooseDownloadConcurrency(currentGranules);
     const started=performance.now();
-    let completed=0;
+    let finalized=0;
     let convertedGranules=0;
     let representedGranules=0;
     let totalRows=0;
@@ -603,9 +690,10 @@ $("downloadCsv").onclick=async function(){
     let backendSamples=0;
     let harmonyAccelerated=0;
     let directProcessed=0;
+    let attemptsCompleted=0;
     let header=null;
     let writeQueue=Promise.resolve();
-    const failures=[];
+    const finalFailures=[];
     const parts=[];
 
     function queueCsv(text){
@@ -620,7 +708,7 @@ $("downloadCsv").onclick=async function(){
           parts.push(header+"\n");
         }
       }else if(chunk.header!==header){
-        throw new Error("CSV schema differs from earlier granules in this collection.");
+        throw new Error("CSV schema differs from another converted granule.");
       }
 
       if(chunk.body){
@@ -633,107 +721,214 @@ $("downloadCsv").onclick=async function(){
       }
     }
 
-    function updateProgress(){
+    function buildGranuleBody(granule,recoveryMode){
+      return {
+        ...baseBody,
+        component:(granule._matched_components&&granule._matched_components.length)
+          ?granule._matched_components.join("; "):componentValues().join("; "),
+        collection_id:granule._collection_id||"",
+        collection_short_name:granule._collection_short_name||"",
+        collection_title:granule._collection_title||granule._collection_short_name||"",
+        collection_version:granule._collection_version||"",
+        collection_provider:granule._collection_provider||"",
+        collection_processing_level:granule._collection_processing_level||"",
+        granule_id:granule.concept_id,
+        granule_ur:granule.granule_ur||null,
+        begin:granule.begin||null,
+        end:granule.end||null,
+        production_date:granule.production_date||null,
+        size_mb:granule.size_mb!=null?Number(granule.size_mb):null,
+        platforms:Array.isArray(granule.platforms)?granule.platforms:[],
+        instruments:Array.isArray(granule.instruments)?granule.instruments:[],
+        download_urls:Array.isArray(granule.download_urls)?granule.download_urls:[],
+        primary_url:granule.primary_url||null,
+        cycle_label:granule._granule_cycle&&granule._granule_cycle.label?granule._granule_cycle.label:null,
+        cycle_interval_seconds:granule._granule_cycle&&granule._granule_cycle.interval_seconds!=null?granule._granule_cycle.interval_seconds:null,
+        cycle_detail:granule._granule_cycle&&granule._granule_cycle.detail?granule._granule_cycle.detail:null,
+        cycle_basis:granule._granule_cycle&&granule._granule_cycle.basis?granule._granule_cycle.basis:null,
+        harmony_available:!!(granule._harmony&&granule._harmony.available),
+        harmony_bbox_subset:!!(granule._harmony&&granule._harmony.bbox_subset),
+        harmony_variable_subset:!!(granule._harmony&&granule._harmony.variable_subset),
+        harmony_concatenate:!!(granule._harmony&&granule._harmony.concatenate),
+        harmony_output_formats:(granule._harmony&&Array.isArray(granule._harmony.output_formats))?granule._harmony.output_formats:[],
+        harmony_services:(granule._harmony&&Array.isArray(granule._harmony.services))?granule._harmony.services:[],
+        recovery_mode:!!recoveryMode
+      };
+    }
+
+    function updateProgress(stage,pendingRecovery){
       const elapsed=Math.max(0.001,(performance.now()-started)/1000);
-      const rate=completed/elapsed;
-      const remaining=total-completed;
+      const rate=finalized/elapsed;
+      const remaining=total-finalized;
       const eta=rate>0?remaining/rate:Infinity;
       const avgBackend=backendSamples?Math.round(totalBackendMs/backendSamples):null;
-      button.textContent="Converting "+completed+"/"+total+"…";
+      button.textContent="Converting "+finalized+"/"+total+"…";
       msg.className="message";
-      msg.textContent="Full parallel mode: "+completed+"/"+total+
-        " processed · "+total+" requests launched together · "+
-        rate.toFixed(rate>=10?1:2)+" granules/s · ETA "+formatEta(eta)+
+      msg.textContent=stage+": "+finalized+"/"+total+" finalized · "+
+        primaryConcurrency+" primary workers · "+
+        attemptsCompleted+" attempts · "+
+        (pendingRecovery?pendingRecovery+" awaiting recovery · ":"")+
+        rate.toFixed(rate>=10?1:2)+" finalized/s · ETA "+formatEta(eta)+
         (avgBackend!==null?" · avg backend "+avgBackend+"ms":"");
     }
 
-    updateProgress();
-
-    const tasks=currentGranules.map(async function(granule,i){
-      const label=granule.granule_ur||granule.concept_id||("granule "+(i+1));
-
+    async function attemptGranule(granule,recoveryMode){
+      const label=granule.granule_ur||granule.concept_id||"granule";
       if(!granule.concept_id){
-        failures.push(label+": missing CMR granule ID");
-        completed++;
-        updateProgress();
-        return;
+        return {
+          ok:false,
+          granule:granule,
+          label:label,
+          error:"missing CMR granule ID",
+          manifest:null
+        };
       }
 
       try{
-        const response=await apiResponseWithRetry("/api/download/nasa/granule",{
-          ...baseBody,
-          component:(granule._matched_components&&granule._matched_components.length)
-            ?granule._matched_components.join("; "):componentValues().join("; "),
-          collection_id:granule._collection_id||"",
-          collection_short_name:granule._collection_short_name||"",
-          collection_title:granule._collection_title||granule._collection_short_name||"",
-          collection_version:granule._collection_version||"",
-          collection_provider:granule._collection_provider||"",
-          collection_processing_level:granule._collection_processing_level||"",
-          granule_id:granule.concept_id,
-          granule_ur:granule.granule_ur||null,
-          begin:granule.begin||null,
-          end:granule.end||null,
-          production_date:granule.production_date||null,
-          size_mb:granule.size_mb!=null?Number(granule.size_mb):null,
-          platforms:Array.isArray(granule.platforms)?granule.platforms:[],
-          instruments:Array.isArray(granule.instruments)?granule.instruments:[],
-          download_urls:Array.isArray(granule.download_urls)?granule.download_urls:[],
-          primary_url:granule.primary_url||null,
-          cycle_label:granule._granule_cycle&&granule._granule_cycle.label?granule._granule_cycle.label:null,
-          cycle_interval_seconds:granule._granule_cycle&&granule._granule_cycle.interval_seconds!=null?granule._granule_cycle.interval_seconds:null,
-          cycle_detail:granule._granule_cycle&&granule._granule_cycle.detail?granule._granule_cycle.detail:null,
-          cycle_basis:granule._granule_cycle&&granule._granule_cycle.basis?granule._granule_cycle.basis:null,
-          harmony_available:!!(granule._harmony&&granule._harmony.available),
-          harmony_bbox_subset:!!(granule._harmony&&granule._harmony.bbox_subset),
-          harmony_variable_subset:!!(granule._harmony&&granule._harmony.variable_subset),
-          harmony_concatenate:!!(granule._harmony&&granule._harmony.concatenate),
-          harmony_output_formats:(granule._harmony&&Array.isArray(granule._harmony.output_formats))?granule._harmony.output_formats:[],
-          harmony_services:(granule._harmony&&Array.isArray(granule._harmony.services))?granule._harmony.services:[]
-        },2);
+        const response=await apiResponseWithRetry(
+          "/api/download/nasa/granule",
+          buildGranuleBody(granule,recoveryMode),
+          recoveryMode?4:2,
+          {timeoutMs:recoveryMode?290000:210000}
+        );
+        attemptsCompleted++;
 
         const text=await response.text();
-        queueCsv(text);
-        representedGranules++;
-
         const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
-        if(Number.isFinite(rows)) totalRows+=rows;
-
         const conversionErrors=Number(response.headers.get("X-Earthdata-Conversion-Errors")||0);
         const accessPath=String(response.headers.get("X-Earthdata-Access-Path")||"direct");
-        if(accessPath.indexOf("harmony")===0) harmonyAccelerated++;
-        else directProcessed++;
         const backendMs=Number(response.headers.get("X-Earthdata-Processing-Ms")||0);
+
         if(Number.isFinite(backendMs)&&backendMs>0){
           totalBackendMs+=backendMs;
           backendSamples++;
         }
 
         if(conversionErrors>0){
-          failures.push(label+": conversion failed; manifest row included in CSV");
-        }else{
-          convertedGranules++;
+          return {
+            ok:false,
+            granule:granule,
+            label:label,
+            error:"NASA granule reached the converter but no scientific rows were decoded.",
+            manifest:text,
+            rows:rows,
+            accessPath:accessPath
+          };
         }
-      }catch(e){
-        const errorText=e&&e.message?e.message:String(e);
-        failures.push(label+": "+errorText);
-        try{
-          queueCsv(localFailureCsv(granule,errorText));
-          representedGranules++;
-        }catch(_){}
-      }finally{
-        completed++;
-        updateProgress();
+
+        return {
+          ok:true,
+          granule:granule,
+          label:label,
+          text:text,
+          rows:rows,
+          accessPath:accessPath
+        };
+      }catch(error){
+        attemptsCompleted++;
+        return {
+          ok:false,
+          granule:granule,
+          label:label,
+          error:error&&error.message?error.message:String(error),
+          manifest:null
+        };
+      }
+    }
+
+    updateProgress("Primary conversion",0);
+
+    const primaryResults=await runBounded(
+      currentGranules,
+      primaryConcurrency,
+      async function(granule){
+        return attemptGranule(granule,false);
+      }
+    );
+
+    const recoveryQueue=[];
+
+    primaryResults.forEach(function(result,index){
+      const granule=currentGranules[index];
+      if(result.status==="fulfilled"&&result.value.ok){
+        const value=result.value;
+        queueCsv(value.text);
+        representedGranules++;
+        convertedGranules++;
+        totalRows+=Number.isFinite(value.rows)?value.rows:0;
+        if(String(value.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
+        else directProcessed++;
+        finalized++;
+      }else{
+        const value=result.status==="fulfilled"
+          ?result.value
+          :{
+              ok:false,
+              granule:granule,
+              label:granule.granule_ur||granule.concept_id||("granule "+(index+1)),
+              error:result.reason&&result.reason.message?result.reason.message:String(result.reason),
+              manifest:null
+            };
+        recoveryQueue.push(value);
       }
     });
 
-    await Promise.all(tasks);
+    updateProgress("Recovery pass",recoveryQueue.length);
+
+    if(recoveryQueue.length){
+      await sleep(1500);
+      const recoveryResults=await runBounded(
+        recoveryQueue,
+        Math.min(2,recoveryQueue.length),
+        async function(previous){
+          const next=await attemptGranule(previous.granule,true);
+          if(!next.manifest&&previous.manifest) next.manifest=previous.manifest;
+          if(!next.error&&previous.error) next.error=previous.error;
+          return next;
+        }
+      );
+
+      recoveryResults.forEach(function(result,index){
+        const previous=recoveryQueue[index];
+        if(result.status==="fulfilled"&&result.value.ok){
+          const value=result.value;
+          queueCsv(value.text);
+          representedGranules++;
+          convertedGranules++;
+          totalRows+=Number.isFinite(value.rows)?value.rows:0;
+          if(String(value.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
+          else directProcessed++;
+        }else{
+          const value=result.status==="fulfilled"
+            ?result.value
+            :{
+                granule:previous.granule,
+                label:previous.label,
+                error:result.reason&&result.reason.message?result.reason.message:String(result.reason),
+                manifest:previous.manifest
+              };
+          const errorText=value.error||previous.error||"Granule conversion failed after recovery retries.";
+          finalFailures.push(value.label+": "+errorText);
+          try{
+            queueCsv(value.manifest||previous.manifest||localFailureCsv(value.granule,errorText));
+            representedGranules++;
+          }catch(_){}
+        }
+        finalized++;
+        updateProgress("Recovery pass",Math.max(0,recoveryQueue.length-index-1));
+      });
+    }
+
+    if(!recoveryQueue.length){
+      finalized=total;
+    }
+
     await writeQueue;
 
     if(!header || representedGranules===0){
       if(writer&&typeof writer.abort==="function") await writer.abort();
       writer=null;
-      const details=failures.slice(0,3).join(" | ");
+      const details=finalFailures.slice(0,3).join(" | ");
       throw new Error("No selected granules could be represented in the CSV."+ (details?" "+details:""));
     }
 
@@ -748,16 +943,22 @@ $("downloadCsv").onclick=async function(){
     const elapsed=Math.max(0.001,(performance.now()-started)/1000);
     const rate=convertedGranules/elapsed;
     const avgBackend=backendSamples?Math.round(totalBackendMs/backendSamples):null;
-    const skipped=failures.length;
-    msg.className=skipped?"message warn":"message success";
+    const unresolved=finalFailures.length;
+    msg.className=unresolved?"message warn":"message success";
     msg.textContent="Converted "+convertedGranules+" of "+total+
-      " granule(s); represented "+representedGranules+" in the CSV in "+elapsed.toFixed(1)+"s"+
-      " ("+rate.toFixed(rate>=10?1:2)+" granules/s)"+
+      " selected granule(s); represented all "+representedGranules+
+      " output records in "+elapsed.toFixed(1)+"s"+
+      " ("+rate.toFixed(rate>=10?1:2)+" converted granules/s)"+
       (avgBackend!==null?" · avg backend "+avgBackend+"ms":"")+
       " · Harmony "+harmonyAccelerated+" · direct "+directProcessed+
       (totalRows?" · "+totalRows+" CSV rows":"")+
-      (skipped?" · "+skipped+" skipped after retries. "+failures.slice(0,2).join(" | "):"");
-    toast(skipped?"CSV created with some skipped granules.":"Combined CSV created successfully.",skipped?"warn":"");
+      (unresolved
+        ?" · "+unresolved+" granule(s) remained non-convertible after the recovery pass and are marked as audit rows."
+        :" · all selected granules converted successfully.");
+    toast(
+      unresolved?"CSV created; unresolved granules are explicitly marked for exclusion from training.":"All selected granules converted successfully.",
+      unresolved?"warn":""
+    );
   }catch(e){
     if(writer){
       try{

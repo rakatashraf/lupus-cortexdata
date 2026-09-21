@@ -30,7 +30,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.3.0",
+    version="2.4.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -120,6 +120,7 @@ class SingleGranuleDownloadRequest(DownloadRequest):
     harmony_concatenate: bool = False
     harmony_output_formats: list[str] = []
     harmony_services: list[str] = []
+    recovery_mode: bool = False
 
 
 class ExternalRequest(BaseModel):
@@ -152,7 +153,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.3",
+        "User-Agent": "EarthdataCSVDownloader/2.4",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -279,7 +280,13 @@ def _harmony_subset_request(
 
     fast_timeout = max(
         1.0,
-        float(os.getenv("EARTHDATA_HARMONY_FAST_TIMEOUT_SECONDS", "4.0")),
+        float(
+            os.getenv(
+                "EARTHDATA_HARMONY_RECOVERY_TIMEOUT_SECONDS" if req.recovery_mode
+                else "EARTHDATA_HARMONY_FAST_TIMEOUT_SECONDS",
+                "12.0" if req.recovery_mode else "4.0",
+            )
+        ),
     )
 
     try:
@@ -390,6 +397,8 @@ def _harmony_poll_job(
 def _prefer_harmony_for_granule(req: SingleGranuleDownloadRequest, granule: dict) -> bool:
     if not req.harmony_available or not req.harmony_bbox_subset:
         return False
+    if req.recovery_mode:
+        return True
     name = str(granule.get("granule_ur") or "").lower()
     urls = " ".join(granule.get("download_urls") or []).lower()
     size_mb = float(granule.get("size_mb") or 0.0)
@@ -710,7 +719,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.3.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.4.0"}
 
 
 @app.post("/api/token/validate")
@@ -987,6 +996,47 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 content = None
                 report = None
 
+        if content is None and req.recovery_mode and harmony_job_id:
+            try:
+                completed = await asyncio.to_thread(
+                    _harmony_poll_job,
+                    _session(req.token),
+                    harmony_job_id,
+                    45.0,
+                )
+                if completed:
+                    subset_data, subset_name, subset_url = completed
+                    meta = _granule_meta(
+                        req,
+                        granule,
+                        filename=subset_name,
+                        url=subset_url,
+                    )
+                    meta["conversion_status"] = "converted"
+                    meta["conversion_error"] = ""
+                    meta["source_access_method"] = "NASA Harmony recovery subset"
+                    frames = convert_bytes(
+                        subset_data,
+                        filename=subset_name,
+                        meta=meta,
+                        filters=req.variable_filters,
+                        bbox=req.bbox.dict4(),
+                        max_rows=max(0, int(req.max_rows_per_variable)),
+                    )
+                    combined = combine_frames(frames)
+                    if not combined.empty:
+                        content = combined.to_csv(index=False).encode("utf-8")
+                        report = {
+                            "rows": len(combined),
+                            "converted_frames": len(frames),
+                            "successful_granules": 1,
+                            "errors": [],
+                            "csv_bytes": len(content),
+                        }
+                        access_path = "harmony-recovery"
+            except Exception:
+                pass
+
         if content is None or report is None:
             content, report = await asyncio.to_thread(
                 _download_convert,
@@ -1005,6 +1055,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                         _harmony_poll_job,
                         _session(req.token),
                         harmony_job_id,
+                        45.0 if req.recovery_mode else 18.0,
                     )
                     if completed:
                         subset_data, subset_name, subset_url = completed
