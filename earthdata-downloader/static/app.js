@@ -182,7 +182,7 @@ const FIXED_EXPORT_COLUMNS=[
   "collection_version","collection_provider","collection_processing_level",
   "granule_id","granule_ur","granule_production_date_utc","granule_size_mb",
   "conversion_status","conversion_error","raw_download_url",
-  "source","source_agency","source_provider","source_satellite","source_instrument",
+  "source","source_type","source_agency","ground_provider","ground_data_available","ground_status","station_id","station_name","provider_location_id","provider_sensor_id","measurement_quality","coverage_percent","source_provider","source_satellite","source_instrument",
   "satellite_platform","instrument","data_timestamp_utc","data_date_utc","data_time_utc",
   "timestamp_status","timestamp_source","timestamp_timezone","granule_start_utc",
   "granule_end_utc","retrieved_at_utc","data_cycle","data_cycle_interval_seconds",
@@ -287,6 +287,46 @@ function localFailureCsv(granule,errorText){
   const body=FIXED_EXPORT_COLUMNS.map(function(column){return csvEscape(row[column]||"");}).join(",");
   return header+"\n"+body+"\n";
 }
+
+function localGroundStatusCsv(component,errorText){
+  const row={
+    component_segment:component,
+    component_primary:component,
+    component_names:component,
+    component_count:1,
+    collection_segment_key:"ground:none",
+    collection_id:"ground:none",
+    collection_short_name:"ground",
+    collection_title:"Ground observation status",
+    collection_provider:"Ground-data resolver",
+    collection_processing_level:"ground_status",
+    granule_id:"ground-status-"+slug(component),
+    granule_ur:"ground-status-"+component,
+    conversion_status:"ground_unavailable",
+    conversion_error:errorText,
+    source:"Ground-data resolver",
+    source_type:"ground_status",
+    source_agency:"Ground-data resolver",
+    ground_provider:"Ground-data resolver",
+    ground_data_available:false,
+    ground_status:"provider_error",
+    variable:"__ground_status__",
+    value:"",
+    value_numeric:"",
+    unit:"",
+    sample_weight:0,
+    sample_weight_source:"not_applicable",
+    training_row_usable:false,
+    training_exclude_reason:"ground_data_unavailable",
+    model_feature_schema_version:"lupus-cortex-training-v2",
+    export_mode:$("lowBandwidthMode").checked?"low_bandwidth_training":"raw_rows",
+    component_query:component,
+    extra_attributes_json:""
+  };
+  return FIXED_EXPORT_COLUMNS.join(",")+"\n"+
+    FIXED_EXPORT_COLUMNS.map(function(column){return csvEscape(row[column]??"");}).join(",")+"\n";
+}
+
 
 function splitCsvHeader(text){
   const clean=String(text||"").replace(/^\uFEFF/,"");
@@ -709,24 +749,25 @@ $("downloadCsv").onclick=async function(){
     let harmonyAccelerated=0;
     let directProcessed=0;
     let attemptsCompleted=0;
-    let header=null;
+    const expectedHeader=FIXED_EXPORT_COLUMNS.join(",");
+    let header=expectedHeader;
     let writeQueue=Promise.resolve();
     const finalFailures=[];
     const parts=[];
+    if(usingFileWriter){
+      writeQueue=writeQueue.then(function(){return writer.write(expectedHeader+"\n");});
+    }else{
+      parts.push(expectedHeader+"\n");
+    }
+    msg.className="message";
+    msg.textContent="Download started. The CSV file/header is being written now while satellite and ground-data workers run in parallel.";
 
     function queueCsv(text){
       const chunk=splitCsvHeader(text);
       if(!chunk.header) throw new Error("Converted granule returned an empty CSV.");
 
-      if(header===null){
-        header=chunk.header;
-        if(usingFileWriter){
-          writeQueue=writeQueue.then(function(){return writer.write(header+"\n");});
-        }else{
-          parts.push(header+"\n");
-        }
-      }else if(chunk.header!==header){
-        throw new Error("CSV schema differs from another converted granule.");
+      if(chunk.header!==header){
+        throw new Error("CSV schema differs from the fixed Lupus Cortex export schema.");
       }
 
       if(chunk.body){
@@ -854,6 +895,38 @@ $("downloadCsv").onclick=async function(){
       }
     }
 
+    let groundRows=0;
+    let groundStatus=$("includeGroundData").checked?"fetching":"disabled";
+    const groundPromise=$("includeGroundData").checked
+      ?(async function(){
+          try{
+            const response=await apiResponseWithRetry(
+              "/api/download/ground",
+              {
+                components:componentValues(),
+                bbox:bbox(),
+                date_range:dates(),
+                openaq_api_key:$("openaqKey").value.trim()||null,
+                low_bandwidth_training_mode:$("lowBandwidthMode").checked,
+                training_grid_degrees:Math.max(0.005,Math.min(1,Number($("trainingGrid").value)||0.05))
+              },
+              3,
+              {timeoutMs:240000}
+            );
+            const text=await response.text();
+            queueCsv(text);
+            groundRows=Number(response.headers.get("X-Earthdata-Rows")||0);
+            groundStatus="done";
+          }catch(error){
+            groundStatus="failed";
+            const detail=error&&error.message?error.message:String(error);
+            componentValues().forEach(function(component){
+              try{queueCsv(localGroundStatusCsv(component,detail));}catch(_){}
+            });
+          }
+        })()
+      :Promise.resolve();
+
     updateProgress("Primary conversion",0);
 
     const primaryResults=await runBounded(
@@ -941,6 +1014,7 @@ $("downloadCsv").onclick=async function(){
       finalized=total;
     }
 
+    await groundPromise;
     await writeQueue;
 
     if(!header || representedGranules===0){
@@ -971,6 +1045,7 @@ $("downloadCsv").onclick=async function(){
       " · Harmony "+harmonyAccelerated+" · direct "+directProcessed+
       (totalRows?" · "+totalRows+" CSV rows":"")+
       ($("lowBandwidthMode").checked?" · low-bandwidth training mode":" · raw-row mode")+
+      ($("includeGroundData").checked?" · ground "+groundStatus+" ("+groundRows+" rows)":"")+
       (unresolved
         ?" · "+unresolved+" granule(s) remained non-convertible after the recovery pass and are marked as audit rows."
         :" · all selected granules converted successfully.");
@@ -991,7 +1066,7 @@ $("downloadCsv").onclick=async function(){
     toast(e.message,"error");
   }finally{
     button.disabled=false;
-    button.textContent="Download combined CSV";
+    button.textContent="Start streaming combined CSV";
   }
 };
 

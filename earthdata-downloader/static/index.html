@@ -118,6 +118,19 @@
           </label>
         </div>
         <div id="networkHint" class="message success"></div>
+        <div class="grid two">
+          <label class="check">
+            <input id="includeGroundData" type="checkbox" checked>
+            <span><strong>Include ground observations</strong><small>Fetch station/reference observations in parallel with NASA whenever a defensible public ground source exists.</small></span>
+          </label>
+          <label>OpenAQ API key
+            <input id="openaqKey" type="password" autocomplete="off" placeholder="optional; needed for PM2.5/PM10/NO₂/O₃/SO₂/CO ground sensors">
+          </label>
+        </div>
+        <div class="info-box">
+          <strong>Satellite + ground rows stream into one model-ready CSV</strong>
+          <span>OpenAQ supplies ground air-monitor observations when a key is provided. NOAA/NCEI supplies mapped weather-station observations. OpenStreetMap supplies ground/reference infrastructure features. Components without a scientifically defensible public ground equivalent are marked unavailable rather than assigned invented values.</span>
+        </div>
         <div class="info-box">
           <strong>All matching granules from every selected collection are collected</strong>
           <span>Granule discovery and conversion use adaptive parallel workers with a low-concurrency recovery pass. Harmony-compatible products are subset by NASA before transfer whenever possible.</span>
@@ -130,12 +143,12 @@
           <label>CSV file name<input id="outputName" placeholder="optional-output-name.csv"></label>
           <div class="action-box">
             <button id="findGranules" class="secondary">Find all granules</button>
-            <button id="downloadCsv" class="primary" disabled>Download combined CSV</button>
+            <button id="downloadCsv" class="primary" disabled>Start streaming combined CSV</button>
           </div>
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">Low-Bandwidth Training Mode is recommended for Lupus Cortex training. It preserves component/collection/time/space/variable provenance and aggregates numeric samples into spatial cells with weighted mean, mean, standard deviation, min, max, and sample count. Raw-row mode preserves every converted row but necessarily transfers more data.</p>
+        <p class="footnote">On supported desktop browsers the output file is created immediately after you choose its save location, then rows are appended as NASA and ground-source conversions complete. Low-Bandwidth Training Mode is recommended for Lupus Cortex training because it reduces transfer size while preserving temporal/spatial statistics.</p>
       </div>
     </section>
 

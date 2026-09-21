@@ -55,6 +55,7 @@ jobs:
 
           from app.convert import combine_frames, compact_training_frame, convert_bytes, _hdf4_airs_file
           from app.main import _harmony_output_format
+          from app.external import resolve_ground
 
           bbox = {"south": 23.0, "west": 90.0, "north": 24.0, "east": 91.0}
           meta = {
@@ -431,6 +432,35 @@ jobs:
           assert "value_mean" in compact.columns
           assert "value_std" in compact.columns
           assert pd.to_numeric(compact["source_row_count"], errors="coerce").fillna(0).sum() >= 20
+
+          assert resolve_ground("PM2.5")["provider_id"] == "openaq"
+          assert resolve_ground("precipitation")["provider_id"] == "noaa_ncei_daily"
+          assert resolve_ground("road density")["provider_id"] == "openstreetmap_ground"
+          assert resolve_ground("AOD")["provider_id"] == "none"
+
+          ground_schema = combine_frames([pd.DataFrame([{
+              "component_names":"temperature",
+              "component_primary":"temperature",
+              "collection_id":"ground:noaa:daily-summaries:TAVG",
+              "granule_id":"ground-test",
+              "observation_time":"2025-01-01T00:00:00Z",
+              "source":"NOAA/NCEI",
+              "source_type":"ground_observation",
+              "ground_provider":"NOAA/NCEI",
+              "ground_data_available":True,
+              "ground_status":"observed",
+              "station_id":"TEST",
+              "station_name":"Test Station",
+              "variable":"TAVG",
+              "value":25.0,
+              "unit":"degC",
+              "latitude":23.7,
+              "longitude":90.4,
+              "conversion_status":"converted",
+          }])])
+          assert ground_schema.iloc[0]["source_type"] == "ground_observation"
+          assert ground_schema.iloc[0]["station_id"] == "TEST"
+          assert "export_mode" in ground_schema.columns
 
           assert _harmony_output_format(["application/netcdf","text/csv"]) == "text/csv"
           assert _harmony_output_format(["application/x-hdf"]) == "application/x-hdf"
