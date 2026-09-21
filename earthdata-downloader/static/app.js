@@ -191,11 +191,11 @@ const FIXED_EXPORT_COLUMNS=[
   "day_of_year_cos","month_sin","month_cos","latitude","longitude","spatial_cell_id",
   "coordinate_status","coordinate_crs","variable","value","value_numeric","unit",
   "weight","weight_numeric","sample_weight","sample_weight_source","weight_unit",
-  "weight_variable","series_id","sequence_id","sequence_order","training_row_usable",
+  "weight_variable","spectral_channel_index","spectral_frequency","spectral_frequency_unit","dimension_index","hdf_swath","airs_scanline","series_id","sequence_id","sequence_order","training_row_usable",
   "training_exclude_reason","model_feature_schema_version","hdf_grid",
   "spatial_resolution_degrees","observation_time","granule_begin","granule_end",
   "component_query","collection_search_name","original_file","download_url",
-  "extra_attributes_json"
+  "export_mode","aggregation_grid_degrees","aggregation_sample_count","source_row_count","value_mean","value_std","value_min","value_max","extra_attributes_json"
 ]
 
 function csvEscape(value){
@@ -311,6 +311,22 @@ function setDefaultDates(){
   const end=new Date();const start=new Date(end.getTime()-29*86400000);
   $("endDate").value=end.toISOString().slice(0,10);$("startDate").value=start.toISOString().slice(0,10);
 }
+function configureLowBandwidthMode(){
+  const connection=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  const slow=!!(connection&&(
+    connection.saveData ||
+    (Number.isFinite(Number(connection.downlink))&&Number(connection.downlink)>0&&Number(connection.downlink)<2) ||
+    /(^|-)2g$|slow-2g/i.test(String(connection.effectiveType||""))
+  ));
+  $("lowBandwidthMode").checked=true;
+  const hint=$("networkHint");
+  if(hint){
+    hint.textContent=slow
+      ?"Slow/data-saver connection detected. Low-Bandwidth Training Mode is enabled automatically."
+      :"Low-Bandwidth Training Mode is enabled by default to minimize transferred CSV bytes.";
+  }
+}
+
 async function health(){
   try{
     const r=await fetch("/api/health");if(!r.ok) throw new Error();
@@ -676,7 +692,9 @@ $("downloadCsv").onclick=async function(){
       fallback_latest:$("fallbackLatest").checked,
       variable_filters:csvList($("variableFilters").value),
       output_name:null,
-      max_rows_per_variable:Number($("maxRows").value)||0
+      max_rows_per_variable:Number($("maxRows").value)||0,
+      low_bandwidth_training_mode:$("lowBandwidthMode").checked,
+      training_grid_degrees:Math.max(0.005,Math.min(1,Number($("trainingGrid").value)||0.05))
     };
 
     const total=currentGranules.length;
@@ -952,6 +970,7 @@ $("downloadCsv").onclick=async function(){
       (avgBackend!==null?" · avg backend "+avgBackend+"ms":"")+
       " · Harmony "+harmonyAccelerated+" · direct "+directProcessed+
       (totalRows?" · "+totalRows+" CSV rows":"")+
+      ($("lowBandwidthMode").checked?" · low-bandwidth training mode":" · raw-row mode")+
       (unresolved
         ?" · "+unresolved+" granule(s) remained non-convertible after the recovery pass and are marked as audit rows."
         :" · all selected granules converted successfully.");
@@ -996,4 +1015,5 @@ async function downloadExternal(item,button){
   }catch(e){toast(e.message,"error");}
   finally{button.disabled=false;button.textContent="Fetch external CSV";}
 }
-setDefaultDates();health();
+setDefaultDates();
+configureLowBandwidthMode();health();

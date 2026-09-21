@@ -2503,6 +2503,12 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "sample_weight_source",
         "weight_unit",
         "weight_variable",
+        "spectral_channel_index",
+        "spectral_frequency",
+        "spectral_frequency_unit",
+        "dimension_index",
+        "hdf_swath",
+        "airs_scanline",
         "series_id",
         "sequence_id",
         "sequence_order",
@@ -2564,3 +2570,186 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
             pass
 
     return df[preferred + ["extra_attributes_json"]].reset_index(drop=True)
+
+def compact_training_frame(
+    df: pd.DataFrame,
+    grid_degrees: float = 0.05,
+) -> pd.DataFrame:
+    """Reduce transfer size while preserving trend/spatial training signal."""
+    if df.empty:
+        return df
+
+    grid = max(0.005, min(1.0, float(grid_degrees or 0.05)))
+    work = df.copy()
+
+    if "conversion_status" not in work.columns:
+        work["conversion_status"] = "converted"
+    if "value_numeric" not in work.columns:
+        work["value_numeric"] = pd.to_numeric(work.get("value"), errors="coerce")
+
+    status = work["conversion_status"].fillna("converted").astype(str)
+    failure_mask = status.isin(["conversion_failed", "request_failed"])
+    numeric_mask = work["value_numeric"].notna() & ~failure_mask
+
+    numeric = work.loc[numeric_mask].copy()
+    audits = work.loc[~numeric_mask].copy()
+    compact_parts: list[pd.DataFrame] = []
+
+    if not numeric.empty:
+        lat = pd.to_numeric(numeric.get("latitude"), errors="coerce")
+        lon = pd.to_numeric(numeric.get("longitude"), errors="coerce")
+
+        grid_lat = pd.Series(np.nan, index=numeric.index, dtype="float64")
+        grid_lon = pd.Series(np.nan, index=numeric.index, dtype="float64")
+        has_lat = lat.notna()
+        has_lon = lon.notna()
+
+        grid_lat.loc[has_lat] = (
+            np.floor((lat.loc[has_lat] + 90.0) / grid) * grid
+            - 90.0 + grid / 2.0
+        ).clip(-90.0, 90.0)
+        grid_lon.loc[has_lon] = (
+            np.floor((lon.loc[has_lon] + 180.0) / grid) * grid
+            - 180.0 + grid / 2.0
+        ).clip(-180.0, 180.0)
+
+        numeric["_fast_lat"] = grid_lat.round(6)
+        numeric["_fast_lon"] = grid_lon.round(6)
+
+        spectral_cols = [
+            col for col in (
+                "spectral_channel_index",
+                "spectral_frequency",
+                "dimension_index",
+            )
+            if col in numeric.columns
+        ]
+        group_cols = [
+            col for col in (
+                "component_segment",
+                "collection_id",
+                "granule_id",
+                "data_timestamp_utc",
+                "data_cycle",
+                "variable",
+                "unit",
+            )
+            if col in numeric.columns
+        ] + spectral_cols + ["_fast_lat", "_fast_lon"]
+
+        effective_weight = pd.to_numeric(
+            numeric.get("sample_weight", pd.Series(1.0, index=numeric.index)),
+            errors="coerce",
+        ).fillna(1.0)
+        effective_weight = effective_weight.where(effective_weight > 0, 1.0)
+        numeric["_fast_weight"] = effective_weight
+        numeric["_fast_weighted_value"] = numeric["value_numeric"] * effective_weight
+
+        grouped = numeric.groupby(group_cols, dropna=False, sort=False)
+        base = grouped.first().reset_index()
+        stats = grouped["value_numeric"].agg(
+            value_mean="mean",
+            value_std="std",
+            value_min="min",
+            value_max="max",
+            aggregation_sample_count="count",
+        ).reset_index()
+        sums = grouped[["_fast_weight", "_fast_weighted_value"]].sum().reset_index()
+
+        compact = base.merge(stats, on=group_cols, how="left").merge(
+            sums, on=group_cols, how="left"
+        )
+        weighted_mean = compact["_fast_weighted_value"] / compact["_fast_weight"].replace(0, np.nan)
+        compact["value_numeric"] = weighted_mean.fillna(compact["value_mean"])
+        compact["value"] = compact["value_numeric"]
+        compact["sample_weight"] = compact["_fast_weight"]
+        compact["sample_weight_source"] = "aggregated_weight_sum"
+        compact["weight_numeric"] = pd.to_numeric(compact.get("weight_numeric"), errors="coerce")
+        compact["weight"] = compact["weight_numeric"]
+
+        compact["latitude"] = compact["_fast_lat"]
+        compact["longitude"] = compact["_fast_lon"]
+        both_geo = compact["latitude"].notna() & compact["longitude"].notna()
+        lat_only = compact["latitude"].notna() & compact["longitude"].isna()
+        lon_only = compact["longitude"].notna() & compact["latitude"].isna()
+        compact["coordinate_status"] = np.select(
+            [both_geo, lat_only, lon_only],
+            ["geolocated_aggregated", "latitude_only_aggregated", "longitude_only_aggregated"],
+            default="nonspatial_aggregated",
+        )
+        compact["coordinate_crs"] = np.where(
+            compact["latitude"].notna() | compact["longitude"].notna(),
+            "EPSG:4326",
+            "",
+        )
+
+        spatial = pd.Series("nonspatial", index=compact.index, dtype="object")
+        spatial.loc[both_geo] = (
+            compact.loc[both_geo, "latitude"].round(6).astype(str)
+            + ":" + compact.loc[both_geo, "longitude"].round(6).astype(str)
+        )
+        spatial.loc[lat_only] = "lat:" + compact.loc[lat_only, "latitude"].round(6).astype(str)
+        spatial.loc[lon_only] = "lon:" + compact.loc[lon_only, "longitude"].round(6).astype(str)
+        compact["spatial_cell_id"] = spatial
+
+        collection_key = compact.get("collection_segment_key", pd.Series("", index=compact.index)).fillna("").astype(str)
+        variable_key = compact.get("variable", pd.Series("", index=compact.index)).fillna("").astype(str)
+        compact["series_id"] = (
+            compact.get("component_segment", pd.Series("", index=compact.index)).fillna("").astype(str)
+            + "|" + collection_key + "|" + variable_key + "|" + compact["spatial_cell_id"].astype(str)
+        )
+        compact["sequence_id"] = compact["series_id"]
+        compact["sequence_order"] = compact.get("timestamp_epoch_seconds")
+        compact["training_row_usable"] = (
+            compact["value_numeric"].notna()
+            & pd.to_numeric(compact.get("timestamp_epoch_seconds"), errors="coerce").notna()
+        )
+        compact["training_exclude_reason"] = np.where(
+            compact["training_row_usable"], "", "timestamp_or_numeric_value_unavailable"
+        )
+        compact["export_mode"] = "low_bandwidth_training"
+        compact["aggregation_grid_degrees"] = grid
+        compact["source_row_count"] = compact["aggregation_sample_count"]
+        compact["model_feature_schema_version"] = "lupus-cortex-training-v2"
+        compact.drop(
+            columns=["_fast_lat","_fast_lon","_fast_weight","_fast_weighted_value"],
+            inplace=True,
+            errors="ignore",
+        )
+        compact_parts.append(compact)
+
+    if not audits.empty:
+        audit_keys = [
+            col for col in ("collection_id","granule_id","variable","conversion_status")
+            if col in audits.columns
+        ]
+        if audit_keys:
+            audits = audits.groupby(audit_keys, dropna=False, sort=False).first().reset_index()
+        audits["export_mode"] = "low_bandwidth_training"
+        audits["aggregation_grid_degrees"] = grid
+        audits["aggregation_sample_count"] = 0
+        audits["source_row_count"] = 0
+        audits["model_feature_schema_version"] = "lupus-cortex-training-v2"
+        compact_parts.append(audits)
+
+    if not compact_parts:
+        return df
+
+    out = pd.concat(compact_parts, ignore_index=True, sort=False)
+    stable_extra = [
+        "export_mode","aggregation_grid_degrees","aggregation_sample_count",
+        "source_row_count","value_mean","value_std","value_min","value_max",
+    ]
+    for column in stable_extra:
+        if column not in out.columns:
+            out[column] = ""
+
+    base_columns = [column for column in df.columns if column != "extra_attributes_json"]
+    ordered = base_columns + [column for column in stable_extra if column not in base_columns]
+    if "extra_attributes_json" in out.columns:
+        ordered.append("extra_attributes_json")
+    for column in ordered:
+        if column not in out.columns:
+            out[column] = ""
+    return out[ordered].reset_index(drop=True)
+

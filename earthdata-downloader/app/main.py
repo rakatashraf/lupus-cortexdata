@@ -20,7 +20,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .cmr import CMRClient
-from .convert import combine_frames, convert_bytes
+from .convert import combine_frames, compact_training_frame, convert_bytes
 from .external import fetch as fetch_external
 from .external import resolve as resolve_external
 
@@ -30,7 +30,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.4.0",
+    version="2.5.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -97,6 +97,8 @@ class DownloadRequest(GranuleRequest):
     variable_filters: list[str] = []
     output_name: Optional[str] = None
     max_rows_per_variable: int = 0
+    low_bandwidth_training_mode: bool = True
+    training_grid_degrees: float = Field(default=0.05, ge=0.005, le=1.0)
 
 
 class SingleGranuleDownloadRequest(DownloadRequest):
@@ -153,7 +155,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.4",
+        "User-Agent": "EarthdataCSVDownloader/2.5",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -662,6 +664,9 @@ def _download_convert(
             else:
                 combined["data_cycle_detail"] = detail
 
+    if req.low_bandwidth_training_mode and not combined.empty:
+        combined = compact_training_frame(combined, req.training_grid_degrees)
+
     if combined.empty:
         raise ValueError("NASA returned no rows that could be represented in the export.")
 
@@ -689,7 +694,7 @@ def _csv_http_response(
     response_headers["X-Content-Type-Options"] = "nosniff"
     response_headers["X-Earthdata-Uncompressed-Bytes"] = str(len(content))
 
-    if len(content) > 3_000_000:
+    if len(content) > 65_536:
         compressed = gzip.compress(content, compresslevel=6)
         if len(compressed) <= safe_limit:
             response_content = compressed
@@ -719,7 +724,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.4.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.5.0"}
 
 
 @app.post("/api/token/validate")
@@ -982,6 +987,8 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                         max_rows=max(0, int(req.max_rows_per_variable)),
                     )
                     combined = combine_frames(frames)
+                    if req.low_bandwidth_training_mode and not combined.empty:
+                        combined = compact_training_frame(combined, req.training_grid_degrees)
                     if not combined.empty:
                         content = combined.to_csv(index=False).encode("utf-8")
                         report = {
@@ -1024,6 +1031,8 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                         max_rows=max(0, int(req.max_rows_per_variable)),
                     )
                     combined = combine_frames(frames)
+                    if req.low_bandwidth_training_mode and not combined.empty:
+                        combined = compact_training_frame(combined, req.training_grid_degrees)
                     if not combined.empty:
                         content = combined.to_csv(index=False).encode("utf-8")
                         report = {
@@ -1077,6 +1086,8 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                             max_rows=max(0, int(req.max_rows_per_variable)),
                         )
                         combined = combine_frames(frames)
+                        if req.low_bandwidth_training_mode and not combined.empty:
+                            combined = compact_training_frame(combined, req.training_grid_degrees)
                         if not combined.empty:
                             content = combined.to_csv(index=False).encode("utf-8")
                             report = {

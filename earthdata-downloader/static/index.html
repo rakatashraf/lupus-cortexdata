@@ -108,9 +108,19 @@
           <label>Variable-name filters<input id="variableFilters" placeholder="optional, comma separated"></label>
           <label>Row limit per variable<input id="maxRows" type="number" min="0" value="0"></label>
         </div>
+        <div class="grid two">
+          <label class="check">
+            <input id="lowBandwidthMode" type="checkbox" checked>
+            <span><strong>Low-Bandwidth Training Mode</strong><small>Aggregate redundant spatial samples server-side before CSV transfer.</small></span>
+          </label>
+          <label>Training spatial grid (degrees)
+            <input id="trainingGrid" type="number" min="0.005" max="1" step="0.005" value="0.05">
+          </label>
+        </div>
+        <div id="networkHint" class="message success"></div>
         <div class="info-box">
           <strong>All matching granules from every selected collection are collected</strong>
-          <span>Granule discovery runs across all selected collections, and CSV creation launches every selected granule conversion independently before merging the normalized rows into one CSV.</span>
+          <span>Granule discovery and conversion use adaptive parallel workers with a low-concurrency recovery pass. Harmony-compatible products are subset by NASA before transfer whenever possible.</span>
         </div>
         <div class="info-box">
           <strong>CSV schema is model-ready and explicitly segmented</strong>
@@ -125,7 +135,7 @@
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">The search has no artificial collection or granule limit. Large jobs launch every selected granule conversion at once with no intentional application-side queue. Actual speed still depends on NASA provider bandwidth, granule size, host concurrency, and your connection. A single exceptionally large granule may still require a variable filter, smaller boundary box, or row limit.</p>
+        <p class="footnote">Low-Bandwidth Training Mode is recommended for Lupus Cortex training. It preserves component/collection/time/space/variable provenance and aggregates numeric samples into spatial cells with weighted mean, mean, standard deviation, min, max, and sample count. Raw-row mode preserves every converted row but necessarily transfers more data.</p>
       </div>
     </section>
 
