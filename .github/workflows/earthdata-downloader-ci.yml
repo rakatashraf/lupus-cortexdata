@@ -54,6 +54,7 @@ jobs:
           from rasterio.transform import from_origin
 
           from app.convert import combine_frames, convert_bytes, _hdf4_airs_file
+          from app.main import _harmony_output_format
 
           bbox = {"south": 23.0, "west": 90.0, "north": 24.0, "east": 91.0}
           meta = {
@@ -403,6 +404,10 @@ jobs:
           assert np.isclose(float(row["sample_weight"]), 1.0)
           assert str(row["series_id"])
           assert np.isfinite(float(row["sequence_order"]))
+
+          assert _harmony_output_format(["application/netcdf","text/csv"]) == "text/csv"
+          assert _harmony_output_format(["application/x-hdf"]) == "application/x-hdf"
+          assert _harmony_output_format([]) is None
 
           print("IN_MEMORY_CONVERSION_TESTS_OK")
           PY

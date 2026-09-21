@@ -480,6 +480,7 @@ $("findGranules").onclick=async function(){
       const data=result.value.data||{};
       if(data.fallback_used) fallbackCollections++;
       const cycle=data.granule_cycle||null;
+      const harmony=data.harmony||null;
 
       (data.items||[]).forEach(function(raw){
         const item={...raw};
@@ -495,6 +496,7 @@ $("findGranules").onclick=async function(){
         item._matched_components=(collection.matched_components&&collection.matched_components.length)
           ?collection.matched_components.slice():componentValues().slice();
         item._granule_cycle=cycle;
+        item._harmony=harmony;
         currentGranules.push(item);
       });
     });
@@ -599,6 +601,8 @@ $("downloadCsv").onclick=async function(){
     let totalRows=0;
     let totalBackendMs=0;
     let backendSamples=0;
+    let harmonyAccelerated=0;
+    let directProcessed=0;
     let header=null;
     let writeQueue=Promise.resolve();
     const failures=[];
@@ -679,7 +683,13 @@ $("downloadCsv").onclick=async function(){
           cycle_label:granule._granule_cycle&&granule._granule_cycle.label?granule._granule_cycle.label:null,
           cycle_interval_seconds:granule._granule_cycle&&granule._granule_cycle.interval_seconds!=null?granule._granule_cycle.interval_seconds:null,
           cycle_detail:granule._granule_cycle&&granule._granule_cycle.detail?granule._granule_cycle.detail:null,
-          cycle_basis:granule._granule_cycle&&granule._granule_cycle.basis?granule._granule_cycle.basis:null
+          cycle_basis:granule._granule_cycle&&granule._granule_cycle.basis?granule._granule_cycle.basis:null,
+          harmony_available:!!(granule._harmony&&granule._harmony.available),
+          harmony_bbox_subset:!!(granule._harmony&&granule._harmony.bbox_subset),
+          harmony_variable_subset:!!(granule._harmony&&granule._harmony.variable_subset),
+          harmony_concatenate:!!(granule._harmony&&granule._harmony.concatenate),
+          harmony_output_formats:(granule._harmony&&Array.isArray(granule._harmony.output_formats))?granule._harmony.output_formats:[],
+          harmony_services:(granule._harmony&&Array.isArray(granule._harmony.services))?granule._harmony.services:[]
         },2);
 
         const text=await response.text();
@@ -690,6 +700,9 @@ $("downloadCsv").onclick=async function(){
         if(Number.isFinite(rows)) totalRows+=rows;
 
         const conversionErrors=Number(response.headers.get("X-Earthdata-Conversion-Errors")||0);
+        const accessPath=String(response.headers.get("X-Earthdata-Access-Path")||"direct");
+        if(accessPath.indexOf("harmony")===0) harmonyAccelerated++;
+        else directProcessed++;
         const backendMs=Number(response.headers.get("X-Earthdata-Processing-Ms")||0);
         if(Number.isFinite(backendMs)&&backendMs>0){
           totalBackendMs+=backendMs;
@@ -741,6 +754,7 @@ $("downloadCsv").onclick=async function(){
       " granule(s); represented "+representedGranules+" in the CSV in "+elapsed.toFixed(1)+"s"+
       " ("+rate.toFixed(rate>=10?1:2)+" granules/s)"+
       (avgBackend!==null?" · avg backend "+avgBackend+"ms":"")+
+      " · Harmony "+harmonyAccelerated+" · direct "+directProcessed+
       (totalRows?" · "+totalRows+" CSV rows":"")+
       (skipped?" · "+skipped+" skipped after retries. "+failures.slice(0,2).join(" | "):"");
     toast(skipped?"CSV created with some skipped granules.":"Combined CSV created successfully.",skipped?"warn":"");

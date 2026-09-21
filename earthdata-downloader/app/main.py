@@ -8,7 +8,7 @@ import time
 from datetime import date
 from pathlib import Path
 from typing import Optional
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import pandas as pd
 import requests
@@ -30,7 +30,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.2.0",
+    version="2.3.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -114,6 +114,12 @@ class SingleGranuleDownloadRequest(DownloadRequest):
     cycle_interval_seconds: Optional[float] = None
     cycle_detail: Optional[str] = None
     cycle_basis: Optional[str] = None
+    harmony_available: bool = False
+    harmony_bbox_subset: bool = False
+    harmony_variable_subset: bool = False
+    harmony_concatenate: bool = False
+    harmony_output_formats: list[str] = []
+    harmony_services: list[str] = []
 
 
 class ExternalRequest(BaseModel):
@@ -146,7 +152,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.2",
+        "User-Agent": "EarthdataCSVDownloader/2.3",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -175,6 +181,226 @@ def _filename(url: str, response: requests.Response, idx: int) -> str:
         }.get(ctype, "")
         name += ext
     return name[:180]
+
+
+HARMONY = "https://harmony.earthdata.nasa.gov"
+
+
+def _harmony_capabilities(token: str, collection_id: str) -> dict:
+    result = {
+        "available": False,
+        "bbox_subset": False,
+        "variable_subset": False,
+        "concatenate": False,
+        "output_formats": [],
+        "services": [],
+    }
+    if not collection_id:
+        return result
+
+    try:
+        r = requests.get(
+            f"{HARMONY}/capabilities",
+            params={"collectionId": collection_id, "version": "2"},
+            headers={
+                "Authorization": f"Bearer {token.strip()}",
+                "Accept": "application/json",
+                "User-Agent": "EarthdataCSVDownloader/2.3",
+            },
+            timeout=(2.5, 4.0),
+            allow_redirects=True,
+        )
+        if not r.ok:
+            return result
+        data = r.json()
+        services = []
+        for service in data.get("services") or []:
+            name = service.get("name")
+            if name and name not in services:
+                services.append(str(name))
+        return {
+            "available": True,
+            "bbox_subset": bool(data.get("bboxSubset")),
+            "variable_subset": bool(data.get("variableSubset")),
+            "concatenate": bool(data.get("concatenate")),
+            "output_formats": [str(v) for v in (data.get("outputFormats") or [])],
+            "services": services,
+        }
+    except Exception:
+        return result
+
+
+def _harmony_output_format(formats: list[str]) -> str | None:
+    normalized = {str(value).lower(): str(value) for value in formats or []}
+    for preferred in (
+        "text/csv",
+        "application/netcdf",
+        "application/x-netcdf4",
+        "application/x-netcdf",
+        "application/x-hdf",
+        "application/x-hdf5",
+        "image/tiff",
+    ):
+        if preferred in normalized:
+            return normalized[preferred]
+    return None
+
+
+def _harmony_subset_request(
+    session: requests.Session,
+    req: SingleGranuleDownloadRequest,
+    granule: dict,
+) -> tuple[bytes, str, str, str | None] | tuple[None, None, None, str | None]:
+    if not req.harmony_available or not req.harmony_bbox_subset or not req.collection_id:
+        return None, None, None, None
+
+    variable_path = "all"
+    if req.harmony_variable_subset and req.variable_filters:
+        clean = [str(v).strip() for v in req.variable_filters if str(v).strip()]
+        if clean:
+            variable_path = ",".join(clean)
+
+    url = (
+        f"{HARMONY}/{quote(req.collection_id, safe='')}"
+        f"/ogc-api-coverages/1.0.0/collections/{quote(variable_path, safe=',')}"
+        "/coverage/rangeset"
+    )
+    params: list[tuple[str, str]] = [
+        ("granuleId", str(granule.get("concept_id") or req.granule_id)),
+        ("subset", f"lat({req.bbox.south}:{req.bbox.north})"),
+        ("subset", f"lon({req.bbox.west}:{req.bbox.east})"),
+        ("maxResults", "1"),
+        ("ignoreErrors", "true"),
+        ("skipPreview", "true"),
+    ]
+    output_format = _harmony_output_format(req.harmony_output_formats)
+    if output_format:
+        params.append(("format", output_format))
+
+    fast_timeout = max(
+        1.0,
+        float(os.getenv("EARTHDATA_HARMONY_FAST_TIMEOUT_SECONDS", "4.0")),
+    )
+
+    try:
+        response = session.get(
+            url,
+            params=params,
+            timeout=(2.0, fast_timeout),
+            allow_redirects=True,
+        )
+    except requests.RequestException:
+        return None, None, None, None
+
+    if not response.ok:
+        return None, None, None, None
+
+    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+    body = response.content or b""
+
+    if content_type == "application/json" or body.lstrip().startswith(b"{"):
+        try:
+            payload = response.json()
+        except Exception:
+            return None, None, None, None
+
+        # Harmony returns job metadata when processing is asynchronous. Keep the
+        # job id so callers can use it as a reliability fallback after the
+        # direct route fails.
+        job_id = payload.get("jobID")
+        for link in payload.get("links") or []:
+            if link.get("rel") == "data" and link.get("href"):
+                data_url = str(link["href"])
+                try:
+                    data_response = session.get(
+                        data_url,
+                        timeout=(2.0, fast_timeout),
+                        allow_redirects=True,
+                    )
+                    if data_response.ok and data_response.content:
+                        name = _filename(data_url, data_response, 1)
+                        return data_response.content, name, str(data_response.url or data_url), str(job_id or "")
+                except Exception:
+                    pass
+        return None, None, None, str(job_id) if job_id else None
+
+    if not body:
+        return None, None, None, None
+
+    name = _filename(str(response.url or url), response, 1)
+    return body, name, str(response.url or url), None
+
+
+def _harmony_poll_job(
+    session: requests.Session,
+    job_id: str | None,
+    max_wait_seconds: float = 18.0,
+) -> tuple[bytes, str, str] | None:
+    if not job_id:
+        return None
+
+    deadline = time.monotonic() + max(1.0, max_wait_seconds)
+    job_url = f"{HARMONY}/jobs/{quote(job_id, safe='')}"
+
+    while time.monotonic() < deadline:
+        try:
+            response = session.get(
+                job_url,
+                headers={"Accept": "application/json"},
+                timeout=(2.0, 4.0),
+                allow_redirects=True,
+            )
+            if not response.ok:
+                return None
+            payload = response.json()
+        except Exception:
+            return None
+
+        status = str(payload.get("status") or "").lower()
+        links = payload.get("links") or []
+        data_links = [
+            str(link.get("href"))
+            for link in links
+            if link.get("rel") == "data" and link.get("href")
+        ]
+        if data_links:
+            for data_url in data_links:
+                try:
+                    data_response = session.get(
+                        data_url,
+                        timeout=(2.0, 8.0),
+                        allow_redirects=True,
+                    )
+                    if data_response.ok and data_response.content:
+                        return (
+                            data_response.content,
+                            _filename(data_url, data_response, 1),
+                            str(data_response.url or data_url),
+                        )
+                except Exception:
+                    continue
+
+        if status in {"failed", "canceled", "cancelled", "successful", "complete", "completed"}:
+            return None
+        time.sleep(0.5)
+
+    return None
+
+
+def _prefer_harmony_for_granule(req: SingleGranuleDownloadRequest, granule: dict) -> bool:
+    if not req.harmony_available or not req.harmony_bbox_subset:
+        return False
+    name = str(granule.get("granule_ur") or "").lower()
+    urls = " ".join(granule.get("download_urls") or []).lower()
+    size_mb = float(granule.get("size_mb") or 0.0)
+    risky_extension = any(
+        token in name or token in urls
+        for token in (".hdf", ".he5", ".h5", ".nc4", ".nc")
+    )
+    risky_collection = str(req.collection_short_name or "").upper().startswith(
+        ("AIRIBRAD", "OMNO2", "OMNO2D")
+    )
+    return risky_collection or risky_extension or size_mb >= 8.0
 
 
 def _download_granule_bytes(
@@ -484,7 +710,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.2.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.3.0"}
 
 
 @app.post("/api/token/validate")
@@ -616,7 +842,7 @@ async def granules_search(req: GranuleRequest):
     if req.date_range.start > req.date_range.end:
         raise HTTPException(400, "Start date must be on or before end date.")
     try:
-        return await CMRClient(req.token).granules(
+        granule_task = CMRClient(req.token).granules(
             collection_id=req.collection_id,
             bbox=req.bbox.cmr(),
             start_date=req.date_range.start.isoformat(),
@@ -625,6 +851,14 @@ async def granules_search(req: GranuleRequest):
             instrument=req.instrument,
             fallback_latest=req.fallback_latest,
         )
+        harmony_task = asyncio.to_thread(
+            _harmony_capabilities,
+            req.token,
+            req.collection_id,
+        )
+        result, harmony = await asyncio.gather(granule_task, harmony_task)
+        result["harmony"] = harmony
+        return result
     except Exception as exc:
         raise HTTPException(502, f"NASA granule search failed: {exc}")
 
@@ -705,12 +939,106 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
             "detail": req.cycle_detail,
             "basis": req.cycle_basis,
         }
-        content, report = await asyncio.to_thread(
-            _download_convert,
-            req,
-            [granule],
-            cycle_override,
-        )
+
+        access_path = "direct"
+        harmony_job_id: str | None = None
+        content = None
+        report = None
+
+        if _prefer_harmony_for_granule(req, granule):
+            try:
+                harmony_result = await asyncio.to_thread(
+                    _harmony_subset_request,
+                    _session(req.token),
+                    req,
+                    granule,
+                )
+                subset_data, subset_name, subset_url, harmony_job_id = harmony_result
+                if subset_data:
+                    meta = _granule_meta(
+                        req,
+                        granule,
+                        filename=subset_name or "",
+                        url=subset_url or "",
+                    )
+                    meta["conversion_status"] = "converted"
+                    meta["conversion_error"] = ""
+                    meta["source_access_method"] = "NASA Harmony bbox subset"
+                    frames = convert_bytes(
+                        subset_data,
+                        filename=subset_name or "harmony_subset",
+                        meta=meta,
+                        filters=req.variable_filters,
+                        bbox=req.bbox.dict4(),
+                        max_rows=max(0, int(req.max_rows_per_variable)),
+                    )
+                    combined = combine_frames(frames)
+                    if not combined.empty:
+                        content = combined.to_csv(index=False).encode("utf-8")
+                        report = {
+                            "rows": len(combined),
+                            "converted_frames": len(frames),
+                            "successful_granules": 1,
+                            "errors": [],
+                            "csv_bytes": len(content),
+                        }
+                        access_path = "harmony"
+            except Exception:
+                content = None
+                report = None
+
+        if content is None or report is None:
+            content, report = await asyncio.to_thread(
+                _download_convert,
+                req,
+                [granule],
+                cycle_override,
+            )
+
+            # If direct conversion only produced a failure manifest and Harmony
+            # already accepted an asynchronous subset job, give NASA a short
+            # reliability window to finish the reduced product and replace the
+            # failure row with real science data.
+            if report.get("successful_granules", 0) == 0 and harmony_job_id:
+                try:
+                    completed = await asyncio.to_thread(
+                        _harmony_poll_job,
+                        _session(req.token),
+                        harmony_job_id,
+                    )
+                    if completed:
+                        subset_data, subset_name, subset_url = completed
+                        meta = _granule_meta(
+                            req,
+                            granule,
+                            filename=subset_name,
+                            url=subset_url,
+                        )
+                        meta["conversion_status"] = "converted"
+                        meta["conversion_error"] = ""
+                        meta["source_access_method"] = "NASA Harmony async bbox subset"
+                        frames = convert_bytes(
+                            subset_data,
+                            filename=subset_name,
+                            meta=meta,
+                            filters=req.variable_filters,
+                            bbox=req.bbox.dict4(),
+                            max_rows=max(0, int(req.max_rows_per_variable)),
+                        )
+                        combined = combine_frames(frames)
+                        if not combined.empty:
+                            content = combined.to_csv(index=False).encode("utf-8")
+                            report = {
+                                "rows": len(combined),
+                                "converted_frames": len(frames),
+                                "successful_granules": 1,
+                                "errors": [],
+                                "csv_bytes": len(content),
+                            }
+                            access_path = "harmony-async"
+                except Exception:
+                    pass
+
         granule_label = granule.get("granule_ur") or req.granule_id
         name = _safe_csv(
             None,
@@ -729,6 +1057,7 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "X-Earthdata-Successful-Granules": str(report.get("successful_granules", 0)),
                 "X-Earthdata-Conversion-Status": "converted" if not report["errors"] else ("partial" if report.get("successful_granules", 0) else "failed"),
                 "X-Earthdata-Processing-Ms": str(elapsed_ms),
+                "X-Earthdata-Access-Path": access_path,
             },
         )
     except HTTPException:
