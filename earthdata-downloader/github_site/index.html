@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lupus Cortex Earthdata Downloader</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">LUPUS CORTEX · GITHUB HOSTED</p>
+        <h1>NASA Earthdata → training-ready CSV</h1>
+        <p class="lede">GitHub Pages hosts this interface. GitHub Actions performs the heavy HDF/NetCDF conversion on a normal Linux runner instead of a serverless function.</p>
+      </div>
+      <a class="ghost" href="https://github.com/rakatashraf/lupus-cortexdata/actions" target="_blank" rel="noreferrer">View processing jobs</a>
+    </header>
+
+    <section class="notice">
+      <strong>One-time security setup:</strong>
+      add your NASA Earthdata token as repository secret <code>EARTHDATA_TOKEN</code> in
+      <a href="https://github.com/rakatashraf/lupus-cortexdata/settings/secrets/actions" target="_blank" rel="noreferrer">GitHub Actions secrets</a>.
+      The token is never placed in the job issue or this page.
+    </section>
+
+    <form id="jobForm">
+      <section class="card">
+        <h2>1. Components and NASA collections</h2>
+        <label>Components
+          <input id="components" required placeholder="NO2, O3, SO2">
+        </label>
+        <label>Collection concept IDs
+          <textarea id="collections" required rows="6" placeholder="C1234567890-GES_DISC&#10;C0987654321-LARC_ASDC"></textarea>
+        </label>
+        <p class="hint">Use NASA CMR collection concept IDs. Multiple components and collections are supported.</p>
+      </section>
+
+      <section class="card">
+        <h2>2. Area and date</h2>
+        <div class="grid four">
+          <label>South<input id="south" type="number" step="any" value="23.55" required></label>
+          <label>West<input id="west" type="number" step="any" value="90.20" required></label>
+          <label>North<input id="north" type="number" step="any" value="24.05" required></label>
+          <label>East<input id="east" type="number" step="any" value="90.65" required></label>
+        </div>
+        <div class="grid two">
+          <label>Start date<input id="start" type="date" required></label>
+          <label>End / due date<input id="end" type="date" required></label>
+        </div>
+        <label class="check"><input id="fallback" type="checkbox" checked> If the requested range has no granules, use the closest available data date.</label>
+      </section>
+
+      <section class="card">
+        <h2>3. Output and processing</h2>
+        <div class="grid two">
+          <label>Output CSV name<input id="output" value="lupus_cortex_training.csv"></label>
+          <label>Parallel workers<input id="workers" type="number" min="1" max="16" value="8"></label>
+        </div>
+        <label class="check"><input id="strict" type="checkbox" checked> Strict component filtering. Unrelated variables are excluded.</label>
+        <label class="check"><input id="ground" type="checkbox" checked> Include available ground/reference observations.</label>
+        <label class="check"><input id="compact" type="checkbox"> Low-bandwidth compact training mode.</label>
+      </section>
+
+      <section class="card action">
+        <button type="submit">Create GitHub processing job</button>
+        <p id="status" class="hint">The button opens a pre-filled GitHub issue. Submit that issue to start the Actions runner.</p>
+      </section>
+    </form>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
