@@ -31,7 +31,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.8.0",
+    version="2.9.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -101,6 +101,13 @@ class DownloadRequest(GranuleRequest):
     max_rows_per_variable: int = 0
     low_bandwidth_training_mode: bool = True
     training_grid_degrees: float = Field(default=0.05, ge=0.005, le=1.0)
+    effective_start_date: Optional[date] = None
+    effective_end_date: Optional[date] = None
+    date_fallback_used: bool = False
+    date_fallback_date: Optional[date] = None
+    date_fallback_relation: Optional[str] = None
+    date_fallback_distance_days: Optional[float] = None
+    date_fallback_target_date: Optional[date] = None
 
 
 class SingleGranuleDownloadRequest(DownloadRequest):
@@ -166,7 +173,7 @@ def _session(token: str) -> requests.Session:
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.8",
+        "User-Agent": "EarthdataCSVDownloader/2.9",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -204,15 +211,33 @@ def _finalize_science_scope(
     combined: pd.DataFrame,
     req: DownloadRequest,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    if combined.empty or not req.strict_scope_mode:
+    if combined.empty:
         return combined, {}
+
+    effective_start = req.effective_start_date or req.date_range.start
+    effective_end = req.effective_end_date or req.date_range.end
+
     return strict_scope_filter(
         combined,
         _component_terms(req.component, []),
-        req.date_range.start.isoformat(),
-        req.date_range.end.isoformat(),
-        keep_audit_rows=False,
+        effective_start.isoformat(),
+        effective_end.isoformat(),
+        keep_audit_rows=not req.strict_scope_mode,
+        component_strict=req.strict_scope_mode,
+        requested_start_date=req.date_range.start.isoformat(),
+        requested_end_date=req.date_range.end.isoformat(),
+        date_fallback_used=req.date_fallback_used,
+        date_fallback_date=(
+            req.date_fallback_date.isoformat()
+            if req.date_fallback_date else None
+        ),
+        date_fallback_relation=req.date_fallback_relation,
+        date_fallback_distance_days=req.date_fallback_distance_days,
+        date_fallback_target_date=(
+            req.date_fallback_target_date or req.date_range.end
+        ).isoformat(),
     )
+
 
 
 def _harmony_capabilities(token: str, collection_id: str) -> dict:
@@ -538,6 +563,24 @@ def _granule_meta(
         "component_query": req.component,
         "requested_start_date": req.date_range.start.isoformat(),
         "requested_end_date": req.date_range.end.isoformat(),
+        "effective_start_date": (
+            req.effective_start_date or req.date_range.start
+        ).isoformat(),
+        "effective_end_date": (
+            req.effective_end_date or req.date_range.end
+        ).isoformat(),
+        "date_fallback_used": bool(req.date_fallback_used),
+        "date_fallback_date": (
+            req.date_fallback_date.isoformat() if req.date_fallback_date else ""
+        ),
+        "date_fallback_relation": req.date_fallback_relation or "",
+        "date_fallback_distance_days": (
+            req.date_fallback_distance_days
+            if req.date_fallback_distance_days is not None else ""
+        ),
+        "date_fallback_target_date": (
+            req.date_fallback_target_date or req.date_range.end
+        ).isoformat(),
         "strict_scope_mode": bool(req.strict_scope_mode),
         "collection_search_name": req.collection_search_name or "",
         "collection_id": req.collection_id,
@@ -841,20 +884,14 @@ def _download_convert(
                 combined["data_cycle_detail"] = detail
 
     scope_report: dict[str, Any] = {}
-    if req.strict_scope_mode and successful_granules > 0 and not combined.empty:
-        combined, scope_report = strict_scope_filter(
-            combined,
-            requested_components,
-            req.date_range.start.isoformat(),
-            req.date_range.end.isoformat(),
-            keep_audit_rows=False,
-        )
+    if successful_granules > 0 and not combined.empty:
+        combined, scope_report = _finalize_science_scope(combined, req)
         if combined.empty:
             error_text = (
-                "The granule decoded successfully, but no science rows matched both "
-                "the selected component(s) and requested date range."
+                "The granule decoded successfully, but no science rows matched "
+                "the selected component scope and effective source date."
             )
-            failure_class = "strict_scope_no_matching_rows"
+            failure_class = "scope_no_matching_rows"
             failure_classes[failure_class] = failure_classes.get(failure_class, 0) + 1
             errors.append({
                 "granule": ";".join(
@@ -870,9 +907,10 @@ def _download_convert(
                     req,
                     granules[0] if granules else {},
                     error_text,
-                    recovery_strategy="strict_component_and_date_gate",
+                    recovery_strategy="component_and_effective_date_gate",
                 )
             ])
+
 
     if req.low_bandwidth_training_mode and not combined.empty and successful_granules > 0:
         combined = compact_training_frame(combined, req.training_grid_degrees)
@@ -936,7 +974,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.8.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.9.0"}
 
 
 @app.post("/api/token/validate")
@@ -1075,7 +1113,7 @@ async def granules_search(req: GranuleRequest):
             end_date=req.date_range.end.isoformat(),
             platform=req.platform,
             instrument=req.instrument,
-            fallback_latest=(req.fallback_latest and not req.strict_scope_mode),
+            fallback_latest=req.fallback_latest,
         )
         harmony_task = asyncio.to_thread(
             _harmony_capabilities,
@@ -1099,11 +1137,29 @@ async def download_nasa(req: DownloadRequest):
             end_date=req.date_range.end.isoformat(),
             platform=req.platform,
             instrument=req.instrument,
-            fallback_latest=(req.fallback_latest and not req.strict_scope_mode),
+            fallback_latest=req.fallback_latest,
         )
         granules = result.get("items") or []
         if not granules:
             raise HTTPException(404, "No downloadable granules were found for this collection and area.")
+
+        req.effective_start_date = date.fromisoformat(
+            str(result.get("effective_start_date") or req.date_range.start.isoformat())
+        )
+        req.effective_end_date = date.fromisoformat(
+            str(result.get("effective_end_date") or req.date_range.end.isoformat())
+        )
+        req.date_fallback_used = bool(result.get("fallback_used"))
+        req.date_fallback_date = (
+            date.fromisoformat(str(result["fallback_date"]))
+            if result.get("fallback_date") else None
+        )
+        req.date_fallback_relation = result.get("fallback_relation")
+        req.date_fallback_distance_days = result.get("fallback_distance_days")
+        req.date_fallback_target_date = (
+            date.fromisoformat(str(result["fallback_target_date"]))
+            if result.get("fallback_target_date") else req.date_range.end
+        )
 
         content, report = await asyncio.to_thread(_download_convert, req, granules)
         search_label = req.component.strip() or (req.collection_search_name or "").strip() or req.collection_id
@@ -1352,6 +1408,15 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                 "X-Earthdata-Access-Path": access_path,
                 "X-Earthdata-Recovery-Metadata": recovery_metadata_strategy,
                 "X-Earthdata-Strict-Scope": str(bool(req.strict_scope_mode)).lower(),
+                "X-Earthdata-Date-Fallback-Used": str(bool(req.date_fallback_used)).lower(),
+                "X-Earthdata-Date-Fallback-Date": (
+                    req.date_fallback_date.isoformat() if req.date_fallback_date else ""
+                ),
+                "X-Earthdata-Date-Fallback-Relation": req.date_fallback_relation or "",
+                "X-Earthdata-Date-Fallback-Distance-Days": (
+                    str(req.date_fallback_distance_days)
+                    if req.date_fallback_distance_days is not None else ""
+                ),
                 "X-Earthdata-Scope-Dropped-Rows": str(
                     int(report.get("scope_report", {}).get("dropped_component_rows", 0))
                     + int(report.get("scope_report", {}).get("dropped_date_rows", 0))
