@@ -49,16 +49,89 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _issue_form_value(body: str, heading: str) -> str:
+    pattern = re.compile(
+        rf"(?ms)^###\s+{re.escape(heading)}\s*\n+(.*?)(?=^###\s+|\Z)"
+    )
+    match = pattern.search(body)
+    if not match:
+        return ""
+    value = match.group(1).strip()
+    if value in {"_No response_", "No response"}:
+        return ""
+    return value
+
+
+def _yes(value: str, default: bool = False) -> bool:
+    text = str(value or "").strip().casefold()
+    if not text:
+        return default
+    return text in {"yes", "true", "1", "on", "enabled"}
+
+
 def load_config(event_path: str) -> dict[str, Any]:
     event = json.loads(Path(event_path).read_text(encoding="utf-8"))
     body = str((event.get("issue") or {}).get("body") or "")
-    if JOB_START not in body or JOB_END not in body:
-        raise RuntimeError("Earthdata job JSON markers were not found in the issue body.")
-    payload = body.split(JOB_START, 1)[1].split(JOB_END, 1)[0]
-    payload = re.sub(r"^\s*\`\`\`(?:json)?\s*", "", payload, flags=re.I)
-    payload = re.sub(r"\s*\`\`\`\s*$", "", payload)
-    config = json.loads(payload.strip())
-    return config
+
+    if JOB_START in body and JOB_END in body:
+        payload = body.split(JOB_START, 1)[1].split(JOB_END, 1)[0]
+        payload = re.sub(r"^\s*\`\`\`(?:json)?\s*", "", payload, flags=re.I)
+        payload = re.sub(r"\s*\`\`\`\s*$", "", payload)
+        return json.loads(payload.strip())
+
+    components = _issue_form_value(body, "Components")
+    collections = _issue_form_value(body, "NASA collection concept IDs")
+    south = _issue_form_value(body, "South latitude")
+    west = _issue_form_value(body, "West longitude")
+    north = _issue_form_value(body, "North latitude")
+    east = _issue_form_value(body, "East longitude")
+    start_date = _issue_form_value(body, "Start date")
+    end_date = _issue_form_value(body, "End / due date")
+
+    if not all([components, collections, south, west, north, east, start_date, end_date]):
+        raise RuntimeError(
+            "The Earthdata issue form is missing one or more required fields."
+        )
+
+    workers_text = _issue_form_value(body, "Parallel workers") or "8"
+    try:
+        workers = max(1, min(int(workers_text), 16))
+    except ValueError:
+        workers = 8
+
+    return {
+        "components": components,
+        "collection_ids": collections,
+        "bbox": {
+            "south": float(south),
+            "west": float(west),
+            "north": float(north),
+            "east": float(east),
+        },
+        "start_date": start_date.strip(),
+        "end_date": end_date.strip(),
+        "fallback_latest": _yes(
+            _issue_form_value(body, "Closest-date fallback"),
+            True,
+        ),
+        "strict_component": _yes(
+            _issue_form_value(body, "Strict component filtering"),
+            True,
+        ),
+        "include_ground": _yes(
+            _issue_form_value(body, "Include ground observations"),
+            True,
+        ),
+        "low_bandwidth_training_mode": _yes(
+            _issue_form_value(body, "Compact training mode"),
+            False,
+        ),
+        "workers": workers,
+        "output_name": (
+            _issue_form_value(body, "Output CSV filename")
+            or "lupus_cortex_training.csv"
+        ),
+    }
 
 
 def clean_list(value: Any) -> list[str]:
