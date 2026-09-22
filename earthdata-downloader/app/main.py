@@ -31,7 +31,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="2.9.0",
+    version="3.0.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -160,20 +160,31 @@ def _safe_csv(name: Optional[str], fallback: str) -> str:
 
 def _session(token: str) -> requests.Session:
     session = requests.Session()
+    # Keep retries shallow here. Granule recovery already rotates alternate
+    # CMR URLs and performs a fresh metadata lookup; stacking transport retries
+    # underneath that causes pathological multi-minute stalls.
     retry = Retry(
-        total=3,
-        connect=3,
-        read=3,
-        status=3,
-        backoff_factor=1.0,
+        total=1,
+        connect=1,
+        read=1,
+        status=1,
+        backoff_factor=0.25,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset(["GET"]),
-        respect_retry_after_header=True,
+        respect_retry_after_header=False,
     )
-    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.mount(
+        "https://",
+        HTTPAdapter(
+            max_retries=retry,
+            pool_connections=64,
+            pool_maxsize=64,
+            pool_block=False,
+        ),
+    )
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/2.9",
+        "User-Agent": "EarthdataCSVDownloader/3.0",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -469,11 +480,43 @@ def _download_granule_bytes(
     session: requests.Session,
     url: str,
     idx: int,
+    recovery_mode: bool = False,
 ) -> tuple[bytes, str, str]:
     max_mb = max(1, int(os.getenv("EARTHDATA_MAX_GRANULE_MB", "256")))
     max_bytes = max_mb * 1024 * 1024
 
-    with session.get(url, stream=True, timeout=(25, 300), allow_redirects=True) as response:
+    connect_timeout = max(
+        1.0,
+        float(os.getenv("EARTHDATA_CONNECT_TIMEOUT_SECONDS", "3.0")),
+    )
+    read_timeout = max(
+        2.0,
+        float(
+            os.getenv(
+                "EARTHDATA_RECOVERY_READ_TIMEOUT_SECONDS" if recovery_mode
+                else "EARTHDATA_PRIMARY_READ_TIMEOUT_SECONDS",
+                "30.0" if recovery_mode else "15.0",
+            )
+        ),
+    )
+    total_budget = max(
+        read_timeout,
+        float(
+            os.getenv(
+                "EARTHDATA_RECOVERY_GRANULE_BUDGET_SECONDS" if recovery_mode
+                else "EARTHDATA_PRIMARY_GRANULE_BUDGET_SECONDS",
+                "45.0" if recovery_mode else "22.0",
+            )
+        ),
+    )
+    started = time.monotonic()
+
+    with session.get(
+        url,
+        stream=True,
+        timeout=(connect_timeout, read_timeout),
+        allow_redirects=True,
+    ) as response:
         if response.status_code in (401, 403):
             raise PermissionError(
                 "NASA denied access to this granule. Validate the Earthdata token and make sure "
@@ -513,6 +556,10 @@ def _download_granule_bytes(
 
         body = bytearray()
         for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if time.monotonic() - started > total_budget:
+                raise TimeoutError(
+                    f"Granule download exceeded the {total_budget:.0f}s fast-path budget."
+                )
             if not chunk:
                 continue
             body.extend(chunk)
@@ -787,9 +834,22 @@ def _download_convert(
         success = False
         url_errors: list[str] = []
 
-        for url in urls:
+        candidate_urls = urls[:6] if req.recovery_mode else urls[:2]
+        granule_deadline = time.monotonic() + (
+            55.0 if req.recovery_mode else 28.0
+        )
+
+        for url in candidate_urls:
+            if time.monotonic() >= granule_deadline:
+                url_errors.append("Granule fast-path time budget exhausted.")
+                break
             try:
-                data, filename, final_url = _download_granule_bytes(session, url, idx)
+                data, filename, final_url = _download_granule_bytes(
+                    session,
+                    url,
+                    idx,
+                    recovery_mode=req.recovery_mode,
+                )
                 meta = _granule_meta(req, granule, filename=filename, url=final_url)
                 meta["conversion_status"] = "converted"
                 meta["conversion_error"] = ""
@@ -974,7 +1034,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "2.9.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "3.0.0"}
 
 
 @app.post("/api/token/validate")

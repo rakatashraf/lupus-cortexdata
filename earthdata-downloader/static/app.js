@@ -152,19 +152,18 @@ function chooseDownloadConcurrency(granules){
   const heavyRatio=heavy/Math.max(1,total);
   const harmonyRatio=harmony/Math.max(1,total);
 
-  // Harmony-compatible products are already subset on NASA's side, so large
-  // jobs can safely use a wider pool without downloading giant raw granules.
-  if(total>=1000 && harmonyRatio>=0.70) return 24;
-  if(total>=500 && harmonyRatio>=0.70) return 20;
+  if(total>=3000 && harmonyRatio>=0.60) return 64;
+  if(total>=1000 && harmonyRatio>=0.60) return 48;
+  if(total>=500 && harmonyRatio>=0.60) return 40;
 
-  // Heavy raw HDF/HDF-EOS products need stricter pressure control.
-  if(heavyRatio>=0.60 && harmonyRatio<0.50) return Math.min(total,6);
-  if(heavyRatio>=0.30 && harmonyRatio<0.50) return Math.min(total,8);
+  if(heavyRatio>=0.60 && harmonyRatio<0.50) return Math.min(total,12);
+  if(heavyRatio>=0.30 && harmonyRatio<0.50) return Math.min(total,16);
 
-  if(total>=1000) return 16;
-  if(total>=500) return 14;
-  if(total>=100) return 12;
-  return Math.min(total,8);
+  if(total>=3000) return 40;
+  if(total>=1000) return 32;
+  if(total>=500) return 28;
+  if(total>=100) return 20;
+  return Math.min(total,12);
 }
 
 
@@ -891,7 +890,7 @@ $("downloadCsv").onclick=async function(){
         activeAttempts+" active · "+
         attemptsCompleted+" responses · "+
         primaryConcurrency+" primary workers · "+
-        (pendingRecovery?pendingRecovery+" awaiting recovery · ":"")+
+        (pendingRecovery?pendingRecovery+" live recovery pending · ":"")+
         (rate>0?rate.toFixed(rate>=10?1:2)+" finalized/s · ETA "+formatEta(eta):"waiting for first completed granule")+
         (avgBackend!==null?" · avg backend "+avgBackend+"ms":"");
     }
@@ -915,8 +914,8 @@ $("downloadCsv").onclick=async function(){
         const response=await apiResponseWithRetry(
           "/api/download/nasa/granule",
           buildGranuleBody(granule,recoveryMode),
-          recoveryMode?4:2,
-          {timeoutMs:recoveryMode?290000:210000}
+          recoveryMode?2:1,
+          {timeoutMs:recoveryMode?75000:45000}
         );
         attemptsCompleted++;
         activeAttempts=Math.max(0,activeAttempts-1);
@@ -1011,15 +1010,32 @@ $("downloadCsv").onclick=async function(){
         })()
       :Promise.resolve();
 
-    updateProgress("Primary conversion",0);
+    updateProgress("Primary + live recovery",0);
 
-    const recoveryQueue=[];
     await runBounded(
       currentGranules,
       primaryConcurrency,
       async function(granule,index){
-        const value=await attemptGranule(granule,false);
+        let value=await attemptGranule(granule,false);
         primaryCompleted++;
+
+        if(!value||!value.ok){
+          // Recover this granule immediately instead of waiting for every
+          // primary request in the whole job to finish.
+          const previous=value||{
+            ok:false,
+            granule:granule,
+            label:granule.granule_ur||granule.concept_id||("granule "+(index+1)),
+            error:"Primary conversion returned no result.",
+            manifest:null
+          };
+
+          updateProgress("Immediate recovery",1);
+          const recovered=await attemptGranule(granule,true);
+          if(!recovered.manifest&&previous.manifest) recovered.manifest=previous.manifest;
+          if(!recovered.error&&previous.error) recovered.error=previous.error;
+          value=recovered;
+        }
 
         if(value&&value.ok){
           queueCsv(value.text);
@@ -1028,58 +1044,28 @@ $("downloadCsv").onclick=async function(){
           totalRows+=Number.isFinite(value.rows)?value.rows:0;
           if(String(value.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
           else directProcessed++;
-          finalized++;
         }else{
-          recoveryQueue.push(value||{
-            ok:false,
-            granule:granule,
-            label:granule.granule_ur||granule.concept_id||("granule "+(index+1)),
-            error:"Primary conversion returned no result.",
-            manifest:null
-          });
+          const errorText=(value&&value.error)||"Granule conversion failed after immediate recovery.";
+          finalFailures.push(
+            ((value&&value.label)||granule.granule_ur||granule.concept_id||("granule "+(index+1)))+
+            ": "+errorText
+          );
+          if(!$("strictScopeMode").checked){
+            try{
+              queueCsv(
+                (value&&value.manifest)||
+                localFailureCsv(granule,errorText)
+              );
+              representedGranules++;
+            }catch(_){}
+          }
         }
 
-        updateProgress("Primary conversion",recoveryQueue.length);
+        finalized++;
+        updateProgress("Primary + live recovery",0);
         return value;
       }
     );
-
-    updateProgress("Recovery pass",recoveryQueue.length);
-
-    if(recoveryQueue.length){
-      await sleep(750);
-      await runBounded(
-        recoveryQueue,
-        Math.min(4,recoveryQueue.length),
-        async function(previous,index){
-          const next=await attemptGranule(previous.granule,true);
-          if(!next.manifest&&previous.manifest) next.manifest=previous.manifest;
-          if(!next.error&&previous.error) next.error=previous.error;
-
-          if(next.ok){
-            queueCsv(next.text);
-            representedGranules++;
-            convertedGranules++;
-            totalRows+=Number.isFinite(next.rows)?next.rows:0;
-            if(String(next.accessPath||"").indexOf("harmony")===0) harmonyAccelerated++;
-            else directProcessed++;
-          }else{
-            const errorText=next.error||previous.error||"Granule conversion failed after recovery retries.";
-            finalFailures.push(next.label+": "+errorText);
-            if(!$("strictScopeMode").checked){
-              try{
-                queueCsv(next.manifest||previous.manifest||localFailureCsv(next.granule,errorText));
-                representedGranules++;
-              }catch(_){}
-            }
-          }
-
-          finalized++;
-          updateProgress("Recovery pass",Math.max(0,recoveryQueue.length-index-1));
-          return next;
-        }
-      );
-    }
 
     await groundPromise;
     await writeQueue;
