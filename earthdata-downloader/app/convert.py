@@ -432,8 +432,16 @@ def strict_scope_filter(
     start_date: Any,
     end_date: Any,
     keep_audit_rows: bool = False,
+    component_strict: bool = True,
+    requested_start_date: Any | None = None,
+    requested_end_date: Any | None = None,
+    date_fallback_used: bool = False,
+    date_fallback_date: Any | None = None,
+    date_fallback_relation: str | None = None,
+    date_fallback_distance_days: float | None = None,
+    date_fallback_target_date: Any | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Keep only rows matching selected component(s) and requested UTC dates."""
+    """Filter to the effective source date and optionally enforce component purity."""
     if df.empty:
         return df, {
             "input_rows": 0,
@@ -452,8 +460,17 @@ def strict_scope_filter(
             seen_components.add(key)
             requested.append(value)
 
-    start_ts = pd.Timestamp(f"{start_date}T00:00:00Z")
-    end_ts = pd.Timestamp(f"{end_date}T23:59:59.999999Z")
+    effective_start = str(start_date)
+    effective_end = str(end_date)
+    original_start = str(
+        requested_start_date if requested_start_date is not None else start_date
+    )
+    original_end = str(
+        requested_end_date if requested_end_date is not None else end_date
+    )
+
+    start_ts = pd.Timestamp(f"{effective_start}T00:00:00Z")
+    end_ts = pd.Timestamp(f"{effective_end}T23:59:59.999999Z")
 
     work = df.copy()
     status = work.get(
@@ -473,30 +490,39 @@ def strict_scope_filter(
     component_basis: list[str] = []
     component_match: list[bool] = []
 
-    for variable in variables:
-        scores: list[tuple[int, int, str, str]] = []
-        for index, component in enumerate(requested):
-            score, basis = _component_match_score(variable, component)
-            if score > 0:
-                scores.append((score, -index, component, basis))
+    if component_strict:
+        for variable in variables:
+            scores: list[tuple[int, int, str, str]] = []
+            for index, component in enumerate(requested):
+                score, basis = _component_match_score(variable, component)
+                if score > 0:
+                    scores.append((score, -index, component, basis))
 
-        if scores:
-            scores.sort(reverse=True)
-            best = scores[0]
-            assigned_components.append(best[2])
-            component_basis.append(best[3])
-            component_match.append(True)
-            continue
+            if scores:
+                scores.sort(reverse=True)
+                best = scores[0]
+                assigned_components.append(best[2])
+                component_basis.append(best[3])
+                component_match.append(True)
+                continue
 
-        base = _science_basename(variable)
-        if len(requested) == 1 and base in _GENERIC_SCIENCE_VARIABLES:
-            assigned_components.append(requested[0])
-            component_basis.append("single_component_generic_science_field")
-            component_match.append(True)
-        else:
-            assigned_components.append("")
-            component_basis.append("no_unambiguous_component_match")
-            component_match.append(False)
+            base = _science_basename(variable)
+            if len(requested) == 1 and base in _GENERIC_SCIENCE_VARIABLES:
+                assigned_components.append(requested[0])
+                component_basis.append("single_component_generic_science_field")
+                component_match.append(True)
+            else:
+                assigned_components.append("")
+                component_basis.append("no_unambiguous_component_match")
+                component_match.append(False)
+    else:
+        existing = work.get(
+            "component_primary",
+            pd.Series("", index=work.index),
+        ).fillna("").astype(str)
+        assigned_components = existing.tolist()
+        component_basis = ["component_filter_disabled"] * len(work)
+        component_match = [True] * len(work)
 
     work["scope_component_match"] = component_match
     work["component_match_basis"] = component_basis
@@ -526,12 +552,11 @@ def strict_scope_filter(
     exact_in_range = exact_observation & observation.between(start_ts, end_ts)
 
     no_observation = ~exact_observation
-    interval_fully_inside = (
+    interval_overlap = (
         no_observation
         & granule_start.notna()
-        & (granule_start >= start_ts)
         & (granule_start <= end_ts)
-        & (granule_end.isna() | (granule_end <= end_ts))
+        & (granule_end.isna() | (granule_end >= start_ts))
     )
     timestamp_only_in_range = (
         no_observation
@@ -540,25 +565,52 @@ def strict_scope_filter(
         & data_timestamp.between(start_ts, end_ts)
     )
 
-    date_match = exact_in_range | interval_fully_inside | timestamp_only_in_range
+    date_match = exact_in_range | interval_overlap | timestamp_only_in_range
     date_basis = np.select(
-        [exact_in_range, interval_fully_inside, timestamp_only_in_range],
+        [exact_in_range, interval_overlap, timestamp_only_in_range],
         [
-            "exact_observation_time",
-            "granule_interval_fully_inside_requested_range",
-            "source_timestamp_inside_requested_range",
+            "exact_observation_time_in_effective_range",
+            "granule_interval_overlaps_effective_range_no_row_time",
+            "source_timestamp_inside_effective_range",
         ],
-        default="outside_or_ambiguous_requested_range",
+        default="outside_effective_date_range",
     )
 
     work["scope_date_match"] = date_match
     work["scope_date_basis"] = date_basis
-    work["requested_start_date"] = str(start_date)
-    work["requested_end_date"] = str(end_date)
-    work["strict_scope_match"] = work["scope_component_match"] & work["scope_date_match"] & ~audit_mask
+    work["requested_start_date"] = original_start
+    work["requested_end_date"] = original_end
+    work["effective_start_date"] = effective_start
+    work["effective_end_date"] = effective_end
+    work["date_fallback_used"] = bool(date_fallback_used)
+    work["date_fallback_date"] = (
+        str(date_fallback_date) if date_fallback_date is not None else ""
+    )
+    work["date_fallback_relation"] = date_fallback_relation or ""
+    work["date_fallback_distance_days"] = (
+        date_fallback_distance_days
+        if date_fallback_distance_days is not None
+        else np.nan
+    )
+    work["date_fallback_target_date"] = (
+        str(date_fallback_target_date)
+        if date_fallback_target_date is not None
+        else original_end
+    )
+
+    component_ok = (
+        work["scope_component_match"]
+        if component_strict
+        else pd.Series(True, index=work.index)
+    )
+    work["strict_scope_match"] = component_ok & work["scope_date_match"] & ~audit_mask
 
     assigned_series = pd.Series(assigned_components, index=work.index, dtype="object")
-    matched = work["strict_scope_match"]
+    matched_component_rows = (
+        work["scope_component_match"] & ~audit_mask
+        if component_strict
+        else pd.Series(False, index=work.index)
+    )
 
     for column in ("component_primary", "component_segment", "component_names"):
         if column in work.columns:
@@ -566,12 +618,15 @@ def strict_scope_filter(
     if "component_count" in work.columns:
         work["component_count"] = work["component_count"].astype("object")
 
-    work.loc[matched, "component_primary"] = assigned_series.loc[matched]
-    work.loc[matched, "component_segment"] = assigned_series.loc[matched]
-    work.loc[matched, "component_names"] = assigned_series.loc[matched]
-    work.loc[matched, "component_count"] = 1
+    if component_strict:
+        work.loc[matched_component_rows, "component_primary"] = assigned_series.loc[matched_component_rows]
+        work.loc[matched_component_rows, "component_segment"] = assigned_series.loc[matched_component_rows]
+        work.loc[matched_component_rows, "component_names"] = assigned_series.loc[matched_component_rows]
+        work.loc[matched_component_rows, "component_count"] = 1
 
-    filtered_mask = matched | (audit_mask if keep_audit_rows else False)
+    filtered_mask = work["strict_scope_match"] | (
+        audit_mask if keep_audit_rows else False
+    )
     result = work.loc[filtered_mask].copy()
 
     if not result.empty:
@@ -611,20 +666,27 @@ def strict_scope_filter(
         result.loc[
             ~result["strict_scope_match"].fillna(False).astype(bool),
             "training_exclude_reason",
-        ] = "strict_scope_excluded"
+        ] = "scope_excluded"
 
     science_mask = ~audit_mask
     report = {
         "input_rows": int(len(work)),
         "science_rows": int(science_mask.sum()),
-        "retained_rows": int((work["strict_scope_match"]).sum()),
-        "dropped_component_rows": int(
-            (science_mask & ~work["scope_component_match"]).sum()
+        "retained_rows": int(work["strict_scope_match"].sum()),
+        "dropped_component_rows": (
+            int((science_mask & ~work["scope_component_match"]).sum())
+            if component_strict else 0
         ),
         "dropped_date_rows": int(
-            (science_mask & work["scope_component_match"] & ~work["scope_date_match"]).sum()
+            (science_mask & component_ok & ~work["scope_date_match"]).sum()
         ),
         "audit_rows": int(audit_mask.sum()),
+        "effective_start_date": effective_start,
+        "effective_end_date": effective_end,
+        "date_fallback_used": bool(date_fallback_used),
+        "date_fallback_date": str(date_fallback_date or ""),
+        "date_fallback_relation": date_fallback_relation or "",
+        "date_fallback_distance_days": date_fallback_distance_days,
     }
     return result.reset_index(drop=True), report
 
@@ -2767,6 +2829,13 @@ def combine_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         "strict_scope_match",
         "requested_start_date",
         "requested_end_date",
+        "effective_start_date",
+        "effective_end_date",
+        "date_fallback_used",
+        "date_fallback_date",
+        "date_fallback_relation",
+        "date_fallback_distance_days",
+        "date_fallback_target_date",
         "scope_date_match",
         "scope_date_basis",
         "collection_segment_key",
