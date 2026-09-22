@@ -54,7 +54,7 @@ jobs:
           from rasterio.transform import from_origin
 
           from app.convert import combine_frames, compact_training_frame, component_filter_terms, convert_bytes, strict_scope_filter, _hdf4_airs_file
-          from app.main import _classify_granule_failure, _harmony_output_format, _merge_refreshed_granule
+          from app.main import _classify_granule_failure, _component_variable_filters, _harmony_output_format, _merge_refreshed_granule
           from app.external import resolve_ground
 
           bbox = {"south": 23.0, "west": 90.0, "north": 24.0, "east": 91.0}
@@ -635,6 +635,28 @@ jobs:
           )
           assert irrelevant_filtered.empty
           assert irrelevant_report["dropped_component_rows"] == 1
+
+          cmr_vars = [
+              {
+                  "name": "/HDFEOS/SWATHS/ColumnAmountNO2Trop",
+                  "long_name": "Tropospheric nitrogen dioxide column",
+                  "standard_name": "",
+                  "definition": "NO2 retrieval",
+                  "additional_identifiers": ["ColumnAmountNO2Trop"],
+                  "science_keywords": ["ATMOSPHERE", "NITROGEN DIOXIDE"],
+              },
+              {
+                  "name": "/HDFEOS/SWATHS/O3",
+                  "long_name": "Total ozone",
+                  "standard_name": "",
+                  "definition": "Ozone retrieval",
+                  "additional_identifiers": ["O3"],
+                  "science_keywords": ["ATMOSPHERE", "OZONE"],
+              },
+          ]
+          resolved_no2 = _component_variable_filters(cmr_vars, ["NO2"])
+          assert "ColumnAmountNO2Trop" in resolved_no2
+          assert "O3" not in resolved_no2
 
           assert _classify_granule_failure("NASA returned 404 for this granule URL") == "stale_or_missing_url"
           assert _classify_granule_failure("NASA temporarily rate-limited the download request") == "rate_limited"

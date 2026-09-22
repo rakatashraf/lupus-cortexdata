@@ -633,7 +633,9 @@ $("findGranules").onclick=async function(){
           platform:csvList($("platformFilter").value)[0]||null,
           instrument:csvList($("instrumentFilter").value)[0]||null,
           fallback_latest:$("fallbackLatest").checked,
-          strict_scope_mode:$("strictScopeMode").checked
+          strict_scope_mode:$("strictScopeMode").checked,
+          components:(collection.matched_components&&collection.matched_components.length)
+            ?collection.matched_components.slice():componentValues().slice()
         };
         const response=await apiResponseWithRetry(
           "/api/granules/search",
@@ -676,6 +678,8 @@ $("findGranules").onclick=async function(){
           ?collection.matched_components.slice():componentValues().slice();
         item._granule_cycle=cycle;
         item._harmony=harmony;
+        item._component_variable_filters=Array.isArray(data.component_variable_filters)
+          ?data.component_variable_filters.slice():[];
         item._effective_start_date=data.effective_start_date||dates().start;
         item._effective_end_date=data.effective_end_date||dates().end;
         item._date_fallback_used=!!data.fallback_used;
@@ -835,8 +839,13 @@ $("downloadCsv").onclick=async function(){
     }
 
     function buildGranuleBody(granule,recoveryMode){
+      const manualFilters=csvList($("variableFilters").value);
       return {
         ...baseBody,
+        variable_filters:manualFilters.length
+          ?manualFilters
+          :(Array.isArray(granule._component_variable_filters)
+              ?granule._component_variable_filters:[]),
         component:(granule._matched_components&&granule._matched_components.length)
           ?granule._matched_components.join("; "):componentValues().join("; "),
         collection_id:granule._collection_id||"",

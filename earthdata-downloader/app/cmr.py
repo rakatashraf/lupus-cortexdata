@@ -332,6 +332,88 @@ class CMRClient:
 
         return hits, items
 
+    async def variables_for_collection(
+        self,
+        collection_id: str,
+    ) -> list[dict[str, Any]]:
+        """Return UMM-Var records explicitly associated with one collection."""
+        if not collection_id:
+            return []
+
+        try:
+            _, items = await self._all_pages(
+                "variables.umm_json",
+                [
+                    ("keyword", collection_id),
+                    ("options[keyword][pattern]", "false"),
+                ],
+                page_size=2000,
+            )
+        except Exception:
+            return []
+
+        out: list[dict[str, Any]] = []
+        for entry in items:
+            associations = entry.get("associations") or {}
+            collection_refs = associations.get("collections") or []
+
+            associated = False
+            for ref in collection_refs:
+                if isinstance(ref, str) and ref == collection_id:
+                    associated = True
+                    break
+                if isinstance(ref, dict):
+                    concept_id = (
+                        ref.get("concept-id")
+                        or ref.get("concept_id")
+                        or ref.get("conceptId")
+                    )
+                    if concept_id == collection_id:
+                        associated = True
+                        break
+            if not associated:
+                continue
+
+            umm = entry.get("umm") or {}
+            additional_ids = []
+            for identifier in umm.get("AdditionalIdentifiers") or []:
+                if isinstance(identifier, dict) and identifier.get("Identifier"):
+                    additional_ids.append(str(identifier["Identifier"]))
+
+            science_keywords = []
+            for keyword in umm.get("ScienceKeywords") or []:
+                if not isinstance(keyword, dict):
+                    continue
+                science_keywords.extend(
+                    str(keyword.get(key) or "")
+                    for key in (
+                        "Category",
+                        "Topic",
+                        "Term",
+                        "VariableLevel1",
+                        "VariableLevel2",
+                        "VariableLevel3",
+                        "DetailedVariable",
+                    )
+                    if keyword.get(key)
+                )
+
+            out.append(
+                {
+                    "concept_id": (entry.get("meta") or {}).get("concept-id"),
+                    "name": str(umm.get("Name") or ""),
+                    "long_name": str(umm.get("LongName") or ""),
+                    "standard_name": str(umm.get("StandardName") or ""),
+                    "definition": str(umm.get("Definition") or ""),
+                    "units": str(umm.get("Units") or ""),
+                    "variable_type": str(umm.get("VariableType") or ""),
+                    "additional_identifiers": additional_ids,
+                    "science_keywords": science_keywords,
+                }
+            )
+        return out
+
+
     async def granule_by_id(
         self,
         granule_id: str,

@@ -21,7 +21,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .cmr import CMRClient
-from .convert import combine_frames, compact_training_frame, component_filter_terms, convert_bytes, strict_scope_filter
+from .convert import combine_frames, compact_training_frame, component_filter_terms, convert_bytes, strict_scope_filter, _component_match_score
 from .external import fetch as fetch_external
 from .external import fetch_ground as fetch_ground_external
 from .external import resolve as resolve_external
@@ -32,7 +32,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="3.1.0",
+    version="3.2.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -104,6 +104,7 @@ class GranuleRequest(BaseModel):
     instrument: Optional[str] = None
     fallback_latest: bool = True
     strict_scope_mode: bool = True
+    components: list[str] = []
 
 
 class DownloadRequest(GranuleRequest):
@@ -202,7 +203,7 @@ def _session(token: str) -> requests.Session:
     )
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/3.1",
+        "User-Agent": "EarthdataCSVDownloader/3.2",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -285,7 +286,7 @@ def _harmony_capabilities(token: str, collection_id: str) -> dict:
     headers = {
         "Authorization": f"Bearer {token.strip()}",
         "Accept": "application/json",
-        "User-Agent": "EarthdataCSVDownloader/3.1",
+        "User-Agent": "EarthdataCSVDownloader/3.2",
     }
 
     # Version 1 intentionally exposes bboxSubset/variableSubset/etc. at the
@@ -1063,7 +1064,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "3.1.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "3.2.0"}
 
 
 @app.post("/api/token/validate")
@@ -1190,12 +1191,75 @@ async def collections_search(req: CollectionRequest):
         raise HTTPException(502, f"NASA collection search failed: {exc}")
 
 
+def _component_variable_filters(
+    records: list[dict[str, Any]],
+    components: list[str],
+) -> list[str]:
+    """Resolve real source-variable names from CMR UMM-Var metadata."""
+    requested = [str(value).strip() for value in components if str(value).strip()]
+    if not records or not requested:
+        return []
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    for record in records:
+        searchable_fields: list[str] = [
+            str(record.get("name") or ""),
+            str(record.get("long_name") or ""),
+            str(record.get("standard_name") or ""),
+            str(record.get("definition") or ""),
+        ]
+        searchable_fields.extend(
+            str(value)
+            for value in (record.get("additional_identifiers") or [])
+            if str(value).strip()
+        )
+        searchable_fields.extend(
+            str(value)
+            for value in (record.get("science_keywords") or [])
+            if str(value).strip()
+        )
+
+        matched = False
+        for component in requested:
+            if any(
+                _component_match_score(field, component)[0] > 0
+                for field in searchable_fields
+                if field
+            ):
+                matched = True
+                break
+
+        if not matched:
+            continue
+
+        for value in [
+            record.get("name"),
+            *(record.get("additional_identifiers") or []),
+        ]:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            for candidate in (
+                text,
+                text.replace("\\", "/").split("/")[-1],
+            ):
+                key = candidate.casefold()
+                if candidate and key not in seen:
+                    seen.add(key)
+                    candidates.append(candidate)
+
+    return candidates
+
+
 @app.post("/api/granules/search")
 async def granules_search(req: GranuleRequest):
     if req.date_range.start > req.date_range.end:
         raise HTTPException(400, "Start date must be on or before end date.")
     try:
-        granule_task = CMRClient(req.token).granules(
+        client = CMRClient(req.token)
+        granule_task = client.granules(
             collection_id=req.collection_id,
             bbox=req.bbox.cmr(),
             start_date=req.date_range.start.isoformat(),
@@ -1209,8 +1273,18 @@ async def granules_search(req: GranuleRequest):
             req.token,
             req.collection_id,
         )
-        result, harmony = await asyncio.gather(granule_task, harmony_task)
+        variables_task = client.variables_for_collection(req.collection_id)
+        result, harmony, variable_records = await asyncio.gather(
+            granule_task,
+            harmony_task,
+            variables_task,
+        )
         result["harmony"] = harmony
+        result["component_variable_filters"] = _component_variable_filters(
+            variable_records,
+            req.components,
+        )
+        result["collection_variable_count"] = len(variable_records)
         return result
     except Exception as exc:
         raise HTTPException(502, f"NASA granule search failed: {exc}")
