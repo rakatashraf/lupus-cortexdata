@@ -256,6 +256,7 @@ def _harmony_capabilities(token: str, collection_id: str) -> dict:
         "available": False,
         "bbox_subset": False,
         "variable_subset": False,
+        "temporal_subset": False,
         "concatenate": False,
         "output_formats": [],
         "services": [],
@@ -263,32 +264,50 @@ def _harmony_capabilities(token: str, collection_id: str) -> dict:
     if not collection_id:
         return result
 
+    headers = {
+        "Authorization": f"Bearer {token.strip()}",
+        "Accept": "application/json",
+        "User-Agent": "EarthdataCSVDownloader/3.0",
+    }
+
+    # Version 1 intentionally exposes bboxSubset/variableSubset/etc. at the
+    # root, matching the fields this downloader needs. Versions 2/3 structure
+    # capabilities under service/summary objects.
     try:
-        r = requests.get(
+        response = requests.get(
             f"{HARMONY}/capabilities",
-            params={"collectionId": collection_id, "version": "2"},
-            headers={
-                "Authorization": f"Bearer {token.strip()}",
-                "Accept": "application/json",
-                "User-Agent": "EarthdataCSVDownloader/2.3",
-            },
-            timeout=(2.5, 4.0),
+            params={"collectionId": collection_id, "version": "1"},
+            headers=headers,
+            timeout=(2.5, 6.0),
             allow_redirects=True,
         )
-        if not r.ok:
+        if not response.ok:
             return result
-        data = r.json()
+
+        data = response.json()
         services = []
         for service in data.get("services") or []:
             name = service.get("name")
             if name and name not in services:
                 services.append(str(name))
+
+        formats = [str(v) for v in (data.get("outputFormats") or [])]
+        available = bool(
+            data.get("bboxSubset")
+            or data.get("variableSubset")
+            or data.get("temporalSubset")
+            or data.get("concatenate")
+            or formats
+            or services
+        )
+
         return {
-            "available": True,
+            "available": available,
             "bbox_subset": bool(data.get("bboxSubset")),
             "variable_subset": bool(data.get("variableSubset")),
+            "temporal_subset": bool(data.get("temporalSubset")),
             "concatenate": bool(data.get("concatenate")),
-            "output_formats": [str(v) for v in (data.get("outputFormats") or [])],
+            "output_formats": formats,
             "services": services,
         }
     except Exception:
