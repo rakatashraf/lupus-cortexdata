@@ -1,24 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "earthdata-downloader": {
-      "root": "earthdata-downloader/",
-      "entrypoint": "app.main:app",
-      "functions": {
-        "app/main.py": {
-          "maxDuration": 300,
-          "memory": 2048
-        }
-      }
-    }
-  },
-  "rewrites": [
+  "redirects": [
     {
       "source": "/(.*)",
-      "destination": {
-        "service": "earthdata-downloader"
-      }
+      "destination": "https://github.com/rakatashraf/lupus-cortexdata/issues/new?template=earthdata-job.yml",
+      "permanent": true
     }
-  ],
-  "fluid": true
+  ]
 }
