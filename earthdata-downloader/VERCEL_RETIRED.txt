@@ -1,0 +1,5 @@
+Vercel deployment retired.
+Use the GitHub-native Earthdata job form:
+https://github.com/rakatashraf/lupus-cortexdata/issues/new?template=earthdata-job.yml
+
+Retirement commit: 2251357c95a6b19c598e1eb47236412381cfe8af
