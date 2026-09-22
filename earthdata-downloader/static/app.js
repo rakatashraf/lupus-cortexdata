@@ -185,7 +185,7 @@ async function apiResponse(path,body){
 
 const FIXED_EXPORT_COLUMNS=[
   "component_segment","component_primary","component_names","component_count",
-  "scope_component_match","component_match_basis","strict_scope_match","requested_start_date","requested_end_date","scope_date_match","scope_date_basis",
+  "scope_component_match","component_match_basis","strict_scope_match","requested_start_date","requested_end_date","effective_start_date","effective_end_date","date_fallback_used","date_fallback_date","date_fallback_relation","date_fallback_distance_days","date_fallback_target_date","scope_date_match","scope_date_basis",
   "collection_segment_key","collection_id","collection_short_name","collection_title",
   "collection_version","collection_provider","collection_processing_level",
   "granule_id","granule_ur","granule_production_date_utc","granule_size_mb",
@@ -232,6 +232,13 @@ function localFailureCsv(granule,errorText){
     strict_scope_match:false,
     requested_start_date:$("startDate").value||"",
     requested_end_date:$("endDate").value||"",
+    effective_start_date:granule._effective_start_date||$("startDate").value||"",
+    effective_end_date:granule._effective_end_date||$("endDate").value||"",
+    date_fallback_used:!!granule._date_fallback_used,
+    date_fallback_date:granule._date_fallback_date||"",
+    date_fallback_relation:granule._date_fallback_relation||"",
+    date_fallback_distance_days:granule._date_fallback_distance_days==null?"":granule._date_fallback_distance_days,
+    date_fallback_target_date:granule._date_fallback_target_date||$("endDate").value||"",
     scope_date_match:false,
     scope_date_basis:"audit_row",
     collection_segment_key:[
@@ -388,16 +395,14 @@ function configureLowBandwidthMode(){
 
 function syncStrictScopeMode(){
   const strict=$("strictScopeMode").checked;
-  const fallback=$("fallbackLatest");
-  fallback.disabled=strict;
-  if(strict) fallback.checked=false;
   const hint=$("strictScopeHint");
   if(hint){
     hint.textContent=strict
-      ?"Strict mode active: only selected component variables and rows inside the selected UTC date range can enter the CSV. Most-recent fallback is disabled."
-      :"Compatibility mode: most-recent fallback and audit rows may be included.";
+      ?"Strict component mode active: unrelated variables/components are removed. Date resolution is separate: the requested range is used first, and the closest available date is used only when that range has no granules."
+      :"Component strictness is off. Date resolution still uses the requested range first and closest-date fallback when enabled.";
   }
 }
+
 
 async function health(){
   try{
@@ -628,7 +633,7 @@ $("findGranules").onclick=async function(){
           date_range:dates(),
           platform:csvList($("platformFilter").value)[0]||null,
           instrument:csvList($("instrumentFilter").value)[0]||null,
-          fallback_latest:$("fallbackLatest").checked && !$("strictScopeMode").checked,
+          fallback_latest:$("fallbackLatest").checked,
           strict_scope_mode:$("strictScopeMode").checked
         };
         const response=await apiResponseWithRetry(
@@ -672,6 +677,13 @@ $("findGranules").onclick=async function(){
           ?collection.matched_components.slice():componentValues().slice();
         item._granule_cycle=cycle;
         item._harmony=harmony;
+        item._effective_start_date=data.effective_start_date||dates().start;
+        item._effective_end_date=data.effective_end_date||dates().end;
+        item._date_fallback_used=!!data.fallback_used;
+        item._date_fallback_date=data.fallback_date||null;
+        item._date_fallback_relation=data.fallback_relation||null;
+        item._date_fallback_distance_days=data.fallback_distance_days==null?null:Number(data.fallback_distance_days);
+        item._date_fallback_target_date=data.fallback_target_date||dates().end;
         currentGranules.push(item);
       });
     });
@@ -680,7 +692,7 @@ $("findGranules").onclick=async function(){
     if(currentGranules.length){
       msg.className=failures.length||fallbackCollections?"message warn":"message success";
       msg.textContent="Loaded "+currentGranules.length+" granule(s) across "+collections.length+" selected collection(s)."+
-        (fallbackCollections?" "+fallbackCollections+" collection(s) used most-recent fallback dates.":"")+
+        (fallbackCollections?" "+fallbackCollections+" collection(s) used the closest available date to the requested end date.":"")+
         (failures.length?" "+failures.length+" collection search(es) failed after retries.":"");
     }else{
       msg.className="message error";
@@ -705,7 +717,10 @@ function renderGranules(items){
     const origin=item._collection_short_name||item._collection_title||item._collection_id||"collection unknown";
     const components=(item._matched_components||[]).join(", ");
     el.innerHTML="<strong>"+escapeHtml(item.granule_ur||item.concept_id||"Granule")+"</strong>"+
-      "<span><b>Start UTC:</b> "+escapeHtml(start)+"<br><b>End UTC:</b> "+escapeHtml(end)+"</span>"+
+      "<span><b>Start UTC:</b> "+escapeHtml(start)+"<br><b>End UTC:</b> "+escapeHtml(end)+
+      (item._date_fallback_used
+        ?"<br><b>Date fallback:</b> "+escapeHtml(item._date_fallback_date||"")+" · "+escapeHtml(item._date_fallback_relation||"")
+        :"")+"</span>"+
       "<span class='collection-origin'><b>"+escapeHtml(origin)+"</b>"+(components?"<br>"+escapeHtml(components):"")+"</span>"+
       "<span>"+(item.size_mb?escapeHtml(String(item.size_mb))+" MB":"")+"</span>";
     root.appendChild(el);
@@ -762,7 +777,7 @@ $("downloadCsv").onclick=async function(){
       date_range:dates(),
       platform:csvList($("platformFilter").value)[0]||null,
       instrument:csvList($("instrumentFilter").value)[0]||null,
-      fallback_latest:$("fallbackLatest").checked && !$("strictScopeMode").checked,
+      fallback_latest:$("fallbackLatest").checked,
       strict_scope_mode:$("strictScopeMode").checked,
       variable_filters:csvList($("variableFilters").value),
       output_name:null,
@@ -850,6 +865,13 @@ $("downloadCsv").onclick=async function(){
         harmony_concatenate:!!(granule._harmony&&granule._harmony.concatenate),
         harmony_output_formats:(granule._harmony&&Array.isArray(granule._harmony.output_formats))?granule._harmony.output_formats:[],
         harmony_services:(granule._harmony&&Array.isArray(granule._harmony.services))?granule._harmony.services:[],
+        effective_start_date:granule._effective_start_date||dates().start,
+        effective_end_date:granule._effective_end_date||dates().end,
+        date_fallback_used:!!granule._date_fallback_used,
+        date_fallback_date:granule._date_fallback_date||null,
+        date_fallback_relation:granule._date_fallback_relation||null,
+        date_fallback_distance_days:granule._date_fallback_distance_days,
+        date_fallback_target_date:granule._date_fallback_target_date||dates().end,
         recovery_mode:!!recoveryMode
       };
     }
@@ -1090,7 +1112,7 @@ $("downloadCsv").onclick=async function(){
       " · Harmony "+harmonyAccelerated+" · direct "+directProcessed+
       (totalRows?" · "+totalRows+" CSV rows":"")+
       ($("lowBandwidthMode").checked?" · low-bandwidth training mode":" · raw-row mode")+
-      ($("strictScopeMode").checked?" · strict component/date scope · "+strictScopeDroppedRows+" irrelevant rows removed":"")+
+      ($("strictScopeMode").checked?" · strict component scope · "+strictScopeDroppedRows+" irrelevant rows removed":"")+
       ($("includeGroundData").checked?" · ground "+groundStatus+" ("+groundRows+" rows)":"")+
       (unresolved
         ?" · "+unresolved+" granule(s) unresolved after cause-aware recovery"+
