@@ -610,6 +610,32 @@ jobs:
           assert len(generic_filtered) == 1
           assert generic_filtered.iloc[0]["component_segment"] == "NDVI"
 
+          irrelevant_source = combine_frames([pd.DataFrame([{
+              "component_names":"NO2",
+              "component_primary":"NO2",
+              "collection_id":"C-OTHER",
+              "collection_short_name":"Mixed chemistry",
+              "collection_title":"Mixed atmospheric chemistry",
+              "granule_id":"G-OTHER",
+              "granule_begin":"2025-01-01T00:00:00Z",
+              "granule_end":"2025-01-01T23:00:00Z",
+              "observation_time":"2025-01-01T06:00:00Z",
+              "variable":"SO2",
+              "value":2.0,
+              "latitude":23.75,
+              "longitude":90.4,
+              "conversion_status":"converted",
+          }])])
+          irrelevant_filtered, irrelevant_report = strict_scope_filter(
+              irrelevant_source,
+              ["NO2"],
+              "2025-01-01",
+              "2025-01-01",
+              component_strict=True,
+          )
+          assert irrelevant_filtered.empty
+          assert irrelevant_report["dropped_component_rows"] == 1
+
           assert _classify_granule_failure("NASA returned 404 for this granule URL") == "stale_or_missing_url"
           assert _classify_granule_failure("NASA temporarily rate-limited the download request") == "rate_limited"
           assert _classify_granule_failure("FUNCTION_INVOCATION_TIMEOUT") == "timeout"

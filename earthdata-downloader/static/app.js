@@ -790,6 +790,7 @@ $("downloadCsv").onclick=async function(){
     const started=performance.now();
     let finalized=0;
     let convertedGranules=0;
+    let skippedIrrelevant=0;
     let representedGranules=0;
     let totalRows=0;
     let totalBackendMs=0;
@@ -923,6 +924,7 @@ $("downloadCsv").onclick=async function(){
         const text=await response.text();
         const rows=Number(response.headers.get("X-Earthdata-Rows")||0);
         const conversionErrors=Number(response.headers.get("X-Earthdata-Conversion-Errors")||0);
+        const irrelevant=String(response.headers.get("X-Earthdata-Irrelevant-Granule")||"false").toLowerCase()==="true";
         const accessPath=String(response.headers.get("X-Earthdata-Access-Path")||"direct");
         const scopeDropped=Number(response.headers.get("X-Earthdata-Scope-Dropped-Rows")||0);
         if(Number.isFinite(scopeDropped)&&scopeDropped>0) strictScopeDroppedRows+=scopeDropped;
@@ -949,6 +951,7 @@ $("downloadCsv").onclick=async function(){
 
         return {
           ok:true,
+          irrelevant:irrelevant,
           granule:granule,
           label:label,
           text:text,
@@ -1035,7 +1038,9 @@ $("downloadCsv").onclick=async function(){
           value=recovered;
         }
 
-        if(value&&value.ok){
+        if(value&&value.ok&&value.irrelevant){
+          skippedIrrelevant++;
+        }else if(value&&value.ok){
           queueCsv(value.text);
           representedGranules++;
           convertedGranules++;
@@ -1090,8 +1095,10 @@ $("downloadCsv").onclick=async function(){
     const avgBackend=backendSamples?Math.round(totalBackendMs/backendSamples):null;
     const unresolved=finalFailures.length;
     msg.className=unresolved?"message warn":"message success";
-    msg.textContent="Converted "+convertedGranules+" of "+total+
-      " selected granule(s); represented all "+representedGranules+
+    msg.textContent="Converted "+convertedGranules+" selected granule(s)"+
+      " · skipped "+skippedIrrelevant+" irrelevant-to-component granule(s)"+
+      " · unresolved "+unresolved+" granule(s)"+
+      "; wrote "+representedGranules+
       " output records in "+elapsed.toFixed(1)+"s"+
       " ("+rate.toFixed(rate>=10?1:2)+" converted granules/s)"+
       (avgBackend!==null?" · avg backend "+avgBackend+"ms":"")+
@@ -1101,7 +1108,7 @@ $("downloadCsv").onclick=async function(){
       ($("strictScopeMode").checked?" · strict component scope · "+strictScopeDroppedRows+" irrelevant rows removed":"")+
       ($("includeGroundData").checked?" · ground "+groundStatus+" ("+groundRows+" rows)":"")+
       (unresolved
-        ?" · "+unresolved+" granule(s) unresolved after cause-aware recovery"+
+        ?" · final failure breakdown"+
           (Object.keys(failureBuckets).length
             ?" · failure classes "+Object.entries(failureBuckets).sort(function(a,b){return b[1]-a[1];}).slice(0,4).map(function(entry){return entry[0]+":"+entry[1];}).join(", ")
             :"")+

@@ -32,7 +32,7 @@ STATIC = ROOT / "static"
 
 app = FastAPI(
     title="NASA Earthdata CSV Downloader",
-    version="3.0.0",
+    version="3.1.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
 )
 
@@ -50,7 +50,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
-    expose_headers=["X-Earthdata-Rows","X-Earthdata-Granules","X-Earthdata-Timezone","X-Earthdata-Granule-Id","X-Earthdata-Conversion-Errors","X-Earthdata-Successful-Granules","X-Earthdata-Conversion-Status","X-Earthdata-Processing-Ms","X-Earthdata-Access-Path","X-Earthdata-Recovery-Metadata","X-Earthdata-Strict-Scope","X-Earthdata-Date-Fallback-Used","X-Earthdata-Date-Fallback-Date","X-Earthdata-Date-Fallback-Relation","X-Earthdata-Date-Fallback-Distance-Days","X-Earthdata-Scope-Dropped-Rows","X-Earthdata-Failure-Class"],
+    expose_headers=["X-Earthdata-Rows","X-Earthdata-Granules","X-Earthdata-Timezone","X-Earthdata-Granule-Id","X-Earthdata-Conversion-Errors","X-Earthdata-Successful-Granules","X-Earthdata-Conversion-Status","X-Earthdata-Processing-Ms","X-Earthdata-Access-Path","X-Earthdata-Recovery-Metadata","X-Earthdata-Strict-Scope","X-Earthdata-Date-Fallback-Used","X-Earthdata-Date-Fallback-Date","X-Earthdata-Date-Fallback-Relation","X-Earthdata-Date-Fallback-Distance-Days","X-Earthdata-Scope-Dropped-Rows","X-Earthdata-Failure-Class","X-Earthdata-Irrelevant-Granule"],
 )
 
 
@@ -202,7 +202,7 @@ def _session(token: str) -> requests.Session:
     )
     session.headers.update({
         "Authorization": f"Bearer {token.strip()}",
-        "User-Agent": "EarthdataCSVDownloader/3.0",
+        "User-Agent": "EarthdataCSVDownloader/3.1",
         "Accept": "application/octet-stream, application/x-netcdf, application/x-hdf, image/tiff, text/csv, application/json, */*",
     })
     return session
@@ -285,7 +285,7 @@ def _harmony_capabilities(token: str, collection_id: str) -> dict:
     headers = {
         "Authorization": f"Bearer {token.strip()}",
         "Accept": "application/json",
-        "User-Agent": "EarthdataCSVDownloader/3.0",
+        "User-Agent": "EarthdataCSVDownloader/3.1",
     }
 
     # Version 1 intentionally exposes bboxSubset/variableSubset/etc. at the
@@ -991,35 +991,19 @@ def _download_convert(
     if successful_granules > 0 and not combined.empty:
         combined, scope_report = _finalize_science_scope(combined, req)
         if combined.empty:
-            error_text = (
-                "The granule decoded successfully, but no science rows matched "
-                "the selected component scope and effective source date."
-            )
-            failure_class = "scope_no_matching_rows"
-            failure_classes[failure_class] = failure_classes.get(failure_class, 0) + 1
-            errors.append({
-                "granule": ";".join(
-                    str(item.get("granule_ur") or item.get("concept_id") or "")
-                    for item in granules[:3]
-                ),
-                "error": error_text,
-                "failure_class": failure_class,
-            })
+            # This is not a broken granule. It belongs to the selected
+            # collection/date search but contains no science rows for the
+            # selected component after the final purity gate.
             successful_granules = 0
-            combined = combine_frames([
-                _conversion_failure_frame(
-                    req,
-                    granules[0] if granules else {},
-                    error_text,
-                    recovery_strategy="component_and_effective_date_gate",
-                )
-            ])
+            scope_report["irrelevant_granules"] = 1
+            scope_report["irrelevant_reason"] = "no_selected_component_rows"
 
 
     if req.low_bandwidth_training_mode and not combined.empty and successful_granules > 0:
         combined = compact_training_frame(combined, req.training_grid_degrees)
 
-    if combined.empty:
+    irrelevant_granules = int(scope_report.get("irrelevant_granules", 0))
+    if combined.empty and not irrelevant_granules:
         raise ValueError("NASA returned no rows that could be represented in the export.")
 
     csv_bytes = combined.to_csv(index=False).encode("utf-8")
@@ -1027,6 +1011,7 @@ def _download_convert(
         "rows": len(combined),
         "converted_frames": len(frames),
         "successful_granules": successful_granules,
+        "irrelevant_granules": irrelevant_granules,
         "errors": errors,
         "failure_classes": failure_classes,
         "scope_report": scope_report,
@@ -1078,7 +1063,7 @@ def _csv_http_response(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "earthdata-csv-downloader", "version": "3.0.0"}
+    return {"ok": True, "service": "earthdata-csv-downloader", "version": "3.1.0"}
 
 
 @app.post("/api/token/validate")
@@ -1278,6 +1263,7 @@ async def download_nasa(req: DownloadRequest):
                 "X-Earthdata-Timezone": "UTC",
                 "X-Earthdata-Conversion-Errors": str(len(report["errors"])),
                 "X-Earthdata-Successful-Granules": str(report.get("successful_granules", 0)),
+                "X-Earthdata-Irrelevant-Granule": str(bool(report.get("irrelevant_granules", 0))).lower(),
                 "X-Earthdata-Conversion-Status": "converted" if not report["errors"] else ("partial" if report.get("successful_granules", 0) else "failed"),
             },
         )
@@ -1373,12 +1359,30 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                     combined, harmony_scope_report = _finalize_science_scope(combined, req)
                     if req.low_bandwidth_training_mode and not combined.empty:
                         combined = compact_training_frame(combined, req.training_grid_degrees)
-                    if not combined.empty:
+                    if combined.empty and harmony_scope_report.get("input_rows", 0):
+                        content = combined.to_csv(index=False).encode("utf-8")
+                        report = {
+                            "rows": 0,
+                            "converted_frames": len(frames),
+                            "successful_granules": 0,
+                            "irrelevant_granules": 1,
+                            "errors": [],
+                            "failure_classes": {},
+                            "scope_report": {
+                                **harmony_scope_report,
+                                "irrelevant_granules": 1,
+                                "irrelevant_reason": "no_selected_component_rows",
+                            },
+                            "csv_bytes": len(content),
+                        }
+                        access_path = "harmony-irrelevant"
+                    elif not combined.empty:
                         content = combined.to_csv(index=False).encode("utf-8")
                         report = {
                             "rows": len(combined),
                             "converted_frames": len(frames),
                             "successful_granules": 1,
+                            "irrelevant_granules": 0,
                             "errors": [],
                             "failure_classes": {},
                             "scope_report": harmony_scope_report,
@@ -1420,12 +1424,30 @@ async def download_nasa_granule(req: SingleGranuleDownloadRequest):
                     combined, harmony_scope_report = _finalize_science_scope(combined, req)
                     if req.low_bandwidth_training_mode and not combined.empty:
                         combined = compact_training_frame(combined, req.training_grid_degrees)
-                    if not combined.empty:
+                    if combined.empty and harmony_scope_report.get("input_rows", 0):
+                        content = combined.to_csv(index=False).encode("utf-8")
+                        report = {
+                            "rows": 0,
+                            "converted_frames": len(frames),
+                            "successful_granules": 0,
+                            "irrelevant_granules": 1,
+                            "errors": [],
+                            "failure_classes": {},
+                            "scope_report": {
+                                **harmony_scope_report,
+                                "irrelevant_granules": 1,
+                                "irrelevant_reason": "no_selected_component_rows",
+                            },
+                            "csv_bytes": len(content),
+                        }
+                        access_path = "harmony-irrelevant"
+                    elif not combined.empty:
                         content = combined.to_csv(index=False).encode("utf-8")
                         report = {
                             "rows": len(combined),
                             "converted_frames": len(frames),
                             "successful_granules": 1,
+                            "irrelevant_granules": 0,
                             "errors": [],
                             "failure_classes": {},
                             "scope_report": harmony_scope_report,
