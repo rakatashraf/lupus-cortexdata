@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
@@ -493,41 +493,86 @@ class CMRClient:
 
         fallback_used = False
         fallback_date: Optional[str] = None
+        fallback_relation: Optional[str] = None
+        fallback_distance_days: Optional[float] = None
+        fallback_target_date = end_date
+        effective_start_date = start_date
+        effective_end_date = end_date
 
         if not items and fallback_latest:
-            latest_data = await self._get(
-                "granules.umm_json",
-                base + [
-                    ("page_size", "1"),
-                    ("sort_key[]", "-start_date"),
-                ],
+            target = datetime.fromisoformat(f"{end_date}T23:59:59+00:00")
+
+            async def nearest_one(
+                temporal: str,
+                sort_key: str,
+            ) -> Optional[dict[str, Any]]:
+                data = await self._get(
+                    "granules.umm_json",
+                    base + [
+                        ("temporal", temporal),
+                        ("page_size", "1"),
+                        ("sort_key[]", sort_key),
+                    ],
+                )
+                raw = data.get("items") or []
+                return self._format_granule(raw[0]) if raw else None
+
+            prior = await nearest_one(
+                f"1900-01-01T00:00:00Z,{target.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                "-start_date",
             )
-            latest_raw = latest_data.get("items") or []
+            future = await nearest_one(
+                f"{(target + timedelta(seconds=1)).strftime('%Y-%m-%dT%H:%M:%SZ')},",
+                "+start_date",
+            )
 
-            if latest_raw:
-                latest = self._format_granule(latest_raw[0])
-                latest_begin = latest.get("begin")
+            candidates: list[tuple[float, int, str, dict[str, Any]]] = []
+            for relation, preference, candidate in (
+                ("nearest_prior", 0, prior),
+                ("nearest_future", 1, future),
+            ):
+                if not candidate or not candidate.get("begin"):
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(
+                        str(candidate["begin"]).replace("Z", "+00:00")
+                    )
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    parsed = parsed.astimezone(timezone.utc)
+                    distance = abs((parsed - target).total_seconds())
+                    candidates.append((distance, preference, relation, candidate))
+                except Exception:
+                    continue
 
-                if latest_begin:
-                    try:
-                        parsed = datetime.fromisoformat(str(latest_begin).replace("Z", "+00:00"))
-                        if parsed.tzinfo is None:
-                            parsed = parsed.replace(tzinfo=timezone.utc)
-                        fallback_date = parsed.date().isoformat()
-                        fallback_temporal = f"{fallback_date}T00:00:00Z,{fallback_date}T23:59:59Z"
-                        hits, items = await self._query_all_granules(
-                            base,
-                            fallback_temporal,
-                            "+start_date",
-                        )
-                    except Exception:
-                        hits = 1
-                        items = [latest]
-                else:
+            if candidates:
+                candidates.sort(key=lambda item: (item[0], item[1]))
+                distance_seconds, _, fallback_relation, nearest = candidates[0]
+                parsed = datetime.fromisoformat(
+                    str(nearest["begin"]).replace("Z", "+00:00")
+                )
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                fallback_date = parsed.astimezone(timezone.utc).date().isoformat()
+                fallback_distance_days = round(distance_seconds / 86400.0, 3)
+
+                fallback_temporal = (
+                    f"{fallback_date}T00:00:00Z,"
+                    f"{fallback_date}T23:59:59Z"
+                )
+                hits, items = await self._query_all_granules(
+                    base,
+                    fallback_temporal,
+                    "+start_date",
+                )
+                if not items:
                     hits = 1
-                    items = [latest]
+                    items = [nearest]
 
                 fallback_used = bool(items)
+                if fallback_used:
+                    effective_start_date = fallback_date
+                    effective_end_date = fallback_date
 
         cycle_summary = self._granule_cycle_summary(items)
 
@@ -538,8 +583,20 @@ class CMRClient:
             "granule_cycle": cycle_summary,
             "fallback_used": fallback_used,
             "fallback_date": fallback_date,
+            "fallback_relation": fallback_relation,
+            "fallback_distance_days": fallback_distance_days,
+            "fallback_target_date": fallback_target_date,
+            "requested_start_date": start_date,
+            "requested_end_date": end_date,
+            "effective_start_date": effective_start_date,
+            "effective_end_date": effective_end_date,
             "fallback_reason": (
-                "No data matched the requested dates, so all granules available on the most recent data date were returned."
+                (
+                    "No granules matched the requested date range. "
+                    f"The closest available data date to {fallback_target_date} "
+                    f"was {fallback_date} ({fallback_relation}, "
+                    f"{fallback_distance_days} day(s) away)."
+                )
                 if fallback_used
                 else None
             ),
