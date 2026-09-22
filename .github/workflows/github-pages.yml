@@ -26,8 +26,10 @@ jobs:
     steps:
       - name: Checkout GitHub-hosted branch
         uses: actions/checkout@v6
-      - name: Configure Pages
+      - name: Configure and enable Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
