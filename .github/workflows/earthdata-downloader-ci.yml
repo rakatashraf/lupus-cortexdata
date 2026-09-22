@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - earthdata-downloader-vercel
+      - github-hosted
     paths:
       - "earthdata-downloader/**"
       - ".github/workflows/earthdata-downloader-ci.yml"
@@ -29,7 +30,7 @@ jobs:
 
       - name: Compile downloader
         run: |
-          python -m py_compile app/main.py app/convert.py app/cmr.py app/external.py
+          python -m py_compile app/main.py app/convert.py app/cmr.py app/external.py scripts/github_batch.py
 
       - name: Validate browser JavaScript
         run: |
