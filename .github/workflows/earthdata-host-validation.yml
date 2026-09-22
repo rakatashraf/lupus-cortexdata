@@ -1,0 +1,45 @@
+name: Validate GitHub-hosted Earthdata setup
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/earthdata-host-validation.yml"
+      - ".github/workflows/earthdata-github-runner.yml"
+      - ".github/ISSUE_TEMPLATE/earthdata-job.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+    steps:
+      - name: Confirm Earthdata secret exists
+        shell: bash
+        run: |
+          if [ -z "$EARTHDATA_TOKEN" ]; then
+            echo "::error::Repository secret EARTHDATA_TOKEN is not configured."
+            exit 1
+          fi
+          echo "EARTHDATA_TOKEN is configured."
+
+      - name: Checkout GitHub-hosted downloader
+        uses: actions/checkout@v6
+        with:
+          ref: github-hosted
+
+      - name: Compile GitHub batch runner
+        run: |
+          python -m py_compile earthdata-downloader/scripts/github_batch.py
+
+      - name: Verify core hosting files
+        run: |
+          test -f earthdata-downloader/app/main.py
+          test -f earthdata-downloader/app/convert.py
+          test -f earthdata-downloader/scripts/github_batch.py
+          test ! -f vercel.json
+          echo "GitHub-hosted branch is ready."

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Earthdata job runs
+    url: https://github.com/rakatashraf/lupus-cortexdata/actions
+    about: View processing progress and download completed CSV artifacts.
