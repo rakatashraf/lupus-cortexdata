@@ -935,7 +935,6 @@ $("downloadCsv").onclick=async function(){
 
         if(conversionErrors>0){
           const failureClass=String(response.headers.get("X-Earthdata-Failure-Class")||"unknown");
-          failureBuckets[failureClass]=(failureBuckets[failureClass]||0)+1;
           return {
             ok:false,
             granule:granule,
@@ -966,7 +965,6 @@ $("downloadCsv").onclick=async function(){
         else if(/401|403|denied|authoriz/i.test(errorText)) failureClass="authorization";
         else if(/timeout|timed out/i.test(errorText)) failureClass="timeout";
         else if(/server error|500|502|503|504|FUNCTION_INVOCATION/i.test(errorText)) failureClass="provider_or_serverless";
-        failureBuckets[failureClass]=(failureBuckets[failureClass]||0)+1;
         return {
           ok:false,
           granule:granule,
@@ -1050,6 +1048,8 @@ $("downloadCsv").onclick=async function(){
             ((value&&value.label)||granule.granule_ur||granule.concept_id||("granule "+(index+1)))+
             ": "+errorText
           );
+          const finalFailureClass=(value&&value.failureClass)||"unknown";
+          failureBuckets[finalFailureClass]=(failureBuckets[finalFailureClass]||0)+1;
           if(!$("strictScopeMode").checked){
             try{
               queueCsv(

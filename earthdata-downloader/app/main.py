@@ -15,6 +15,7 @@ import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -33,6 +34,23 @@ app = FastAPI(
     title="NASA Earthdata CSV Downloader",
     version="3.0.0",
     description="Search NASA Earthdata, download matching granules, convert supported science formats to CSV, and fall back to selected public internet sources when NASA has no matching collection.",
+)
+
+_cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "EARTHDATA_CORS_ORIGINS",
+        "https://lupus-cortex-git-earthdata-do-e998ce-rakat-bin-ashrafs-projects.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    expose_headers=["X-Earthdata-Rows","X-Earthdata-Granules","X-Earthdata-Timezone","X-Earthdata-Granule-Id","X-Earthdata-Conversion-Errors","X-Earthdata-Successful-Granules","X-Earthdata-Conversion-Status","X-Earthdata-Processing-Ms","X-Earthdata-Access-Path","X-Earthdata-Recovery-Metadata","X-Earthdata-Strict-Scope","X-Earthdata-Date-Fallback-Used","X-Earthdata-Date-Fallback-Date","X-Earthdata-Date-Fallback-Relation","X-Earthdata-Date-Fallback-Distance-Days","X-Earthdata-Scope-Dropped-Rows","X-Earthdata-Failure-Class"],
 )
 
 
@@ -501,7 +519,9 @@ def _download_granule_bytes(
     idx: int,
     recovery_mode: bool = False,
 ) -> tuple[bytes, str, str]:
-    max_mb = max(1, int(os.getenv("EARTHDATA_MAX_GRANULE_MB", "256")))
+    persistent = os.getenv("EARTHDATA_RUNTIME_PROFILE", "").lower() == "persistent"
+    max_mb_default = "4096" if persistent else "256"
+    max_mb = max(1, int(os.getenv("EARTHDATA_MAX_GRANULE_MB", max_mb_default)))
     max_bytes = max_mb * 1024 * 1024
 
     connect_timeout = max(
@@ -514,7 +534,8 @@ def _download_granule_bytes(
             os.getenv(
                 "EARTHDATA_RECOVERY_READ_TIMEOUT_SECONDS" if recovery_mode
                 else "EARTHDATA_PRIMARY_READ_TIMEOUT_SECONDS",
-                "30.0" if recovery_mode else "15.0",
+                ("180.0" if persistent else "30.0") if recovery_mode
+                else ("90.0" if persistent else "15.0"),
             )
         ),
     )
@@ -524,7 +545,8 @@ def _download_granule_bytes(
             os.getenv(
                 "EARTHDATA_RECOVERY_GRANULE_BUDGET_SECONDS" if recovery_mode
                 else "EARTHDATA_PRIMARY_GRANULE_BUDGET_SECONDS",
-                "45.0" if recovery_mode else "22.0",
+                ("300.0" if persistent else "45.0") if recovery_mode
+                else ("150.0" if persistent else "22.0"),
             )
         ),
     )
@@ -854,8 +876,11 @@ def _download_convert(
         url_errors: list[str] = []
 
         candidate_urls = urls[:6] if req.recovery_mode else urls[:2]
+        persistent = os.getenv("EARTHDATA_RUNTIME_PROFILE", "").lower() == "persistent"
         granule_deadline = time.monotonic() + (
-            55.0 if req.recovery_mode else 28.0
+            (360.0 if persistent else 55.0)
+            if req.recovery_mode
+            else (180.0 if persistent else 28.0)
         )
 
         for url in candidate_urls:

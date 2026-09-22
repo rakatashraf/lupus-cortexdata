@@ -10,3 +10,6 @@ h5py==3.14.0
 rasterio==1.4.3
 pyhdf==0.11.6
 cftime==1.6.4.post1
+
+uvicorn[standard]==0.35.0
+pydap==3.5.5

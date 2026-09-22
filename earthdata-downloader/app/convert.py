@@ -426,6 +426,67 @@ def _component_match_score(variable: Any, component: str) -> tuple[int, str]:
     return best, basis
 
 
+
+_ANCILLARY_VARIABLE_TOKENS = {
+    "latitude", "longitude", "lat", "lon", "time", "datetime", "date",
+    "quality", "qa", "flag", "flags", "uncertainty", "error", "errors",
+    "weight", "weights", "index", "indices", "count", "counts",
+    "cloud", "cloudfraction", "cloudmask", "zenith", "azimuth", "angle",
+    "scan", "scanline", "track", "xtrack", "orbit", "corner", "bounds",
+    "pressurelevel", "level", "levels", "layerindex", "dimension",
+}
+
+
+def _is_ancillary_variable(variable: Any) -> bool:
+    base = _science_basename(variable)
+    if not base:
+        return True
+    if base in {_science_name(v) for v in _ANCILLARY_VARIABLE_TOKENS}:
+        return True
+    prefixes = (
+        "quality", "qa", "flag", "uncertainty", "error", "weight",
+        "latitude", "longitude", "cloud", "zenith", "azimuth",
+        "corner", "bounds", "pressurelevel",
+    )
+    return base.startswith(prefixes)
+
+
+def _collection_supports_component(row: pd.Series, component: str) -> bool:
+    aliases = _component_aliases(component)
+    if not aliases:
+        return False
+    text = " ".join(
+        str(row.get(column) or "")
+        for column in (
+            "collection_short_name",
+            "collection_title",
+            "collection_id",
+            "component_query",
+            "component_names",
+        )
+    )
+    normalized = _science_name(text)
+    return any(
+        alias and (
+            alias == _science_name(str(row.get("component_primary") or ""))
+            or (len(alias) >= 3 and alias in normalized)
+        )
+        for alias in aliases
+    )
+
+
+def _matches_known_other_component(variable: Any, selected_component: str) -> bool:
+    selected = _science_name(selected_component)
+    for canonical, aliases in _COMPONENT_ALIAS_GROUPS.items():
+        group = {_science_name(canonical)} | {_science_name(v) for v in aliases}
+        if selected in group:
+            continue
+        for alias in group:
+            if len(alias) >= 2 and _component_match_score(variable, canonical)[0] > 0:
+                return True
+    return False
+
+
 def strict_scope_filter(
     df: pd.DataFrame,
     components: Iterable[str],
@@ -512,9 +573,24 @@ def strict_scope_filter(
                 component_basis.append("single_component_generic_science_field")
                 component_match.append(True)
             else:
-                assigned_components.append("")
-                component_basis.append("no_unambiguous_component_match")
-                component_match.append(False)
+                row = work.iloc[len(assigned_components)]
+                collection_specific = (
+                    len(requested) == 1
+                    and _collection_supports_component(row, requested[0])
+                )
+                safe_generic = (
+                    collection_specific
+                    and not _is_ancillary_variable(variable)
+                    and not _matches_known_other_component(variable, requested[0])
+                )
+                if safe_generic:
+                    assigned_components.append(requested[0])
+                    component_basis.append("component_specific_collection_science_variable")
+                    component_match.append(True)
+                else:
+                    assigned_components.append("")
+                    component_basis.append("no_unambiguous_component_match")
+                    component_match.append(False)
     else:
         existing = work.get(
             "component_primary",
