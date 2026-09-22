@@ -4,28 +4,46 @@ This branch is the GitHub-native replacement for the previous Vercel deployment.
 
 ## Architecture
 
-- GitHub Pages hosts the static configuration UI from `earthdata-downloader/github_site/`.
-- GitHub Issues are used as non-secret processing job requests.
-- GitHub Actions runs `.github/workflows/earthdata-github-runner.yml` from the default branch.
-- The Actions runner checks out `github-hosted`, installs native HDF4/HDF5/NetCDF/GDAL libraries, downloads NASA granules, converts them, combines the CSV, and uploads the result as an Actions artifact.
-- NASA credentials are read only from the repository secret `EARTHDATA_TOKEN`.
+- **GitHub Issue Form** is the user interface.
+- **GitHub Actions** performs NASA discovery, HDF/NetCDF/GeoTIFF conversion, strict component filtering, closest-date fallback, ground-data fusion, and CSV merging.
+- **GitHub Actions artifacts** deliver the final CSV and `job_report.json`.
+- Heavy processing runs on a normal GitHub-hosted Linux runner with native HDF4/HDF5/NetCDF/GDAL libraries instead of Vercel serverless functions.
+- NASA credentials are read only from the encrypted repository secret `EARTHDATA_TOKEN`.
 
-## One-time GitHub settings
+## Start a job
 
-1. Open repository **Settings → Pages**.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. Open **Settings → Secrets and variables → Actions**.
-4. Add repository secret **EARTHDATA_TOKEN** containing the NASA Earthdata token.
-5. Optional: add **OPENAQ_API_KEY** for ground-data enrichment.
+Open:
 
-After Pages is enabled, rerun the workflow **Deploy Earthdata UI to GitHub Pages** or push any change to `earthdata-downloader/github_site/`.
+https://github.com/rakatashraf/lupus-cortexdata/issues/new?template=earthdata-job.yml
 
-Expected Pages URL:
+Fill in components, NASA collection concept IDs, bbox, dates, fallback behavior, workers, ground-data preference and output filename, then submit the issue.
 
-`https://rakatashraf.github.io/lupus-cortexdata/`
+Submitting an issue whose title starts with `[Earthdata Job]` triggers:
+
+`.github/workflows/earthdata-github-runner.yml`
+
+The workflow checks out this `github-hosted` branch, installs the native scientific libraries, performs the conversion and uploads the result as a workflow artifact. A completion comment is added to the issue with the run link.
+
+## Required repository secret
+
+Repository setting:
+
+**Settings → Secrets and variables → Actions → New repository secret**
+
+Name:
+
+`EARTHDATA_TOKEN`
+
+Value:
+
+your NASA Earthdata bearer token.
+
+Optional ground-air-quality enrichment uses:
+
+`OPENAQ_API_KEY`
 
 ## Vercel retirement
 
-The `github-hosted` branch no longer contains `vercel.json`.
+This branch contains no `vercel.json` and no Pages deployment workflow. The downloader no longer depends on Vercel.
 
-After GitHub Pages is live, delete the old Vercel project from the Vercel dashboard to remove the previous deployment completely.
+The old Vercel project itself must be deleted from the Vercel dashboard because the connected Vercel API available to ChatGPT does not expose project deletion.
