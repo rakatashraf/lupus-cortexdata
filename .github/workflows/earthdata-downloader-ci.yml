@@ -523,6 +523,71 @@ jobs:
           assert component_filter_terms(["NO2"])
           assert any("no2" in item for item in component_filter_terms(["NO2"]))
 
+          fallback_scope = combine_frames([pd.DataFrame([
+              {
+                  "component_names":"NO2;O3",
+                  "component_primary":"NO2",
+                  "collection_id":"C-FALLBACK",
+                  "granule_id":"G-FALLBACK",
+                  "granule_begin":"2025-01-08T00:00:00Z",
+                  "granule_end":"2025-01-08T23:59:59Z",
+                  "observation_time":"2025-01-08T06:00:00Z",
+                  "variable":"ColumnAmountNO2Trop",
+                  "value":5.0,
+                  "latitude":23.75,
+                  "longitude":90.4,
+                  "conversion_status":"converted",
+              },
+              {
+                  "component_names":"NO2;O3",
+                  "component_primary":"NO2",
+                  "collection_id":"C-FALLBACK",
+                  "granule_id":"G-FALLBACK",
+                  "granule_begin":"2025-01-08T00:00:00Z",
+                  "granule_end":"2025-01-08T23:59:59Z",
+                  "observation_time":"2025-01-08T07:00:00Z",
+                  "variable":"O3",
+                  "value":6.0,
+                  "latitude":23.75,
+                  "longitude":90.4,
+                  "conversion_status":"converted",
+              },
+          ])])
+          fallback_filtered, fallback_report = strict_scope_filter(
+              fallback_scope,
+              ["NO2"],
+              "2025-01-08",
+              "2025-01-08",
+              component_strict=True,
+              requested_start_date="2025-01-10",
+              requested_end_date="2025-01-10",
+              date_fallback_used=True,
+              date_fallback_date="2025-01-08",
+              date_fallback_relation="nearest_prior",
+              date_fallback_distance_days=2.0,
+              date_fallback_target_date="2025-01-10",
+          )
+          assert len(fallback_filtered) == 1
+          assert fallback_filtered.iloc[0]["component_segment"] == "NO2"
+          assert bool(fallback_filtered.iloc[0]["date_fallback_used"]) is True
+          assert fallback_filtered.iloc[0]["requested_end_date"] == "2025-01-10"
+          assert fallback_filtered.iloc[0]["effective_end_date"] == "2025-01-08"
+          assert fallback_filtered.iloc[0]["date_fallback_relation"] == "nearest_prior"
+          assert fallback_report["dropped_component_rows"] == 1
+
+          nonstrict_filtered, _ = strict_scope_filter(
+              fallback_scope,
+              ["NO2"],
+              "2025-01-08",
+              "2025-01-08",
+              component_strict=False,
+              requested_start_date="2025-01-10",
+              requested_end_date="2025-01-10",
+              date_fallback_used=True,
+              date_fallback_date="2025-01-08",
+          )
+          assert set(nonstrict_filtered["variable"]) == {"ColumnAmountNO2Trop", "O3"}
+
           generic_scope = combine_frames([pd.DataFrame([{
               "component_names":"NDVI",
               "component_primary":"NDVI",

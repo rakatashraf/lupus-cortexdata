@@ -70,10 +70,10 @@
         </div>
         <label class="check">
           <input id="strictScopeMode" type="checkbox" checked>
-          <span><strong>Strict clean component/date scope</strong><small>Export only rows whose actual science variable matches the selected component and whose observation time is inside the selected UTC date range.</small></span>
+          <span><strong>Strict clean component scope</strong><small>Remove unrelated variables/components from multi-variable collections. Date fallback remains independent.</small></span>
         </label>
         <div id="strictScopeHint" class="message success"></div>
-        <label class="check"><input id="fallbackLatest" type="checkbox"> If strict mode is off and the selected dates contain no granules, use the most recent available granules for the same collection and area.</label>
+        <label class="check"><input id="fallbackLatest" type="checkbox" checked> If the selected date range has no granules, use the closest available data date to the requested end date for the same collection and area.</label>
         <button id="searchCollections" class="primary">Search Earthdata</button>
         <div id="searchMessage" class="message"></div>
       </div>
@@ -153,7 +153,7 @@
         </div>
         <div id="granuleMessage" class="message"></div>
         <div id="granules" class="granules"></div>
-        <p class="footnote">Strict clean scope is recommended for Lupus Cortex training. The converter may inspect extra source variables internally during recovery, but only selected-component rows inside the requested UTC date range are permitted into the final CSV. On supported desktop browsers, accepted rows are appended as soon as they finish.</p>
+        <p class="footnote">Strict component scope is recommended for Lupus Cortex training. The converter may inspect extra source variables internally during recovery, but unrelated components are removed before export. The requested date range is used first; if it has no granules, the closest available date is used and explicitly recorded in the CSV. On supported desktop browsers, accepted rows are appended as soon as they finish.</p>
       </div>
     </section>
 
