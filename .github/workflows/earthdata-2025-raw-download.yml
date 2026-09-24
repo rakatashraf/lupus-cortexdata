@@ -1,0 +1,42 @@
+name: Earthdata 2025 Raw Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Source key such as gpm_imerg. Leave blank for all 20 NASA source jobs.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r earthdata-plugin/requirements.txt
+      - name: Download 2025 Earthdata granules
+        env:
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+          SOURCE: ${{ inputs.source }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$SOURCE" ]; then args+=(--source "$SOURCE"); fi
+          python earthdata-plugin/earthdata_plugin.py --out earthdata_output "${args[@]}"
+      - name: Upload inventory and job report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lupus-cortex-earthdata-2025-report
+          path: |
+            earthdata_output/job_report.json
+            earthdata_output/inventory/*.csv
+          if-no-files-found: warn
+          retention-days: 7
